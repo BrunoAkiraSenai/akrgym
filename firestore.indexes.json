@@ -1,0 +1,12 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "historico_treinos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "rotina_id", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "DESCENDING" }
+      ]
+    }
+  ]
+}
