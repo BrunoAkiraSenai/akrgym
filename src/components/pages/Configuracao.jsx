@@ -14,6 +14,8 @@ export default function Configuracao() {
   const [newNome, setNewNome] = useState('')
   const [novoExercicio, setNovoExercicio] = useState({ nome: '', metas_series: '', metas_rep: '' })
 
+  const isExpanded = (id) => expandedId === id
+
   const carregarRotinas = useCallback(async () => {
     setLoading(true)
     setErro(null)
@@ -80,21 +82,26 @@ export default function Configuracao() {
   }
 
   const removerExercicio = async (rotinaId, index) => {
-    const rotina = rotinas.find(r => r.id === rotinaId)
-    if (!rotina) return
-
+    if (saving === `rem-${rotinaId}-${index}`) return
+    setSaving(`rem-${rotinaId}-${index}`)
     setErro(null)
 
     try {
+      const rotina = rotinas.find(r => r.id === rotinaId)
+      if (!rotina) return
       const novos = (rotina.exercicios || []).filter((_, i) => i !== index)
       await updateDoc(doc(db, 'rotinas', rotinaId), { exercicios: novos })
       await carregarRotinas()
     } catch (err) {
       setErro(`Erro ao remover exercício: ${err.message}`)
     }
+
+    setSaving(null)
   }
 
   const excluirRotina = async (rotinaId) => {
+    if (saving === `del-${rotinaId}`) return
+    setSaving(`del-${rotinaId}`)
     setErro(null)
 
     try {
@@ -104,6 +111,8 @@ export default function Configuracao() {
     } catch (err) {
       setErro(`Erro ao excluir rotina: ${err.message}`)
     }
+
+    setSaving(null)
   }
 
   return (
@@ -242,7 +251,5 @@ export default function Configuracao() {
     </div>
   )
 
-  function isExpanded(id) {
-    return expandedId === id
-  }
+
 }

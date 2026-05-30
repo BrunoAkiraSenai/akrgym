@@ -37,9 +37,13 @@ export default function Execucao({ onFinish }) {
     })()
   }, [])
 
+  const [loadingHistorico, setLoadingHistorico] = useState(false)
+
   const iniciarTreino = useCallback(async (rotina) => {
+    if (loadingHistorico) return
     setRotinaAtiva(rotina)
     setStep('active')
+    setLoadingHistorico(true)
     setErro(null)
 
     setSeriesData(
@@ -66,7 +70,9 @@ export default function Execucao({ onFinish }) {
       setHistorico(null)
       setErro(`Erro ao buscar histórico: ${err.message}`)
     }
-  }, [])
+
+    setLoadingHistorico(false)
+  }, [loadingHistorico])
 
   const atualizarSerie = (exIdx, serieIdx, campo, valor) => {
     setSeriesData(prev => {
@@ -80,7 +86,11 @@ export default function Execucao({ onFinish }) {
     if (!historico) return null
     const ex = historico.exercicios?.find(e => e.nome === exercicioNome)
     if (!ex || !ex.series) return null
-    return ex.series.map((s, i) => `${i + 1}ªS: ${s.carga}kg x ${s.reps}`).join(' | ')
+    return ex.series.map((s, i) => {
+      const carga = s.carga ?? '?'
+      const reps = s.reps ?? '?'
+      return `${i + 1}ªS: ${carga}kg x ${reps}`
+    }).join(' | ')
   }
 
   const finalizarTreino = async () => {
