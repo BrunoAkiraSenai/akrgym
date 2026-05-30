@@ -60,11 +60,8 @@ export default function Evolucao() {
       .filter(t => t.exercicios && Array.isArray(t.exercicios) && t.exercicios.some(ex => ex.nome === selecionado))
       .map(t => {
         const ex = t.exercicios.find(e => e.nome === selecionado)
-        if (!ex || !ex.series || ex.series.length === 0) return null
-        const cargas = ex.series.map(s => s.carga).filter(v => v != null)
-        if (cargas.length === 0) return null
-        const maxCarga = Math.max(...cargas)
-        return { data: t.data, carga: maxCarga, label: t.rotina_id }
+        if (!ex || ex.carga_top == null) return null
+        return { data: t.data, carga: ex.carga_top, reps: ex.reps_top, label: t.rotina_id }
       })
       .filter(Boolean)
   })()

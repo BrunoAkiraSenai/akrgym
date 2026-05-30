@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { Dumbbell, Calendar, Zap, AlertTriangle } from 'lucide-react'
+import PROTOCOLO_BASE from '../../config/protocolo'
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -136,7 +137,9 @@ export default function Home({ onStartWorkout }) {
         ) : ultimoTreino ? (
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-white font-semibold">{ultimoTreino.rotina_id || 'Treino'}</p>
+              <p className="text-white font-semibold">
+                {PROTOCOLO_BASE[ultimoTreino.rotina_id]?.nome || ultimoTreino.rotina_id || 'Treino'}
+              </p>
               <p className="text-neutral-400 text-sm">{tempoRelativo(dataTreino)}</p>
             </div>
             <Dumbbell size={22} className="text-emerald-400" />
