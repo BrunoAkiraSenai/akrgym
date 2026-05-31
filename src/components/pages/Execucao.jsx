@@ -9,6 +9,8 @@ import {
   Flame, Thermometer, Zap, RefreshCw, Info,
 } from 'lucide-react'
 
+const STORAGE_KEY = 'rascunho_treino_ativo'
+
 export default function Execucao({ onFinish }) {
   const [step, setStep] = useState('select')
   const [rotinaKey, setRotinaKey] = useState(null)
@@ -16,8 +18,29 @@ export default function Execucao({ onFinish }) {
   const [saving, setSaving] = useState(false)
   const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [erro, setErro] = useState(null)
+  const [recuperado, setRecuperado] = useState(false)
 
   const keys = Object.keys(PROTOCOLO_BASE)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+      if (draft?.rotinaKey && draft?.topSetData?.length > 0 && PROTOCOLO_BASE[draft.rotinaKey]) {
+        setRotinaKey(draft.rotinaKey)
+        setTopSetData(draft.topSetData)
+        setStep('active')
+        setRecuperado(true)
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    if (step === 'active' && rotinaKey && topSetData.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rotinaKey, topSetData }))
+    }
+  }, [rotinaKey, topSetData, step])
 
   const iniciarTreino = useCallback(async (key) => {
     if (loadingHistorico) return
@@ -27,32 +50,22 @@ export default function Execucao({ onFinish }) {
     setErro(null)
 
     const protocolo = PROTOCOLO_BASE[key]
-    if (!protocolo) {
-      setErro('Rotina não encontrada no protocolo.')
-      setLoadingHistorico(false)
-      return
-    }
+    if (!protocolo) { setErro('Rotina não encontrada.'); setLoadingHistorico(false); return }
 
     try {
-      const q = query(
-        collection(db, 'historico_treinos'),
-        where('rotina_id', '==', key),
-        orderBy('data', 'desc'),
-        limit(1)
+      const snap = await getDocs(
+        query(collection(db, 'historico_treinos'), where('rotina_id', '==', key), orderBy('data', 'desc'), limit(1))
       )
-      const snap = await getDocs(q)
       const ultimo = !snap.empty ? snap.docs[0].data() : null
 
       setTopSetData(
         protocolo.exercicios.map(ex => {
           const anterior = ultimo?.exercicios?.find(e => e.nome === ex.nome)
-          const ref = anterior?.carga_top ?? ex.base_top
           return {
             nome: ex.nome,
             meta_reps: ex.meta_reps,
-            carga: '',
-            reps: '',
-            ref,
+            carga: '', reps: '',
+            ref: anterior?.carga_top ?? ex.base_top,
             repsAnterior: anterior?.reps_top ?? null,
             tem_aquecimento: ex.tem_aquecimento ?? false,
             IsAgachamento: ex.IsAgachamento ?? false,
@@ -60,10 +73,7 @@ export default function Execucao({ onFinish }) {
           }
         })
       )
-    } catch (err) {
-      setErro(`Erro ao buscar histórico: ${err.message}`)
-    }
-
+    } catch (err) { setErro(`Erro ao buscar histórico: ${err.message}`) }
     setLoadingHistorico(false)
   }, [loadingHistorico])
 
@@ -72,58 +82,40 @@ export default function Execucao({ onFinish }) {
   }
 
   const finalizarTreino = async () => {
-    setSaving(true)
-    setErro(null)
-
+    setSaving(true); setErro(null)
     try {
-      const data = {
+      await addDoc(collection(db, 'historico_treinos'), {
         rotina_id: rotinaKey,
         data: new Date(),
-        exercicios: topSetData.map(ex => ({
-          nome: ex.nome,
-          carga_top: Number(ex.carga),
-          reps_top: Number(ex.reps),
-        })),
-      }
-      await addDoc(collection(db, 'historico_treinos'), data)
+        exercicios: topSetData.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
+      })
+      localStorage.removeItem(STORAGE_KEY)
       onFinish()
-    } catch (err) {
-      setErro(`Erro ao salvar treino: ${err.message}`)
-      setSaving(false)
-    }
+    } catch (err) { setErro(`Erro ao salvar: ${err.message}`); setSaving(false) }
   }
 
-  const podeFinalizar = topSetData.length > 0 && topSetData.every(ex =>
-    ex.carga !== '' && ex.reps !== ''
-  )
+  const podeFinalizar = topSetData.length > 0 && topSetData.every(ex => ex.carga !== '' && ex.reps !== '')
 
   if (step === 'select') {
     return (
-      <div className="flex flex-col gap-4 pt-4 pb-6">
-        <h1 className="text-xl font-bold text-white">Qual treino de hoje?</h1>
-
+      <div className="flex flex-col gap-3 pt-2 pb-4">
+        <h1 className="text-xl font-bold tracking-tight text-white mb-1">Qual treino de hoje?</h1>
         {erro && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-start gap-2">
-            <AlertTriangle size={18} className="text-red-400 shrink-0 mt-0.5" />
-            <p className="text-red-300 text-sm">{erro}</p>
-          </div>
+          <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
         )}
-
         {keys.map(key => {
-          const rotina = PROTOCOLO_BASE[key]
+          const r = PROTOCOLO_BASE[key]
           return (
             <button
               key={key}
               onClick={() => iniciarTreino(key)}
-              className="w-full flex items-center justify-between bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 p-5 rounded-xl transition-colors text-left"
+              className="w-full flex items-center justify-between bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-5 transition-all active:scale-[0.97] hover:border-white/10 text-left"
             >
               <div>
-                <span className="text-white font-bold text-lg">{rotina.nome}</span>
-                <span className="text-neutral-400 text-sm block">
-                  {rotina.exercicios.length} exercícios
-                </span>
+                <span className="text-white font-semibold text-base tracking-tight">{r.nome}</span>
+                <span className="text-neutral-500 text-sm block">{r.exercicios.length} exercícios</span>
               </div>
-              <Play size={24} className="text-emerald-400 shrink-0" />
+              <Play size={22} className="text-emerald-400 shrink-0 drop-shadow-[0_0_6px_rgba(52,211,153,0.3)]" />
             </button>
           )
         })}
@@ -134,33 +126,42 @@ export default function Execucao({ onFinish }) {
   const rotina = PROTOCOLO_BASE[rotinaKey]
 
   return (
-    <div className="flex flex-col gap-4 pt-2 pb-8">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => { setStep('select'); setRotinaKey(null); setErro(null) }}
-          className="text-neutral-400 hover:text-white p-1"
-        >
-          <ChevronLeft size={24} />
+    <div className="flex flex-col gap-3 pt-1 pb-4">
+      <div className="flex items-center gap-2 mb-1">
+        <button onClick={() => { setStep('select'); setRotinaKey(null); setErro(null) }}
+          className="text-neutral-500 hover:text-white p-1 transition-all active:scale-90">
+          <ChevronLeft size={22} />
         </button>
-        <h1 className="text-xl font-bold text-white">{rotina?.nome}</h1>
+        <h1 className="text-lg font-bold tracking-tight text-white">{rotina?.nome}</h1>
       </div>
 
-      {erro && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 flex items-start gap-2">
-          <AlertTriangle size={18} className="text-red-400 shrink-0 mt-0.5" />
-          <p className="text-red-300 text-sm">{erro}</p>
+      {recuperado && (
+        <div className="flex items-center justify-between bg-cyan-500/10 backdrop-blur-md border border-cyan-500/20 rounded-2xl px-4 py-3">
+          <span className="text-cyan-400 text-xs font-medium">⚡ Rascunho de treino recuperado!</span>
+          <button onClick={() => {
+            localStorage.removeItem(STORAGE_KEY)
+            setRecuperado(false)
+            setStep('select')
+            setRotinaKey(null)
+            setTopSetData([])
+            setErro(null)
+          }} className="text-neutral-500 hover:text-neutral-300 text-[11px] font-semibold bg-neutral-800 px-3 py-1.5 rounded-lg transition-all active:scale-90">
+            Descartar
+          </button>
         </div>
       )}
 
+      {erro && (
+        <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
+      )}
+
       {loadingHistorico ? (
-        <p className="text-neutral-500 text-center py-8">Carregando...</p>
+        <p className="text-neutral-600 text-center py-8 text-sm">Carregando...</p>
       ) : topSetData.length === 0 ? (
-        <p className="text-neutral-500 text-center py-4">Nenhum exercício nesta rotina.</p>
+        <p className="text-neutral-600 text-center py-4 text-sm">Nenhum exercício.</p>
       ) : (
         topSetData.map((ex, exIdx) => {
-          const aqPeso = ex.tem_aquecimento
-            ? Math.round(ex.ref * 0.6)
-            : null
+          const aqPeso = ex.tem_aquecimento ? Math.round(ex.ref * 0.6) : null
           const prepPeso = Math.round(ex.ref * 0.85)
           const cargaHoje = Number(ex.carga)
           const backoffPeso = cargaHoje > 0
@@ -168,89 +169,77 @@ export default function Execucao({ onFinish }) {
             : null
 
           return (
-            <div key={ex.nome} className="bg-neutral-800 rounded-xl p-4 space-y-3">
+            <div key={ex.nome} className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3 transition-all">
               <div className="flex items-center justify-between">
-                <h2 className="text-white font-bold text-base">{ex.nome}</h2>
-                <span className="text-neutral-500 text-xs">Meta: {ex.meta_reps} reps</span>
+                <h2 className="text-white font-semibold text-sm tracking-tight">{ex.nome}</h2>
+                <span className="text-neutral-500 text-[11px] font-mono">meta {ex.meta_reps}</span>
               </div>
 
-              <p className="text-emerald-400/80 text-xs bg-emerald-500/10 rounded-lg px-3 py-2">
-                Referência: <span className="font-bold">{ex.ref}kg</span>
-                {ex.repsAnterior ? ` — último treino: ${ex.repsAnterior} reps` : ''}
-              </p>
+              <div className="flex items-center gap-2 text-emerald-400/80 text-[11px] font-mono bg-emerald-500/5 rounded-xl px-3 py-2 border border-emerald-500/10">
+                <Flame size={12} className="shrink-0" />
+                <span>Referência: <strong className="text-emerald-300">{ex.ref}kg</strong>
+                  {ex.repsAnterior ? ` · últ. ${ex.repsAnterior} reps` : ''}
+                </span>
+              </div>
 
               {ex.nota && (
-                <p className="text-orange-400 text-xs bg-orange-500/10 rounded-lg px-3 py-2 flex items-start gap-1.5">
-                  <Info size={13} className="shrink-0 mt-0.5" />
-                  {ex.nota}
-                </p>
+                <div className="flex items-start gap-1.5 text-orange-400/80 text-[11px] bg-orange-500/5 rounded-xl px-3 py-2 border border-orange-500/10">
+                  <Info size={12} className="shrink-0 mt-0.5" />
+                  <span>{ex.nota}</span>
+                </div>
               )}
 
-              <div className="bg-neutral-900/60 rounded-xl p-3 space-y-2 border border-neutral-700">
-                <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wide flex items-center gap-1">
-                  <Thermometer size={12} /> Protocolo
-                </p>
+              <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
+                <div className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1.5">Protocolo</div>
 
                 {ex.tem_aquecimento && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-neutral-400 flex items-center gap-1.5">
-                      <RefreshCw size={13} className="text-blue-400" /> Aquecimento
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="text-neutral-500 font-mono flex items-center gap-1.5">
+                      <RefreshCw size={11} className="text-blue-400/70" /> Aquec.
                     </span>
-                    <span className="text-neutral-300 font-mono">
-                      {ex.IsAgachamento
-                        ? 'Barra Olímpica x 10'
-                        : `${aqPeso}kg x 10`
-                      }
+                    <span className="text-neutral-400 font-mono">
+                      {ex.IsAgachamento ? 'Barra Olímpica × 10' : `${aqPeso}kg × 10`}
                     </span>
                   </div>
                 )}
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-neutral-400 flex items-center gap-1.5">
-                    <Zap size={13} className="text-yellow-400" /> Preparatória (85%)
+                <div className="flex items-center justify-between text-[12px]">
+                  <span className="text-neutral-500 font-mono flex items-center gap-1.5">
+                    <Zap size={11} className="text-yellow-400/70" /> Preparatória
                   </span>
-                  <span className="text-neutral-300 font-mono">{prepPeso}kg x 6</span>
+                  <span className="text-neutral-400 font-mono">{prepPeso}kg × 6</span>
                 </div>
 
-                <div className="border-t border-neutral-700 pt-2">
-                  <div className="flex items-center justify-between text-sm mb-1.5">
-                    <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                      <Flame size={14} /> TOP SET (100%)
+                <div className="border-t border-white/5 pt-2 mt-2">
+                  <div className="flex items-center justify-between text-[12px] mb-2">
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1.5 tracking-tight">
+                      <Flame size={13} /> TOP SET
                     </span>
-                    <span className="text-neutral-500 text-xs">
-                      Superar {ex.ref}kg
-                    </span>
+                    <span className="text-neutral-500 text-[11px] font-mono">superar {ex.ref}kg</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
-                      type="number"
-                      inputMode="numeric"
-                      placeholder="kg"
+                      type="number" inputMode="numeric" placeholder="kg"
                       value={ex.carga}
                       onChange={e => atualizar(exIdx, 'carga', e.target.value)}
-                      className="w-full bg-neutral-700 text-white placeholder-neutral-500 p-4 rounded-xl text-base text-center outline-none focus:ring-2 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(52,211,153,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <input
-                      type="number"
-                      inputMode="numeric"
-                      placeholder="reps"
+                      type="number" inputMode="numeric" placeholder="reps"
                       value={ex.reps}
                       onChange={e => atualizar(exIdx, 'reps', e.target.value)}
-                      className="w-full bg-neutral-700 text-white placeholder-neutral-500 p-4 rounded-xl text-base text-center outline-none focus:ring-2 focus:ring-emerald-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(52,211,153,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 </div>
 
                 {backoffPeso && (
-                  <div className="flex items-center justify-between text-sm pt-1 border-t border-neutral-700">
-                    <span className="text-neutral-400 flex items-center gap-1.5">
-                      <RefreshCw size={13} className="text-purple-400" /> Back-Off
+                  <div className="flex items-center justify-between text-[12px] pt-1.5 border-t border-white/5">
+                    <span className="text-neutral-500 font-mono flex items-center gap-1.5">
+                      <RefreshCw size={11} className="text-purple-400/70" /> Back-Off
                     </span>
-                    <span className="text-purple-300 font-mono font-semibold">
-                      {ex.IsAgachamento
-                        ? `-10%: ${backoffPeso}kg x 6-8`
-                        : `${backoffPeso}kg x 8-10`
-                      }
+                    <span className="text-purple-300/80 font-mono font-semibold">
+                      {ex.IsAgachamento ? `-10%: ${backoffPeso}kg × 6-8` : `${backoffPeso}kg × 8-10`}
                     </span>
                   </div>
                 )}
@@ -263,13 +252,10 @@ export default function Execucao({ onFinish }) {
       <button
         onClick={finalizarTreino}
         disabled={!podeFinalizar || saving}
-        className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-lg py-5 rounded-xl transition-colors mt-2"
+        className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-lg py-5 rounded-2xl transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2 mt-1"
       >
-        {saving ? (
-          <><Loader size={22} className="animate-spin" /> Salvando...</>
-        ) : (
-          <><CheckCircle size={22} /> Finalizar Treino</>
-        )}
+        {saving ? <><Loader size={20} className="animate-spin" /> Salvando...</>
+        : <><CheckCircle size={20} /> Finalizar Treino</>}
       </button>
     </div>
   )
