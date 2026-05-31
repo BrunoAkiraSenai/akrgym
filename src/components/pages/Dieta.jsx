@@ -68,6 +68,7 @@ function clonarRefs(refs) {
 
 export default function Dieta() {
   const [aba, setAba] = useState('diario')
+  const [dataAtiva, setDataAtiva] = useState(hojeId())
   const [hoje, setHoje] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
@@ -85,12 +86,12 @@ export default function Dieta() {
   const carregarHoje = useCallback(async () => {
     setLoading(true); setErro(null)
     try {
-      const id = hojeId()
-      const snap = await getDoc(doc(db, 'diario_dieta', id))
-      setHoje(snap.exists() ? snap.data() : diaVazio())
+      const snap = await getDoc(doc(db, 'diario_dieta', dataAtiva))
+      if (snap.exists()) setHoje(snap.data())
+      else setHoje({ data: dataAtiva, refeicoes: {}, extras_globais: [] })
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
-  }, [])
+  }, [dataAtiva])
 
   const carregarBase = useCallback(async () => {
     try {
@@ -109,7 +110,7 @@ export default function Dieta() {
   useEffect(() => { carregarHoje(); carregarBase() }, [carregarHoje, carregarBase])
 
   const salvarHoje = async (novo) => {
-    try { await setDoc(doc(db, 'diario_dieta', hojeId()), { ...novo, data: hojeId() }); setHoje(novo) }
+    try { await setDoc(doc(db, 'diario_dieta', dataAtiva), { ...novo, data: dataAtiva }); setHoje(novo) }
     catch (err) { setErro(`Erro: ${err.message}`) }
   }
 
@@ -306,6 +307,17 @@ Refeição do usuário: "${aiInput}"`
           <p className="text-neutral-600 text-center py-8 text-sm">Carregando...</p>
         ) : (
           <>
+            {dataAtiva !== hojeId() && (
+              <div className="flex items-center justify-between bg-cyan-500/10 backdrop-blur-md border border-cyan-500/20 rounded-2xl px-4 py-3">
+                <span className="text-cyan-400 text-xs font-medium">
+                  📅 Editando o histórico do dia {new Date(dataAtiva + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                </span>
+                <button onClick={() => setDataAtiva(hojeId())}
+                  className="text-cyan-400/70 hover:text-cyan-400 text-[11px] font-semibold bg-cyan-500/10 px-3 py-1.5 rounded-lg transition-all active:scale-90">
+                  Voltar para Hoje
+                </button>
+              </div>
+            )}
             <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Progresso Hoje</span>
               {[
@@ -470,13 +482,13 @@ Refeição do usuário: "${aiInput}"`
           </>
         )
       ) : (
-        <PainelEstatisticas mesDocs={mesDocs} carregarMes={carregarMes} />
+        <PainelEstatisticas mesDocs={mesDocs} carregarMes={carregarMes} onDayClick={(data) => { setDataAtiva(data); setAba('diario') }} />
       )}
     </div>
   )
 }
 
-function PainelEstatisticas({ mesDocs, carregarMes }) {
+function PainelEstatisticas({ mesDocs, carregarMes, onDayClick }) {
   useEffect(() => { if (mesDocs.length === 0) carregarMes() }, [])
 
   const hoje = new Date()
@@ -573,9 +585,10 @@ function PainelEstatisticas({ mesDocs, carregarMes }) {
           {diasSemana.map(d => <div key={d} className="text-[8px] text-neutral-600 text-center font-medium py-1">{d}</div>)}
           {Array.from({ length: primeiroDia }).map((_, i) => <div key={`e-${i}`} />)}
           {diasArray.map(({ dia, data }) => (
-            <div key={data} className={`aspect-square rounded-md flex items-center justify-center ${corDia(data)}`}>
+            <button key={data} onClick={() => onDayClick?.(data)}
+              className={`aspect-square rounded-md flex items-center justify-center transition-all active:scale-90 ${corDia(data)}`}>
               <span className="text-[9px] text-neutral-400 font-mono">{dia}</span>
-            </div>
+            </button>
           ))}
         </div>
         <div className="flex items-center justify-center gap-3 mt-2 text-[9px] text-neutral-600">
