@@ -18,10 +18,10 @@ function refeicaoVazia() {
   return { status: 'pendente', substituto: null, extra: [] }
 }
 
-function diaVazio() {
+function diaVazio(data) {
   const obj = {}
   REF_BASE.forEach(r => { obj[r.id] = refeicaoVazia() })
-  return { data: hojeId(), refeicoes: obj, extras_globais: [] }
+  return { data: data || hojeId(), refeicoes: obj, extras_globais: [] }
 }
 
 function calcularTotais(dia, refs) {
@@ -87,8 +87,12 @@ export default function Dieta() {
     setLoading(true); setErro(null)
     try {
       const snap = await getDoc(doc(db, 'diario_dieta', dataAtiva))
-      if (snap.exists()) setHoje(snap.data())
-      else setHoje({ data: dataAtiva, refeicoes: {}, extras_globais: [] })
+      if (snap.exists()) {
+        const data = snap.data()
+        if (!data.refeicoes) data.refeicoes = {}
+        REF_BASE.forEach(r => { if (!data.refeicoes[r.id]) data.refeicoes[r.id] = refeicaoVazia() })
+        setHoje(data)
+      } else setHoje(diaVazio(dataAtiva))
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
   }, [dataAtiva])
@@ -109,10 +113,12 @@ export default function Dieta() {
 
   useEffect(() => { carregarHoje(); carregarBase() }, [carregarHoje, carregarBase])
 
-  const salvarHoje = async (novo) => {
-    try { await setDoc(doc(db, 'diario_dieta', dataAtiva), { ...novo, data: dataAtiva }); setHoje(novo) }
+  useEffect(() => { setLoading(true) }, [dataAtiva])
+
+  const salvarHoje = useCallback(async (data, novo) => {
+    try { await setDoc(doc(db, 'diario_dieta', data), { ...novo, data }); setHoje(novo) }
     catch (err) { setErro(`Erro: ${err.message}`) }
-  }
+  }, [])
 
   const salvarBase = async (novasRefs) => {
     try { await setDoc(doc(db, 'config', 'dieta_base'), { refeicoes: novasRefs }); setRefs(novasRefs); setConfAberto(false) }
@@ -120,21 +126,23 @@ export default function Dieta() {
   }
 
   const confirmar = (id) => {
-    const n = { ...hoje, refeicoes: { ...hoje.refeicoes } }
+    let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
+    if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     const a = n.refeicoes[id]
     n.refeicoes[id] = a.status === 'limpo'
       ? { status: 'pendente', substituto: null, extra: a.extra || [] }
       : { ...a, status: 'limpo', substituto: null }
-    salvarHoje(n)
+    salvarHoje(dataAtiva, n)
   }
 
   const pular = (id) => {
-    const n = { ...hoje, refeicoes: { ...hoje.refeicoes } }
+    let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
+    if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     const a = n.refeicoes[id]
     n.refeicoes[id] = a.status === 'pulado'
       ? { status: 'pendente', substituto: null, extra: a.extra || [] }
       : { status: 'pulado', substituto: null, extra: a.extra || [] }
-    salvarHoje(n)
+    salvarHoje(dataAtiva, n)
   }
 
   const abrirCustom = (id) => {
@@ -145,7 +153,8 @@ export default function Dieta() {
 
   const salvarCustom = (id) => {
     if (!formCustom.proteinas && !formCustom.carboidratos && !formCustom.gorduras) return
-    const n = { ...hoje, refeicoes: { ...hoje.refeicoes } }
+    let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
+    if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     n.refeicoes[id] = {
       ...n.refeicoes[id], status: 'customizado',
       substituto: {
@@ -155,20 +164,20 @@ export default function Dieta() {
         gorduras: Number(formCustom.gorduras),
       },
     }
-    salvarHoje(n)
+    salvarHoje(dataAtiva, n)
     setEditando(null)
   }
 
   const adicionarExtraGlobal = () => {
     if (!extraGlobal.nome.trim() || (!extraGlobal.kcal && !extraGlobal.proteinas && !extraGlobal.carboidratos && !extraGlobal.gorduras)) return
     const n = { ...hoje, extras_globais: [...(hoje.extras_globais || []), { ...extraGlobal, kcal: Number(extraGlobal.kcal), proteinas: Number(extraGlobal.proteinas), carboidratos: Number(extraGlobal.carboidratos), gorduras: Number(extraGlobal.gorduras) }] }
-    salvarHoje(n)
+    salvarHoje(dataAtiva, n)
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
   }
 
   const removerExtraGlobal = (idx) => {
     const n = { ...hoje, extras_globais: (hoje.extras_globais || []).filter((_, i) => i !== idx) }
-    salvarHoje(n)
+    salvarHoje(dataAtiva, n)
   }
 
   const analisarComIA = async () => {
@@ -498,24 +507,29 @@ function PainelEstatisticas({ mesDocs, carregarMes, onDayClick }) {
   const primeiroDia = new Date(ano, mes - 1, 1).getDay()
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
-  let totalReg = 0; let limpoCount = 0; let alteradoCount = 0; let puladoCount = 0
+  let greenDays = 0; let yellowDays = 0; let redDays = 0; let totalDiasComDado = 0
   const diasMap = {}
 
   mesDocs.forEach(d => {
     diasMap[d.data] = d
-    if (d.refeicoes) {
-      Object.values(d.refeicoes).forEach(r => {
-        if (!r || r.status === 'pendente') return
-        totalReg++
-        if (r.status === 'limpo') limpoCount++
-        else if (r.status === 'customizado') alteradoCount++
-        else if (r.status === 'pulado') puladoCount++
-      })
-    }
-    if ((d.extras_globais || []).length > 0) alteradoCount++
+    if (!d.refeicoes) return
+
+    const refs = Object.values(d.refeicoes)
+    const todosPendentes = refs.every(r => !r || r.status === 'pendente')
+    if (todosPendentes) return
+
+    totalDiasComDado++
+    const temLivre = refs.some(r => r?.status === 'livre')
+    const temPuladoMaisDeUm = refs.filter(r => r?.status === 'pulado').length > 1
+    const temCustom = refs.some(r => r?.status === 'customizado') || (d.extras_globais || []).length > 0
+    const temPulado = refs.some(r => r?.status === 'pulado')
+
+    if (temLivre || temPuladoMaisDeUm) redDays++
+    else if (temCustom || temPulado) yellowDays++
+    else greenDays++
   })
 
-  const aderencia = totalReg > 0 ? Math.round((limpoCount / totalReg) * 100) : 0
+  const aderencia = totalDiasComDado > 0 ? Math.round((greenDays / totalDiasComDado) * 100) : 0
 
   function kcalDoDia(doc) {
     if (!doc?.refeicoes) return 0
@@ -555,8 +569,8 @@ function PainelEstatisticas({ mesDocs, carregarMes, onDayClick }) {
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 text-center">
-          <span className="text-2xl font-bold text-white">{totalReg}</span>
-          <span className="text-neutral-500 text-xs block mt-0.5">Registros no mês</span>
+          <span className="text-2xl font-bold text-white">{totalDiasComDado}</span>
+          <span className="text-neutral-500 text-xs block mt-0.5">Dias no mês</span>
         </div>
         <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 text-center">
           <span className="text-2xl font-bold text-emerald-400">{aderencia}%</span>
@@ -566,14 +580,14 @@ function PainelEstatisticas({ mesDocs, carregarMes, onDayClick }) {
 
       <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-2">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-emerald-400 font-medium">{limpoCount} Concluídas 🟢</span>
-          <span className="text-yellow-400 font-medium">{alteradoCount} Alteradas 🟡</span>
-          <span className="text-red-400 font-medium">{puladoCount} Puladas 🔴</span>
+          <span className="text-emerald-400 font-medium">{greenDays} Dias 🟢</span>
+          <span className="text-yellow-400 font-medium">{yellowDays} Dias 🟡</span>
+          <span className="text-red-400 font-medium">{redDays} Dias 🔴</span>
         </div>
         <div className="h-2 bg-neutral-800 rounded-full overflow-hidden flex">
-          <div className="h-full bg-emerald-500/60" style={{ width: `${totalReg > 0 ? (limpoCount / totalReg) * 100 : 0}%` }} />
-          <div className="h-full bg-yellow-500/60" style={{ width: `${totalReg > 0 ? (alteradoCount / totalReg) * 100 : 0}%` }} />
-          <div className="h-full bg-red-500/60" style={{ width: `${totalReg > 0 ? (puladoCount / totalReg) * 100 : 0}%` }} />
+          <div className="h-full bg-emerald-500/60" style={{ width: `${totalDiasComDado > 0 ? (greenDays / totalDiasComDado) * 100 : 0}%` }} />
+          <div className="h-full bg-yellow-500/60" style={{ width: `${totalDiasComDado > 0 ? (yellowDays / totalDiasComDado) * 100 : 0}%` }} />
+          <div className="h-full bg-red-500/60" style={{ width: `${totalDiasComDado > 0 ? (redDays / totalDiasComDado) * 100 : 0}%` }} />
         </div>
       </div>
 
