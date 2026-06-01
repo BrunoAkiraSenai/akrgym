@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, query, orderBy, addDoc } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, addDoc, deleteDoc, updateDoc, doc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import {
   Dumbbell, BarChart3, AlertTriangle, Trophy, Target, Flame,
-  Activity, Save, ChevronDown, ChevronUp, Minus, Weight,
+  Activity, Save, ChevronDown, ChevronUp, Minus, Weight, Trash, Pencil, X,
 } from 'lucide-react'
 
 const PAD = { top: 24, right: 16, bottom: 44, left: 56 }
@@ -47,6 +47,7 @@ export default function Evolucao({ user }) {
   const [medidaData, setMedidaData] = useState(new Date().toISOString().split('T')[0])
   const [novaMedida, setNovaMedida] = useState({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
   const [savingMedida, setSavingMedida] = useState(false)
+  const [editandoId, setEditandoId] = useState(null)
   const [medidaGrafico, setMedidaGrafico] = useState('peso')
 
   const carregarTreinos = useCallback(async () => {
@@ -85,11 +86,44 @@ export default function Evolucao({ user }) {
     try {
       const registro = { data: new Date(medidaData + 'T12:00:00') }
       CAMPOS_MEDIDA.forEach(c => { registro[c.key] = Number(novaMedida[c.key]) })
-      await addDoc(collection(db, 'users', user.uid, 'historico_corporal'), registro)
+      if (editandoId) {
+        await updateDoc(doc(db, 'users', user.uid, 'historico_corporal', editandoId), registro)
+      } else {
+        await addDoc(collection(db, 'users', user.uid, 'historico_corporal'), registro)
+      }
       setNovaMedida({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
+      setEditandoId(null)
       await carregarMedidas()
     } catch (err) { setErro(`Erro ao salvar: ${err.message}`) }
     setSavingMedida(false)
+  }
+
+  const editarMedida = (m) => {
+    setEditandoId(m.id)
+    setMedidaData(m.data.toISOString().split('T')[0])
+    setNovaMedida({
+      peso: String(m.peso ?? ''),
+      cintura: String(m.cintura ?? ''),
+      abdomen: String(m.abdomen ?? ''),
+      braco_dir: String(m.braco_dir ?? ''),
+      peito: String(m.peito ?? ''),
+      coxa_dir: String(m.coxa_dir ?? ''),
+    })
+  }
+
+  const cancelarEdicao = () => {
+    setEditandoId(null)
+    setNovaMedida({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
+    setMedidaData(new Date().toISOString().split('T')[0])
+  }
+
+  const deletarMedida = async (id, dataStr) => {
+    if (!window.confirm(`Deseja apagar a medida do dia ${dataStr}? Essa ação não pode ser desfeita.`)) return
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'historico_corporal', id))
+      if (editandoId === id) cancelarEdicao()
+      await carregarMedidas()
+    } catch (err) { setErro(`Erro ao deletar: ${err.message}`) }
   }
 
   const dadosTreino = (() => {
@@ -287,10 +321,18 @@ export default function Evolucao({ user }) {
         </>
       ) : (
         <>
-          <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
-            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
-              <Activity size={12} className="text-cyan-400" /> Novo Registro
-            </span>
+            <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Activity size={12} className="text-cyan-400" /> {editandoId ? 'Editar Medida' : 'Novo Registro'}
+              </span>
+              {editandoId && (
+                <button onClick={cancelarEdicao}
+                  className="text-neutral-500 hover:text-white flex items-center gap-1 text-xs transition-all active:scale-90">
+                  <X size={14} /> Cancelar
+                </button>
+              )}
+            </div>
             <div className="mb-2">
               <label className="text-[9px] text-neutral-600 uppercase tracking-wider block mb-0.5">Data</label>
               <input type="date" value={medidaData} onChange={e => setMedidaData(e.target.value)}
@@ -309,7 +351,8 @@ export default function Evolucao({ user }) {
             </div>
             <button onClick={registrarMedida} disabled={savingMedida || CAMPOS_MEDIDA.some(c => novaMedida[c.key] === '')}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-3 rounded-xl text-sm transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed">
-              {savingMedida ? <><Save size={16} className="animate-spin" /> Salvando...</> : <><Save size={16} /> Registrar Medidas</>}
+              {savingMedida ? <><Save size={16} className="animate-spin" /> Salvando...</>
+              : <><Save size={16} /> {editandoId ? 'Atualizar Medida' : 'Registrar Medidas'}</>}
             </button>
           </div>
 
@@ -418,7 +461,7 @@ export default function Evolucao({ user }) {
             </div>
           )}
 
-          {medidas.length > 1 && (
+          {medidas.length >= 1 && (
             <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Histórico
@@ -429,6 +472,7 @@ export default function Evolucao({ user }) {
                     <tr className="text-neutral-600 border-b border-white/5">
                       <th className="text-left py-2 pr-2 font-medium">Data</th>
                       {CAMPOS_MEDIDA.map(c => <th key={c.key} className="text-center py-2 px-1 font-medium">{c.label}</th>)}
+                      <th className="text-right py-2 pl-2 font-medium">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -440,6 +484,18 @@ export default function Evolucao({ user }) {
                         {CAMPOS_MEDIDA.map(c => (
                           <td key={c.key} className="text-center text-white font-mono py-2 px-1">{m[c.key]}</td>
                         ))}
+                        <td className="text-right py-2 pl-2 whitespace-nowrap">
+                          <button onClick={() => editarMedida(m)}
+                            className="text-amber-400/70 hover:text-amber-400 p-1.5 transition-all active:scale-90">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => deletarMedida(
+                            m.id,
+                            m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                          )} className="text-red-400/70 hover:text-red-400 p-1.5 transition-all active:scale-90">
+                            <Trash size={14} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

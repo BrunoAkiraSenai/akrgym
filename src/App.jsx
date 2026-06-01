@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
-import { onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword } from 'firebase/auth'
+import { useState, useEffect } from 'react'
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, writeBatch, query, where } from 'firebase/firestore'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 import Layout from './components/Layout'
 import Login from './components/pages/Login'
 import Home from './components/pages/Home'
@@ -18,27 +18,6 @@ const SEED_CONFIG = {
   metas: { kcal: 1970, proteinas: 165, carboidratos: 226, gorduras: 43 },
   refeicoes: REFEICOES,
   treinos: PROTOCOLO_BASE,
-}
-
-async function migrateBatch(fromUid, toUid) {
-  const batch = writeBatch(db)
-  const collections = ['historico_treinos', 'diario_dieta', 'historico_corporal']
-
-  for (const colName of collections) {
-    const snap = await getDocs(collection(db, 'users', fromUid, colName))
-    snap.docs.forEach(d => {
-      batch.set(doc(db, 'users', toUid, colName, d.id), d.data())
-      batch.delete(doc(db, 'users', fromUid, colName, d.id))
-    })
-  }
-
-  const configDoc = await getDoc(doc(db, 'users', fromUid, 'config', 'data'))
-  if (configDoc.exists()) {
-    batch.set(doc(db, 'users', toUid, 'config', 'data'), configDoc.data())
-    batch.delete(doc(db, 'users', fromUid, 'config', 'data'))
-  }
-
-  await batch.commit()
 }
 
 async function ensureUserConfig(uid) {
@@ -72,23 +51,6 @@ export default function App() {
     }
   }, [user, loading])
 
-  const loginAkira = useCallback(async () => {
-    const currentUid = user?.uid
-    try {
-      const cred = await signInWithEmailAndPassword(auth, 'akirafurumori@gmail.com', '2804089aA@')
-      if (currentUid && user?.isAnonymous) {
-        await migrateBatch(currentUid, cred.user.uid)
-      }
-    } catch (err) {
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
-        const cred = await signInWithEmailAndPassword(auth, 'akirafurumori@gmail.com', '2804089aA@')
-        if (currentUid && user?.isAnonymous) {
-          await migrateBatch(currentUid, cred.user.uid)
-        }
-      }
-    }
-  }, [user])
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full bg-[#050505]">
@@ -97,7 +59,7 @@ export default function App() {
     )
   }
 
-  if (!user) return <Login onLoginAkira={loginAkira} />
+  if (!user) return <Login />
 
   const renderPage = () => {
     switch (activeTab) {

@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '../../firebase'
-import { Apple, Loader, Zap } from 'lucide-react'
+import { Apple, Loader } from 'lucide-react'
 
-export default function Login({ onLoginAkira }) {
+export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -66,17 +66,6 @@ export default function Login({ onLoginAkira }) {
             {loading ? <><Loader size={18} className="animate-spin" /> Entrando...</> : 'Entrar / Cadastrar'}
           </button>
         </form>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5" /></div>
-          <div className="relative flex justify-center"><span className="bg-[#050505] px-3 text-[10px] text-neutral-600">ou</span></div>
-        </div>
-
-        <button onClick={onLoginAkira} disabled={loading}
-          className="w-full flex items-center justify-center gap-2 bg-neutral-900/50 backdrop-blur-md border border-white/10 hover:bg-neutral-800 text-white font-semibold py-4 rounded-xl text-sm transition-all active:scale-[0.97] disabled:opacity-30">
-          <Zap size={18} className="text-yellow-400" />
-          Entrar como Akira Furumori 🚀
-        </button>
       </div>
     </div>
   )

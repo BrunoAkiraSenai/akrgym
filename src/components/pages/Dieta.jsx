@@ -3,13 +3,21 @@ import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase
 import { db } from '../../firebase'
 import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff } from 'lucide-react'
+import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
 function hojeId() { return new Date().toISOString().split('T')[0] }
 
-function inicioMes() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+function formatMesKey(ano, mes) {
+  return `${ano}-${String(mes).padStart(2, '0')}`
+}
+
+function inicioMes(ano, mes) {
+  return `${ano}-${String(mes).padStart(2, '0')}-01`
+}
+
+function fimMes(ano, mes) {
+  const ultimo = new Date(ano, mes, 0).getDate()
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`
 }
 
 function diasNoMes(ano, mes) { return new Date(ano, mes, 0).getDate() }
@@ -27,11 +35,9 @@ function diaVazio(data) {
 function calcularTotais(dia, refs) {
   const t = { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }
   if (!dia?.refeicoes) return t
-
   refs.forEach(ref => {
     const r = dia.refeicoes[ref.id]
     if (!r || r.status === 'pendente' || r.status === 'pulado') return
-
     if (r.status === 'customizado' && r.substituto) {
       t.kcal += (r.substituto.proteinas * 4 + r.substituto.carboidratos * 4 + r.substituto.gorduras * 9)
       t.proteinas += Number(r.substituto.proteinas) || 0
@@ -43,7 +49,6 @@ function calcularTotais(dia, refs) {
       t.carboidratos += ref.carboidratos
       t.gorduras += ref.gorduras
     }
-
     ;(r.extra || []).forEach(e => {
       t.kcal += (Number(e.proteinas) * 4 + Number(e.carboidratos) * 4 + Number(e.gorduras) * 9)
       t.proteinas += Number(e.proteinas) || 0
@@ -51,14 +56,12 @@ function calcularTotais(dia, refs) {
       t.gorduras += Number(e.gorduras) || 0
     })
   })
-
   ;(dia.extras_globais || []).forEach(e => {
     t.kcal += Number(e.kcal) || 0
     t.proteinas += Number(e.proteinas) || 0
     t.carboidratos += Number(e.carboidratos) || 0
     t.gorduras += Number(e.gorduras) || 0
   })
-
   return t
 }
 
@@ -77,13 +80,25 @@ export default function Dieta({ user }) {
   const [refs, setRefs] = useState(clonarRefs(REF_BASE))
   const [confAberto, setConfAberto] = useState(false)
   const [extraGlobal, setExtraGlobal] = useState({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
+  const [editandoExtraIdx, setEditandoExtraIdx] = useState(null)
   const [mesDocs, setMesDocs] = useState([])
-  const [aiKey, setAiKey] = useState(localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '')
+  const [mesAtual, setMesAtual] = useState({ ano: new Date().getFullYear(), mes: new Date().getMonth() + 1 })
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
-  const [userMetas, setUserMetas] = useState(METAS_DIARIAS)
+  const [aiKey, setAiKey] = useState(localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '')
   const [aiKeyVisible, setAiKeyVisible] = useState(false)
+  const [userMetas, setUserMetas] = useState(METAS_DIARIAS)
+  const [toast, setToast] = useState(null)
+
+  // Toast auto-dismiss
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  const showToast = (msg, tipo) => setToast({ msg, tipo })
 
   const carregarHoje = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -110,9 +125,11 @@ export default function Dieta({ user }) {
     } catch {}
   }, [])
 
-  const carregarMes = useCallback(async () => {
+  const carregarMes = useCallback(async (ano, mes) => {
     try {
-      const snap = await getDocs(query(collection(db, 'users', user.uid, 'diario_dieta'), where('data', '>=', inicioMes()), where('data', '<=', hojeId())))
+      const ini = inicioMes(ano, mes)
+      const fim = fimMes(ano, mes)
+      const snap = await getDocs(query(collection(db, 'users', user.uid, 'diario_dieta'), where('data', '>=', ini), where('data', '<=', fim)))
       setMesDocs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     } catch (err) { setErro(`Erro: ${err.message}`) }
   }, [])
@@ -121,15 +138,27 @@ export default function Dieta({ user }) {
 
   useEffect(() => { setLoading(true) }, [dataAtiva])
 
+  const recarregarMes = useCallback(() => {
+    carregarMes(mesAtual.ano, mesAtual.mes)
+  }, [mesAtual, carregarMes])
+
   const salvarHoje = useCallback(async (data, novo) => {
-    try { await setDoc(doc(db, 'users', user.uid, 'diario_dieta', data), { ...novo, data }); setHoje(novo) }
-    catch (err) { setErro(`Erro: ${err.message}`) }
-  }, [])
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'diario_dieta', data), { ...novo, data })
+      setHoje(novo)
+      showToast('✓ Salvo', 'sucesso')
+      recarregarMes()
+    } catch (err) {
+      setErro(`Erro ao salvar. Verifique sua conexão.`)
+      showToast('Erro ao salvar. Verifique sua conexão.', 'erro')
+    }
+  }, [recarregarMes])
 
   const salvarBase = async (novasRefs) => {
     try {
       await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { refeicoes: novasRefs, metas: userMetas }, { merge: true })
       setRefs(novasRefs); setConfAberto(false)
+      showToast('✓ Salvo', 'sucesso')
     } catch (err) { setErro(`Erro: ${err.message}`) }
   }
 
@@ -144,6 +173,8 @@ export default function Dieta({ user }) {
   }
 
   const pular = (id) => {
+    const atual = hoje?.refeicoes?.[id]
+    if (atual?.status === 'pendente' && !window.confirm('Tem certeza que deseja pular esta refeição?')) return
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
     if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     const a = n.refeicoes[id]
@@ -176,29 +207,54 @@ export default function Dieta({ user }) {
     setEditando(null)
   }
 
+  // Extra global: adicionar ou editar
   const adicionarExtraGlobal = () => {
     if (!extraGlobal.nome.trim() || (!extraGlobal.kcal && !extraGlobal.proteinas && !extraGlobal.carboidratos && !extraGlobal.gorduras)) return
-    const n = { ...hoje, extras_globais: [...(hoje.extras_globais || []), { ...extraGlobal, kcal: Number(extraGlobal.kcal), proteinas: Number(extraGlobal.proteinas), carboidratos: Number(extraGlobal.carboidratos), gorduras: Number(extraGlobal.gorduras) }] }
+    const n = { ...hoje, extras_globais: [...(hoje.extras_globais || [])] }
+    const item = { ...extraGlobal, kcal: Number(extraGlobal.kcal), proteinas: Number(extraGlobal.proteinas), carboidratos: Number(extraGlobal.carboidratos), gorduras: Number(extraGlobal.gorduras) }
+    if (editandoExtraIdx !== null) {
+      n.extras_globais[editandoExtraIdx] = item
+    } else {
+      n.extras_globais.push(item)
+    }
     salvarHoje(dataAtiva, n)
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
+    setEditandoExtraIdx(null)
+  }
+
+  const cancelarExtra = () => {
+    setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
+    setEditandoExtraIdx(null)
+  }
+
+  const editarExtra = (idx) => {
+    const e = hoje?.extras_globais?.[idx]
+    if (!e) return
+    setExtraGlobal({
+      nome: e.nome || '',
+      kcal: String(e.kcal || ''),
+      proteinas: String(e.proteinas || ''),
+      carboidratos: String(e.carboidratos || ''),
+      gorduras: String(e.gorduras || ''),
+    })
+    setEditandoExtraIdx(idx)
   }
 
   const removerExtraGlobal = (idx) => {
     const n = { ...hoje, extras_globais: (hoje.extras_globais || []).filter((_, i) => i !== idx) }
     salvarHoje(dataAtiva, n)
+    if (editandoExtraIdx === idx) cancelarExtra()
   }
 
+  // IA Gemini via SDK direto (Cloud Function requer plano Blaze)
   const analisarComIA = async () => {
     if (!aiInput.trim() || aiLoading) return
     setAiLoading(true); setAiResult(null); setErro(null)
-
     try {
       const key = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY
       if (!key) { setErro('Configure sua chave da API Gemini nas configurações.'); setAiLoading(false); return }
-
       const genAI = new GoogleGenerativeAI(key)
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-
       const prompt = `Você é um assistente de nutrição de alta precisão focado estritamente no mercado de alimentação do BRASIL.
 Ao analisar a refeição descrita pelo usuário, siga estas diretrizes estritas:
 1. Priorize como fontes de dados a tabela TACO (Unicamp), TBCA (USP) e os menus nutricionais oficiais das filiais brasileiras de marcas de fast-food (ex: McDonald's Brasil, Burger King Brasil, Subway Brasil).
@@ -214,11 +270,9 @@ Ao analisar a refeição descrita pelo usuário, siga estas diretrizes estritas:
 Não adicione nenhum texto explicativo fora do JSON.
 
 Refeição do usuário: "${aiInput}"`
-
       const result = await model.generateContent(prompt)
       const text = result.response.text().trim()
       const parsed = JSON.parse(text)
-
       if (parsed.kcal != null && parsed.p != null) {
         setAiResult(parsed)
         setExtraGlobal({
@@ -234,7 +288,6 @@ Refeição do usuário: "${aiInput}"`
     } catch (err) {
       setErro(`Erro na análise: ${err.message}`)
     }
-
     setAiLoading(false)
   }
 
@@ -255,8 +308,22 @@ Refeição do usuário: "${aiInput}"`
     return 'from-neutral-600 to-neutral-500'
   }
 
+  const hojeData = new Date()
+  const podeAvancar = mesAtual.ano < hojeData.getFullYear() || (mesAtual.ano === hojeData.getFullYear() && mesAtual.mes < hojeData.getMonth() + 1)
+
   return (
     <div className="flex flex-col gap-3 pt-2 pb-4">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-24 left-4 right-4 z-50 flex items-center justify-center pointer-events-none`}>
+          <div className={`px-4 py-2.5 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md ${
+            toast.tipo === 'sucesso' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
+          }`}>
+            {toast.msg}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-xl font-bold tracking-tight text-white">Dieta</h1>
         <div className="flex items-center gap-1">
@@ -269,19 +336,18 @@ Refeição do usuário: "${aiInput}"`
       <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-1 flex">
         <button onClick={() => setAba('diario')}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'diario' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'}`}>Diário</button>
-        <button onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes() }}
+        <button onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes) }}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'estatisticas' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
       </div>
 
       {erro && <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
 
       {confAberto && (
-          <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
+        <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-neutral-300">Configurar Base</span>
             <button onClick={() => { setConfAberto(false); setRefs(clonarRefs(REF_BASE)) }} className="text-neutral-500 hover:text-white"><X size={16} /></button>
           </div>
-
           <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
             <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Metas Diárias</span>
             <div className="grid grid-cols-4 gap-1.5">
@@ -300,7 +366,6 @@ Refeição do usuário: "${aiInput}"`
               ))}
             </div>
           </div>
-
           {refs.map((ref, i) => (
             <div key={ref.id} className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
               <span className="text-xs text-white font-medium">{ref.nome}</span>
@@ -462,7 +527,9 @@ Refeição do usuário: "${aiInput}"`
             })}
 
             <div className="bg-neutral-900/50 backdrop-blur-md border border-cyan-500/20 rounded-2xl p-4 space-y-2">
-              <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">+ Alimento Extra / Fora da Dieta</span>
+              <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">
+                {editandoExtraIdx !== null ? '✏️ Editar Alimento' : '+ Alimento Extra / Fora da Dieta'}
+              </span>
               <div className="grid grid-cols-2 gap-1.5">
                 <input type="text" placeholder="Nome" value={extraGlobal.nome}
                   onChange={e => setExtraGlobal(p => ({ ...p, nome: e.target.value }))}
@@ -474,15 +541,26 @@ Refeição do usuário: "${aiInput}"`
                     className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs text-center outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
                 ))}
               </div>
-              <button onClick={adicionarExtraGlobal}
-                disabled={!extraGlobal.nome.trim()}
-                className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30">
-                <Plus size={14} /> Adicionar
-              </button>
+              <div className="flex gap-2">
+                {editandoExtraIdx !== null && (
+                  <button onClick={cancelarExtra}
+                    className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95">
+                    Cancelar
+                  </button>
+                )}
+                <button onClick={adicionarExtraGlobal}
+                  disabled={!extraGlobal.nome.trim()}
+                  className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30">
+                  <Plus size={14} /> {editandoExtraIdx !== null ? 'Atualizar' : 'Adicionar'}
+                </button>
+              </div>
               {(hoje?.extras_globais || []).map((e, i) => (
                 <div key={i} className="flex items-center justify-between bg-cyan-500/5 rounded-lg px-3 py-1.5 font-mono text-[11px] text-cyan-400/80 border border-cyan-500/10">
                   <span>+ {e.nome} — {e.kcal || 0} kcal · P: {e.proteinas || 0} · C: {e.carboidratos || 0} · G: {e.gorduras || 0}</span>
-                  <button onClick={() => removerExtraGlobal(i)} className="text-red-400/60 hover:text-red-400 ml-1"><X size={12} /></button>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => editarExtra(i)} className="text-amber-400/70 hover:text-amber-400 transition-all active:scale-90"><Pencil size={13} /></button>
+                    <button onClick={() => removerExtraGlobal(i)} className="text-red-400/60 hover:text-red-400 transition-all active:scale-90"><X size={13} /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -535,37 +613,96 @@ Refeição do usuário: "${aiInput}"`
           </>
         )
       ) : (
-        <PainelEstatisticas mesDocs={mesDocs} carregarMes={carregarMes} userMetas={userMetas} onDayClick={(data) => { setDataAtiva(data); setAba('diario') }} />
+        <PainelEstatisticas
+          mesDocs={mesDocs}
+          carregarMes={carregarMes}
+          userMetas={userMetas}
+          mesAtual={mesAtual}
+          setMesAtual={setMesAtual}
+          podeAvancar={podeAvancar}
+          onDayClick={(data) => { setDataAtiva(data); setAba('diario') }}
+        />
       )}
     </div>
   )
 }
 
-function PainelEstatisticas({ mesDocs, carregarMes, userMetas, onDayClick }) {
-  useEffect(() => { if (mesDocs.length === 0) carregarMes() }, [])
+function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
+  useEffect(() => {
+    if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes)
+  }, [mesAtual])
 
-  const hoje = new Date()
-  const ano = hoje.getFullYear()
-  const mes = hoje.getMonth() + 1
+  const { ano, mes } = mesAtual
   const totalDias = diasNoMes(ano, mes)
   const primeiroDia = new Date(ano, mes - 1, 1).getDay()
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const META_KCAL = userMetas?.kcal || 1970
+
+  const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    .replace(/^(\w)/, l => l.toUpperCase())
 
   function corDia(dataStr) {
     const doc = diasMap[dataStr]
     if (!doc) return 'bg-neutral-800'
     const kcal = kcalDoDia(doc)
     if (kcal === 0) return 'bg-neutral-800'
-    const diff = Math.abs(kcal - META_KCAL)
-    if (diff <= 100) return 'bg-emerald-500/40'
-    if (diff <= 200) return 'bg-amber-500/40'
+    if (kcal <= 2000) return 'bg-emerald-500/40'
+    if (kcal <= 2250) return 'bg-amber-500/40'
     return 'bg-red-500/40'
   }
+
+  function kcalDoDia(doc) {
+    if (!doc?.refeicoes) return 0
+    let total = 0
+    Object.entries(doc.refeicoes).forEach(([id, r]) => {
+      if (!r || r.status === 'pendente' || r.status === 'pulado') return
+      const ref = REF_BASE.find(m => m.id === id)
+      if (r.status === 'customizado' && r.substituto) {
+        total += (Number(r.substituto.proteinas) * 4 + Number(r.substituto.carboidratos) * 4 + Number(r.substituto.gorduras) * 9)
+      } else if ((r.status === 'limpo' || r.status === 'livre') && ref) {
+        total += ref.kcal
+      }
+    })
+    ;(doc.extras_globais || []).forEach(e => { total += Number(e.kcal) || 0 })
+    return total
+  }
+
+  let greenDays = 0; let yellowDays = 0; let redDays = 0; let totalDiasComDado = 0
+  const diasMap = {}
+
+  mesDocs.forEach(d => {
+    diasMap[d.data] = d
+    if (!d.refeicoes) return
+    const refs = Object.values(d.refeicoes)
+    const todosPendentes = refs.every(r => !r || r.status === 'pendente')
+    if (todosPendentes) return
+    totalDiasComDado++
+    const temLivre = refs.some(r => r?.status === 'livre')
+    const temPuladoMaisDeUm = refs.filter(r => r?.status === 'pulado').length > 1
+    const temCustom = refs.some(r => r?.status === 'customizado') || (d.extras_globais || []).length > 0
+    const temPulado = refs.some(r => r?.status === 'pulado')
+    if (temLivre || temPuladoMaisDeUm) redDays++
+    else if (temCustom || temPulado) yellowDays++
+    else greenDays++
+  })
+
+  const aderencia = totalDiasComDado > 0 ? Math.round((greenDays / totalDiasComDado) * 100) : 0
 
   const diasArray = []
   for (let d = 1; d <= totalDias; d++) {
     diasArray.push({ dia: d, data: `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}` })
+  }
+
+  const hoje = new Date()
+  const voltarMes = () => {
+    if (mes === 1) setMesAtual({ ano: ano - 1, mes: 12 })
+    else setMesAtual({ ano, mes: mes - 1 })
+  }
+
+  const avancarMes = () => {
+    if (!podeAvancar) return
+    if (mes === 12) setMesAtual({ ano: ano + 1, mes: 1 })
+    else setMesAtual({ ano, mes: mes + 1 })
   }
 
   return (
@@ -595,9 +732,17 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, onDayClick }) {
       </div>
 
       <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
-        <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-2">
-          {new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^(\w)/, l => l.toUpperCase())}
-        </span>
+        <div className="flex items-center justify-between mb-2">
+          <button onClick={voltarMes}
+            className="border border-white/10 rounded-xl p-2 text-white/60 hover:text-white transition-all active:scale-90">
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">{nomeMes}</span>
+          <button onClick={avancarMes} disabled={!podeAvancar}
+            className={`border rounded-xl p-2 transition-all active:scale-90 ${podeAvancar ? 'border-white/10 text-white/60 hover:text-white' : 'border-transparent text-neutral-700 cursor-not-allowed'}`}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
         <div className="grid grid-cols-7 gap-1">
           {diasSemana.map(d => <div key={d} className="text-[8px] text-neutral-600 text-center font-medium py-1">{d}</div>)}
           {Array.from({ length: primeiroDia }).map((_, i) => <div key={`e-${i}`} />)}
@@ -609,9 +754,9 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, onDayClick }) {
           ))}
         </div>
         <div className="flex items-center justify-center gap-3 mt-2 text-[9px] text-neutral-600">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ±100kcal da meta</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> ±200kcal</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;200kcal</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ≤2000 kcal</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> 2001-2250</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;2250</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neutral-800" /> Sem dados</span>
         </div>
       </div>
