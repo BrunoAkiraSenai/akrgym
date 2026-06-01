@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  collection, getDocs, query, where, orderBy, limit, addDoc,
+  collection, getDocs, query, where, orderBy, limit, addDoc, doc, getDoc, setDoc,
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
@@ -9,9 +9,8 @@ import {
   Flame, Thermometer, Zap, RefreshCw, Info,
 } from 'lucide-react'
 
-const STORAGE_KEY = 'rascunho_treino_ativo'
-
 export default function Execucao({ user, onFinish }) {
+  const STORAGE_KEY = `rascunho_treino_${user.uid}`
   const [step, setStep] = useState('select')
   const [rotinaKey, setRotinaKey] = useState(null)
   const [topSetData, setTopSetData] = useState([])
@@ -19,22 +18,40 @@ export default function Execucao({ user, onFinish }) {
   const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [erro, setErro] = useState(null)
   const [recuperado, setRecuperado] = useState(false)
-
-  const keys = Object.keys(PROTOCOLO_BASE)
+  const [treinosState, setTreinosState] = useState(null)
 
   useEffect(() => {
+    ;(async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
+        if (snap.exists() && snap.data().treinos) {
+          setTreinosState(snap.data().treinos)
+        } else {
+          await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { treinos: PROTOCOLO_BASE }, { merge: true })
+          setTreinosState(PROTOCOLO_BASE)
+        }
+      } catch {
+        setTreinosState(PROTOCOLO_BASE)
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (!treinosState) return
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return
       const draft = JSON.parse(raw)
-      if (draft?.rotinaKey && draft?.topSetData?.length > 0 && PROTOCOLO_BASE[draft.rotinaKey]) {
+      if (draft?.rotinaKey && draft?.topSetData?.length > 0 && treinosState[draft.rotinaKey]) {
         setRotinaKey(draft.rotinaKey)
         setTopSetData(draft.topSetData)
         setStep('active')
         setRecuperado(true)
       }
     } catch {}
-  }, [])
+  }, [treinosState])
+
+  const keys = treinosState ? Object.keys(treinosState) : []
 
   useEffect(() => {
     if (step === 'active' && rotinaKey && topSetData.length > 0) {
@@ -44,13 +61,19 @@ export default function Execucao({ user, onFinish }) {
 
   const iniciarTreino = useCallback(async (key) => {
     if (loadingHistorico) return
+    if (!treinosState?.[key]) {
+      if (PROTOCOLO_BASE[key]) {
+        await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { treinos: PROTOCOLO_BASE }, { merge: true })
+        setTreinosState(PROTOCOLO_BASE)
+      }
+      setErro('Rotina não encontrada.')
+      return
+    }
+    const protocolo = treinosState[key]
     setRotinaKey(key)
     setStep('active')
     setLoadingHistorico(true)
     setErro(null)
-
-    const protocolo = PROTOCOLO_BASE[key]
-    if (!protocolo) { setErro('Rotina não encontrada.'); setLoadingHistorico(false); return }
 
     try {
       const snap = await getDocs(
@@ -75,7 +98,7 @@ export default function Execucao({ user, onFinish }) {
       )
     } catch (err) { setErro(`Erro ao buscar histórico: ${err.message}`) }
     setLoadingHistorico(false)
-  }, [loadingHistorico])
+  }, [loadingHistorico, treinosState, user.uid])
 
   const atualizar = (exIdx, campo, valor) => {
     setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, [campo]: valor } : { ...ex }))
@@ -104,7 +127,7 @@ export default function Execucao({ user, onFinish }) {
           <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
         )}
         {keys.map(key => {
-          const r = PROTOCOLO_BASE[key]
+          const r = treinosState[key]
           return (
             <button
               key={key}
@@ -112,8 +135,8 @@ export default function Execucao({ user, onFinish }) {
               className="w-full flex items-center justify-between bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-5 transition-all active:scale-[0.97] hover:border-white/10 text-left"
             >
               <div>
-                <span className="text-white font-semibold text-base tracking-tight">{r.nome}</span>
-                <span className="text-neutral-500 text-sm block">{r.exercicios.length} exercícios</span>
+                <span className="text-white font-semibold text-base tracking-tight">{r?.nome || key}</span>
+                <span className="text-neutral-500 text-sm block">{r?.exercicios?.length || 0} exercícios</span>
               </div>
               <Play size={22} className="text-emerald-400 shrink-0 drop-shadow-[0_0_6px_rgba(52,211,153,0.3)]" />
             </button>
@@ -123,7 +146,7 @@ export default function Execucao({ user, onFinish }) {
     )
   }
 
-  const rotina = PROTOCOLO_BASE[rotinaKey]
+  const rotina = treinosState?.[rotinaKey]
 
   return (
     <div className="flex flex-col gap-3 pt-1 pb-4">

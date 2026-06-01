@@ -3,7 +3,7 @@ import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase
 import { db } from '../../firebase'
 import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { Apple, Plus, X, Check, Settings, Sparkles, Loader } from 'lucide-react'
+import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff } from 'lucide-react'
 
 function hojeId() { return new Date().toISOString().split('T')[0] }
 
@@ -82,6 +82,8 @@ export default function Dieta({ user }) {
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
+  const [userMetas, setUserMetas] = useState(METAS_DIARIAS)
+  const [aiKeyVisible, setAiKeyVisible] = useState(false)
 
   const carregarHoje = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -99,8 +101,12 @@ export default function Dieta({ user }) {
 
   const carregarBase = useCallback(async () => {
     try {
-      const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'dieta_base'))
-      if (snap.exists()) setRefs(snap.data().refeicoes || clonarRefs(REF_BASE))
+      const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
+      if (snap.exists()) {
+        const data = snap.data()
+        if (data.refeicoes) setRefs(clonarRefs(data.refeicoes))
+        if (data.metas) setUserMetas(data.metas)
+      }
     } catch {}
   }, [])
 
@@ -121,8 +127,10 @@ export default function Dieta({ user }) {
   }, [])
 
   const salvarBase = async (novasRefs) => {
-    try { await setDoc(doc(db, 'users', user.uid, 'config', 'dieta_base'), { refeicoes: novasRefs }); setRefs(novasRefs); setConfAberto(false) }
-    catch (err) { setErro(`Erro: ${err.message}`) }
+    try {
+      await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { refeicoes: novasRefs, metas: userMetas }, { merge: true })
+      setRefs(novasRefs); setConfAberto(false)
+    } catch (err) { setErro(`Erro: ${err.message}`) }
   }
 
   const confirmar = (id) => {
@@ -268,11 +276,31 @@ Refeição do usuário: "${aiInput}"`
       {erro && <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
 
       {confAberto && (
-        <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
+          <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-neutral-300">Configurar Base</span>
             <button onClick={() => { setConfAberto(false); setRefs(clonarRefs(REF_BASE)) }} className="text-neutral-500 hover:text-white"><X size={16} /></button>
           </div>
+
+          <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
+            <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Metas Diárias</span>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { key: 'kcal', label: 'Kcal', value: userMetas.kcal },
+                { key: 'proteinas', label: 'P (g)', value: userMetas.proteinas },
+                { key: 'carboidratos', label: 'C (g)', value: userMetas.carboidratos },
+                { key: 'gorduras', label: 'G (g)', value: userMetas.gorduras },
+              ].map(c => (
+                <div key={c.key}>
+                  <label className="text-[8px] text-neutral-600 block mb-0.5">{c.label}</label>
+                  <input type="number" value={c.value}
+                    onChange={e => setUserMetas(p => ({ ...p, [c.key]: Number(e.target.value) }))}
+                    className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
+                </div>
+              ))}
+            </div>
+          </div>
+
           {refs.map((ref, i) => (
             <div key={ref.id} className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
               <span className="text-xs text-white font-medium">{ref.nome}</span>
@@ -299,15 +327,31 @@ Refeição do usuário: "${aiInput}"`
 
           <div className="border-t border-white/5 pt-3 space-y-1.5">
             <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">🤖 IA Gemini</span>
-            <input type="password" placeholder="Sua chave da API Gemini"
-              value={aiKey} onChange={e => setAiKey(e.target.value)}
-              className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30" />
-            <button onClick={() => { localStorage.setItem('gemini_api_key', aiKey); setErro(null); setAiKey(aiKey) }}
-              className="w-full bg-cyan-500/10 text-cyan-400 font-semibold py-2 rounded-xl text-xs transition-all active:scale-95 border border-cyan-500/20">Salvar Chave API</button>
+            {localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY ? (
+              <div className="flex items-center justify-between bg-emerald-500/10 rounded-xl px-3 py-2.5 border border-emerald-500/20">
+                <span className="text-emerald-400 text-xs font-medium flex items-center gap-1.5">🔑 Chave de IA Configurada</span>
+                <button onClick={() => { localStorage.removeItem('gemini_api_key'); setAiKey(''); setAiKeyVisible(false) }}
+                  className="text-neutral-500 hover:text-neutral-300 text-[10px] font-semibold bg-neutral-800 px-2.5 py-1.5 rounded-lg transition-all active:scale-90">Alterar</button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <input type={aiKeyVisible ? 'text' : 'password'} placeholder="Sua chave da API Gemini"
+                    value={aiKey} onChange={e => setAiKey(e.target.value)}
+                    className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30 pr-9" />
+                  <button onClick={() => setAiKeyVisible(!aiKeyVisible)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300">
+                    {aiKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                <button onClick={() => { localStorage.setItem('gemini_api_key', aiKey); setErro(null); setAiKey(aiKey) }}
+                  className="w-full bg-cyan-500/10 text-cyan-400 font-semibold py-2 rounded-xl text-xs transition-all active:scale-95 border border-cyan-500/20">Salvar Chave API</button>
+              </>
+            )}
           </div>
 
           <button onClick={() => salvarBase(refs)}
-            className="w-full bg-cyan-500/10 text-cyan-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 border border-cyan-500/20">Salvar Base</button>
+            className="w-full bg-cyan-500/10 text-cyan-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 border border-cyan-500/20">Salvar Tudo</button>
         </div>
       )}
 
@@ -330,10 +374,10 @@ Refeição do usuário: "${aiInput}"`
             <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Progresso Hoje</span>
               {[
-                { key: 'kcal', label: 'Calorias', atual: Math.round(totais.kcal), meta: METAS_DIARIAS.kcal, u: 'kcal' },
-                { key: 'proteinas', label: 'Proteínas', atual: Math.round(totais.proteinas), meta: METAS_DIARIAS.proteinas, u: 'g' },
-                { key: 'carboidratos', label: 'Carboidratos', atual: Math.round(totais.carboidratos), meta: METAS_DIARIAS.carboidratos, u: 'g' },
-                { key: 'gorduras', label: 'Gorduras', atual: Math.round(totais.gorduras), meta: METAS_DIARIAS.gorduras, u: 'g' },
+                { key: 'kcal', label: 'Calorias', atual: Math.round(totais.kcal), meta: userMetas.kcal, u: 'kcal' },
+                { key: 'proteinas', label: 'Proteínas', atual: Math.round(totais.proteinas), meta: userMetas.proteinas, u: 'g' },
+                { key: 'carboidratos', label: 'Carboidratos', atual: Math.round(totais.carboidratos), meta: userMetas.carboidratos, u: 'g' },
+                { key: 'gorduras', label: 'Gorduras', atual: Math.round(totais.gorduras), meta: userMetas.gorduras, u: 'g' },
               ].map(item => {
                 const pct = Math.min((item.atual / item.meta) * 100, 100)
                 return (
@@ -475,10 +519,10 @@ Refeição do usuário: "${aiInput}"`
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Total do Dia</span>
               <div className="grid grid-cols-4 gap-2 mt-2">
                 {[
-                  { label: 'Calorias', v: Math.round(totais.kcal), m: METAS_DIARIAS.kcal, u: 'kcal' },
-                  { label: 'Proteínas', v: Math.round(totais.proteinas), m: METAS_DIARIAS.proteinas, u: 'g' },
-                  { label: 'Carbo', v: Math.round(totais.carboidratos), m: METAS_DIARIAS.carboidratos, u: 'g' },
-                  { label: 'Gorduras', v: Math.round(totais.gorduras), m: METAS_DIARIAS.gorduras, u: 'g' },
+                  { label: 'Calorias', v: Math.round(totais.kcal), m: userMetas.kcal, u: 'kcal' },
+                  { label: 'Proteínas', v: Math.round(totais.proteinas), m: userMetas.proteinas, u: 'g' },
+                  { label: 'Carbo', v: Math.round(totais.carboidratos), m: userMetas.carboidratos, u: 'g' },
+                  { label: 'Gorduras', v: Math.round(totais.gorduras), m: userMetas.gorduras, u: 'g' },
                 ].map(item => (
                   <div key={item.label} className="bg-black/30 rounded-xl p-2 text-center border border-white/5">
                     <div className="text-[9px] text-neutral-500 font-mono">{item.label}</div>
@@ -491,13 +535,13 @@ Refeição do usuário: "${aiInput}"`
           </>
         )
       ) : (
-        <PainelEstatisticas mesDocs={mesDocs} carregarMes={carregarMes} onDayClick={(data) => { setDataAtiva(data); setAba('diario') }} />
+        <PainelEstatisticas mesDocs={mesDocs} carregarMes={carregarMes} userMetas={userMetas} onDayClick={(data) => { setDataAtiva(data); setAba('diario') }} />
       )}
     </div>
   )
 }
 
-function PainelEstatisticas({ mesDocs, carregarMes, onDayClick }) {
+function PainelEstatisticas({ mesDocs, carregarMes, userMetas, onDayClick }) {
   useEffect(() => { if (mesDocs.length === 0) carregarMes() }, [])
 
   const hoje = new Date()
@@ -506,57 +550,16 @@ function PainelEstatisticas({ mesDocs, carregarMes, onDayClick }) {
   const totalDias = diasNoMes(ano, mes)
   const primeiroDia = new Date(ano, mes - 1, 1).getDay()
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-
-  let greenDays = 0; let yellowDays = 0; let redDays = 0; let totalDiasComDado = 0
-  const diasMap = {}
-
-  mesDocs.forEach(d => {
-    diasMap[d.data] = d
-    if (!d.refeicoes) return
-
-    const refs = Object.values(d.refeicoes)
-    const todosPendentes = refs.every(r => !r || r.status === 'pendente')
-    if (todosPendentes) return
-
-    totalDiasComDado++
-    const temLivre = refs.some(r => r?.status === 'livre')
-    const temPuladoMaisDeUm = refs.filter(r => r?.status === 'pulado').length > 1
-    const temCustom = refs.some(r => r?.status === 'customizado') || (d.extras_globais || []).length > 0
-    const temPulado = refs.some(r => r?.status === 'pulado')
-
-    if (temLivre || temPuladoMaisDeUm) redDays++
-    else if (temCustom || temPulado) yellowDays++
-    else greenDays++
-  })
-
-  const aderencia = totalDiasComDado > 0 ? Math.round((greenDays / totalDiasComDado) * 100) : 0
-
-  function kcalDoDia(doc) {
-    if (!doc?.refeicoes) return 0
-    let total = 0
-    Object.entries(doc.refeicoes).forEach(([id, r]) => {
-      if (!r || r.status === 'pendente' || r.status === 'pulado') return
-      const ref = REF_BASE.find(m => m.id === id)
-      if (r.status === 'customizado' && r.substituto) {
-        total += (Number(r.substituto.proteinas) * 4 + Number(r.substituto.carboidratos) * 4 + Number(r.substituto.gorduras) * 9)
-      } else if (r.status === 'limpo' && ref) {
-        total += ref.kcal
-      }
-    })
-    ;(doc.extras_globais || []).forEach(e => { total += Number(e.kcal) || 0 })
-    return total
-  }
-
-  const META_KCAL = 1970
+  const META_KCAL = userMetas?.kcal || 1970
 
   function corDia(dataStr) {
     const doc = diasMap[dataStr]
     if (!doc) return 'bg-neutral-800'
     const kcal = kcalDoDia(doc)
     if (kcal === 0) return 'bg-neutral-800'
-    if (kcal <= 2000) return 'bg-emerald-500/40'
-    const diff = kcal - 2000
-    if (diff <= 100) return 'bg-amber-500/40'
+    const diff = Math.abs(kcal - META_KCAL)
+    if (diff <= 100) return 'bg-emerald-500/40'
+    if (diff <= 200) return 'bg-amber-500/40'
     return 'bg-red-500/40'
   }
 

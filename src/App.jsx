@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
-import { onAuthStateChanged } from 'firebase/auth'
+import { useState, useEffect, useCallback } from 'react'
+import { onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword } from 'firebase/auth'
 import { auth, db } from './firebase'
-import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore'
+import { collection, doc, getDocs, getDoc, setDoc, deleteDoc, writeBatch, query, where } from 'firebase/firestore'
 import Layout from './components/Layout'
 import Login from './components/pages/Login'
 import Home from './components/pages/Home'
@@ -9,43 +9,85 @@ import Dieta from './components/pages/Dieta'
 import Execucao from './components/pages/Execucao'
 import Evolucao from './components/pages/Evolucao'
 import Configuracao from './components/pages/Configuracao'
+import { REFEICOES, METAS_DIARIAS } from './config/dieta'
+import PROTOCOLO_BASE from './config/protocolo'
 
-async function migrateData(uid) {
-  const collectionsToMigrate = ['historico_treinos', 'diario_dieta', 'historico_corporal']
-  for (const colName of collectionsToMigrate) {
-    const snap = await getDocs(collection(db, colName))
-    if (!snap.empty) {
-      for (const docSnap of snap.docs) {
-        await setDoc(doc(db, 'users', uid, colName, docSnap.id), docSnap.data())
-        await deleteDoc(doc(db, colName, docSnap.id))
-      }
-    }
+const USER_CONFIG = (uid) => doc(db, 'users', uid, 'config', 'data')
+
+const SEED_CONFIG = {
+  metas: { kcal: 1970, proteinas: 165, carboidratos: 226, gorduras: 43 },
+  refeicoes: REFEICOES,
+  treinos: PROTOCOLO_BASE,
+}
+
+async function migrateBatch(fromUid, toUid) {
+  const batch = writeBatch(db)
+  const collections = ['historico_treinos', 'diario_dieta', 'historico_corporal']
+
+  for (const colName of collections) {
+    const snap = await getDocs(collection(db, 'users', fromUid, colName))
+    snap.docs.forEach(d => {
+      batch.set(doc(db, 'users', toUid, colName, d.id), d.data())
+      batch.delete(doc(db, 'users', fromUid, colName, d.id))
+    })
   }
-  const configDocs = ['overrides', 'dieta_base']
-  for (const docName of configDocs) {
-    const snap = await getDoc(doc(db, 'config', docName))
-    if (snap.exists()) {
-      await setDoc(doc(db, 'users', uid, 'config', docName), snap.data())
-      await deleteDoc(doc(db, 'config', docName))
-    }
+
+  const configDoc = await getDoc(doc(db, 'users', fromUid, 'config', 'data'))
+  if (configDoc.exists()) {
+    batch.set(doc(db, 'users', toUid, 'config', 'data'), configDoc.data())
+    batch.delete(doc(db, 'users', fromUid, 'config', 'data'))
+  }
+
+  await batch.commit()
+}
+
+async function ensureUserConfig(uid) {
+  const snap = await getDoc(USER_CONFIG(uid))
+  if (!snap.exists()) {
+    await setDoc(USER_CONFIG(uid), SEED_CONFIG)
   }
 }
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [activeTab, setActiveTab] = useState('home')
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
-        await migrateData(u.uid)
+        setIsAnonymous(u.isAnonymous)
+        await ensureUserConfig(u.uid)
       }
       setUser(u)
       setLoading(false)
     })
     return () => unsub()
   }, [])
+
+  useEffect(() => {
+    if (!user && !loading) {
+      signInAnonymously(auth).catch(() => {})
+    }
+  }, [user, loading])
+
+  const loginAkira = useCallback(async () => {
+    const currentUid = user?.uid
+    try {
+      const cred = await signInWithEmailAndPassword(auth, 'akirafurumori@gmail.com', '2804089aA@')
+      if (currentUid && user?.isAnonymous) {
+        await migrateBatch(currentUid, cred.user.uid)
+      }
+    } catch (err) {
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+        const cred = await signInWithEmailAndPassword(auth, 'akirafurumori@gmail.com', '2804089aA@')
+        if (currentUid && user?.isAnonymous) {
+          await migrateBatch(currentUid, cred.user.uid)
+        }
+      }
+    }
+  }, [user])
 
   if (loading) {
     return (
@@ -55,7 +97,7 @@ export default function App() {
     )
   }
 
-  if (!user) return <Login />
+  if (!user) return <Login onLoginAkira={loginAkira} />
 
   const renderPage = () => {
     switch (activeTab) {
