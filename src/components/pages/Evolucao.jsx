@@ -7,6 +7,13 @@ import {
   Activity, Save, ChevronDown, ChevronUp, Minus, Weight, Trash, Pencil, X,
 } from 'lucide-react'
 
+function dataLocalStr(data) {
+  const d = data || new Date()
+  const offset = d.getTimezoneOffset()
+  const local = new Date(d.getTime() - offset * 60000)
+  return local.toISOString().split('T')[0]
+}
+
 const PAD = { top: 24, right: 16, bottom: 44, left: 56 }
 const H = 280
 
@@ -44,7 +51,7 @@ export default function Evolucao({ user }) {
   const [erro, setErro] = useState(null)
 
   const [medidas, setMedidas] = useState([])
-  const [medidaData, setMedidaData] = useState(new Date().toISOString().split('T')[0])
+  const [medidaData, setMedidaData] = useState(dataLocalStr())
   const [novaMedida, setNovaMedida] = useState({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
   const [savingMedida, setSavingMedida] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
@@ -100,7 +107,7 @@ export default function Evolucao({ user }) {
 
   const editarMedida = (m) => {
     setEditandoId(m.id)
-    setMedidaData(m.data.toISOString().split('T')[0])
+    setMedidaData(dataLocalStr(m.data))
     setNovaMedida({
       peso: String(m.peso ?? ''),
       cintura: String(m.cintura ?? ''),
@@ -114,7 +121,7 @@ export default function Evolucao({ user }) {
   const cancelarEdicao = () => {
     setEditandoId(null)
     setNovaMedida({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
-    setMedidaData(new Date().toISOString().split('T')[0])
+    setMedidaData(dataLocalStr())
   }
 
   const deletarMedida = async (id, dataStr) => {

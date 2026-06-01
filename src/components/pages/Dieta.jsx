@@ -5,7 +5,12 @@ import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
-function hojeId() { return new Date().toISOString().split('T')[0] }
+function hojeId() {
+  const d = new Date()
+  const offset = d.getTimezoneOffset()
+  const local = new Date(d.getTime() - offset * 60000)
+  return local.toISOString().split('T')[0]
+}
 
 function formatMesKey(ano, mes) {
   return `${ano}-${String(mes).padStart(2, '0')}`
@@ -37,7 +42,7 @@ function calcularTotais(dia, refs) {
   if (!dia?.refeicoes) return t
   refs.forEach(ref => {
     const r = dia.refeicoes[ref.id]
-    if (!r || r.status === 'pendente' || r.status === 'pulado') return
+    if (!r || r.status === 'pendente') return
     if (r.status === 'customizado' && r.substituto) {
       t.kcal += (r.substituto.proteinas * 4 + r.substituto.carboidratos * 4 + r.substituto.gorduras * 9)
       t.proteinas += Number(r.substituto.proteinas) || 0
@@ -122,7 +127,9 @@ export default function Dieta({ user }) {
         if (data.refeicoes) setRefs(clonarRefs(data.refeicoes))
         if (data.metas) setUserMetas(data.metas)
       }
-    } catch {}
+    } catch {
+      showToast('Erro ao carregar configuração. Usando valores padrão.', 'erro')
+    }
   }, [])
 
   const carregarMes = useCallback(async (ano, mes) => {
@@ -135,6 +142,9 @@ export default function Dieta({ user }) {
   }, [])
 
   useEffect(() => { carregarHoje(); carregarBase() }, [carregarHoje, carregarBase])
+
+  // Carrega dados do mês ativo no mount para o heatmap
+  useEffect(() => { carregarMes(mesAtual.ano, mesAtual.mes) }, [])
 
   useEffect(() => { setLoading(true) }, [dataAtiva])
 
@@ -191,7 +201,6 @@ export default function Dieta({ user }) {
   }
 
   const salvarCustom = (id) => {
-    if (!formCustom.proteinas && !formCustom.carboidratos && !formCustom.gorduras) return
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
     if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     n.refeicoes[id] = {
@@ -205,11 +214,12 @@ export default function Dieta({ user }) {
     }
     salvarHoje(dataAtiva, n)
     setEditando(null)
+    setFormCustom({ proteinas: '', carboidratos: '', gorduras: '' })
   }
 
   // Extra global: adicionar ou editar
   const adicionarExtraGlobal = () => {
-    if (!extraGlobal.nome.trim() || (!extraGlobal.kcal && !extraGlobal.proteinas && !extraGlobal.carboidratos && !extraGlobal.gorduras)) return
+    if (!extraGlobal.nome.trim()) return
     const n = { ...hoje, extras_globais: [...(hoje.extras_globais || [])] }
     const item = { ...extraGlobal, kcal: Number(extraGlobal.kcal), proteinas: Number(extraGlobal.proteinas), carboidratos: Number(extraGlobal.carboidratos), gorduras: Number(extraGlobal.gorduras) }
     if (editandoExtraIdx !== null) {
@@ -259,20 +269,29 @@ export default function Dieta({ user }) {
 Ao analisar a refeição descrita pelo usuário, siga estas diretrizes estritas:
 1. Priorize como fontes de dados a tabela TACO (Unicamp), TBCA (USP) e os menus nutricionais oficiais das filiais brasileiras de marcas de fast-food (ex: McDonald's Brasil, Burger King Brasil, Subway Brasil).
 2. Se o usuário mencionar pratos regionais ou estabelecimentos locais (ex: 'parmegiana do Omatutinho'), estime o peso e os macros com base no modo de preparo e tamanho de porção tradicional de restaurantes brasileiros.
-3. Retorne OBRIGATORIAMENTE apenas um objeto JSON puro, sem formatação markdown (sem \`\`\`json e sem \`\`\` no final), contendo as chaves:
+3. Responda SOMENTE com o objeto JSON puro. Nenhum texto antes ou depois. Nenhum bloco de código markdown. Apenas o JSON começando com { e terminando com }. Sem \`\`\`json, sem \`\`\`, sem comentários. As chaves devem ser exatamente:
 {
-  nome: string,
-  kcal: number,
-  p: number,
-  c: number,
-  g: number
+  "nome": string,
+  "kcal": number,
+  "p": number,
+  "c": number,
+  "g": number
 }
 Não adicione nenhum texto explicativo fora do JSON.
 
 Refeição do usuário: "${aiInput}"`
       const result = await model.generateContent(prompt)
-      const text = result.response.text().trim()
-      const parsed = JSON.parse(text)
+      const raw = result.response.text().trim()
+      // Remove markdown code blocks se a IA ignorar a instrução
+      const cleaned = raw.replace(/```json?/gi, '').replace(/```/g, '').trim()
+      let parsed
+      try {
+        parsed = JSON.parse(cleaned)
+      } catch {
+        showToast('IA retornou resposta inválida. Tente novamente.', 'erro')
+        setAiLoading(false)
+        return
+      }
       if (parsed.kcal != null && parsed.p != null) {
         setAiResult(parsed)
         setExtraGlobal({
@@ -508,7 +527,7 @@ Refeição do usuário: "${aiInput}"`
                     <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] text-neutral-400">Customizar Macros</span>
-                        <button onClick={() => setEditando(null)} className="text-neutral-500 hover:text-white"><X size={14} /></button>
+                        <button onClick={() => { setEditando(null); setFormCustom({ proteinas: '', carboidratos: '', gorduras: '' }) }} className="text-neutral-500 hover:text-white"><X size={14} /></button>
                       </div>
                       {['proteinas', 'carboidratos', 'gorduras'].map(c => (
                         <div key={c}>
@@ -629,7 +648,7 @@ Refeição do usuário: "${aiInput}"`
 
 function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
   useEffect(() => {
-    if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes)
+    carregarMes(mesAtual.ano, mesAtual.mes)
   }, [mesAtual])
 
   const { ano, mes } = mesAtual
@@ -646,8 +665,9 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesA
     if (!doc) return 'bg-neutral-800'
     const kcal = kcalDoDia(doc)
     if (kcal === 0) return 'bg-neutral-800'
-    if (kcal <= 2000) return 'bg-emerald-500/40'
-    if (kcal <= 2250) return 'bg-amber-500/40'
+    const diff = Math.abs(kcal - META_KCAL)
+    if (diff <= 100) return 'bg-emerald-500/40'
+    if (diff <= 200) return 'bg-amber-500/40'
     return 'bg-red-500/40'
   }
 
@@ -754,9 +774,9 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesA
           ))}
         </div>
         <div className="flex items-center justify-center gap-3 mt-2 text-[9px] text-neutral-600">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ≤2000 kcal</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> 2001-2250</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;2250</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ±100kcal</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> ±200kcal</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;200kcal</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neutral-800" /> Sem dados</span>
         </div>
       </div>
