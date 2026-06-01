@@ -33,7 +33,7 @@ const CAMPOS_MEDIDA = [
   { key: 'coxa_dir', label: 'Coxa', unidade: 'cm', lowerBetter: false },
 ]
 
-export default function Evolucao() {
+export default function Evolucao({ user }) {
   const [aba, setAba] = useState('treino')
 
   const [todosTreinos, setTodosTreinos] = useState([])
@@ -53,7 +53,7 @@ export default function Evolucao() {
     setLoading(true); setErro(null)
     try {
       if (!db) { setErro('Firestore não inicializado.'); setLoading(false); return }
-      const snap = await getDocs(query(collection(db, 'historico_treinos'), orderBy('data', 'asc')))
+      const snap = await getDocs(query(collection(db, 'users', user.uid, 'historico_treinos'), orderBy('data', 'asc')))
       const treinos = snap.docs.map(d => {
         const raw = d.data()
         return { ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
@@ -68,7 +68,7 @@ export default function Evolucao() {
 
   const carregarMedidas = useCallback(async () => {
     try {
-      const snap = await getDocs(query(collection(db, 'historico_corporal'), orderBy('data', 'desc')))
+      const snap = await getDocs(query(collection(db, 'users', user.uid, 'historico_corporal'), orderBy('data', 'desc')))
       setMedidas(snap.docs.map(d => {
         const raw = d.data()
         return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
@@ -85,7 +85,7 @@ export default function Evolucao() {
     try {
       const registro = { data: new Date(medidaData + 'T12:00:00') }
       CAMPOS_MEDIDA.forEach(c => { registro[c.key] = Number(novaMedida[c.key]) })
-      await addDoc(collection(db, 'historico_corporal'), registro)
+      await addDoc(collection(db, 'users', user.uid, 'historico_corporal'), registro)
       setNovaMedida({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
       await carregarMedidas()
     } catch (err) { setErro(`Erro ao salvar: ${err.message}`) }

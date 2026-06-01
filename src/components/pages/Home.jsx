@@ -41,7 +41,7 @@ function fimSemana(data) {
   return d
 }
 
-export default function Home({ onStartWorkout }) {
+export default function Home({ user, onStartWorkout }) {
   const [ultimoTreino, setUltimoTreino] = useState(null)
   const [totalTreinos, setTotalTreinos] = useState(0)
   const [diasComTreino, setDiasComTreino] = useState([])
@@ -55,7 +55,7 @@ export default function Home({ onStartWorkout }) {
     setErro(null)
     try {
       if (!db) { setErro('Firestore não inicializado.'); setLoading(false); return }
-      const ref = collection(db, 'historico_treinos')
+      const ref = collection(db, 'users', user.uid, 'historico_treinos')
       const [ultimoSnap, totalSnap, semanalSnap] = await Promise.all([
         getDocs(query(ref, orderBy('data', 'desc'), limit(1))),
         getDocs(ref),

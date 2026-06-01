@@ -66,7 +66,7 @@ function clonarRefs(refs) {
   return refs.map(r => ({ ...r }))
 }
 
-export default function Dieta() {
+export default function Dieta({ user }) {
   const [aba, setAba] = useState('diario')
   const [dataAtiva, setDataAtiva] = useState(hojeId())
   const [hoje, setHoje] = useState(null)
@@ -86,7 +86,7 @@ export default function Dieta() {
   const carregarHoje = useCallback(async () => {
     setLoading(true); setErro(null)
     try {
-      const snap = await getDoc(doc(db, 'diario_dieta', dataAtiva))
+      const snap = await getDoc(doc(db, 'users', user.uid, 'diario_dieta', dataAtiva))
       if (snap.exists()) {
         const data = snap.data()
         if (!data.refeicoes) data.refeicoes = {}
@@ -99,14 +99,14 @@ export default function Dieta() {
 
   const carregarBase = useCallback(async () => {
     try {
-      const snap = await getDoc(doc(db, 'config', 'dieta_base'))
+      const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'dieta_base'))
       if (snap.exists()) setRefs(snap.data().refeicoes || clonarRefs(REF_BASE))
     } catch {}
   }, [])
 
   const carregarMes = useCallback(async () => {
     try {
-      const snap = await getDocs(query(collection(db, 'diario_dieta'), where('data', '>=', inicioMes()), where('data', '<=', hojeId())))
+      const snap = await getDocs(query(collection(db, 'users', user.uid, 'diario_dieta'), where('data', '>=', inicioMes()), where('data', '<=', hojeId())))
       setMesDocs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     } catch (err) { setErro(`Erro: ${err.message}`) }
   }, [])
@@ -116,12 +116,12 @@ export default function Dieta() {
   useEffect(() => { setLoading(true) }, [dataAtiva])
 
   const salvarHoje = useCallback(async (data, novo) => {
-    try { await setDoc(doc(db, 'diario_dieta', data), { ...novo, data }); setHoje(novo) }
+    try { await setDoc(doc(db, 'users', user.uid, 'diario_dieta', data), { ...novo, data }); setHoje(novo) }
     catch (err) { setErro(`Erro: ${err.message}`) }
   }, [])
 
   const salvarBase = async (novasRefs) => {
-    try { await setDoc(doc(db, 'config', 'dieta_base'), { refeicoes: novasRefs }); setRefs(novasRefs); setConfAberto(false) }
+    try { await setDoc(doc(db, 'users', user.uid, 'config', 'dieta_base'), { refeicoes: novasRefs }); setRefs(novasRefs); setConfAberto(false) }
     catch (err) { setErro(`Erro: ${err.message}`) }
   }
 

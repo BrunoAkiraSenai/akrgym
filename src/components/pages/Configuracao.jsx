@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { signOut } from 'firebase/auth'
+import { auth, db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut } from 'lucide-react'
 
-const OVERRIDES_DOC = doc(db, 'config', 'overrides')
-
-export default function Configuracao() {
+export default function Configuracao({ user }) {
+  const OVERRIDES_DOC = doc(db, 'users', user.uid, 'config', 'overrides')
   const [overrides, setOverrides] = useState({})
   const [expandedKey, setExpandedKey] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -223,6 +223,11 @@ export default function Configuracao() {
           : <><Save size={20} /> Salvar Alterações</>}
         </button>
       )}
+
+      <button onClick={() => signOut(auth)}
+        className="w-full flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 font-semibold py-4 rounded-xl text-sm transition-all active:scale-[0.97] mt-2 border border-white/5">
+        <LogOut size={16} /> Sair da conta
+      </button>
     </div>
   )
 }

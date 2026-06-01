@@ -11,7 +11,7 @@ import {
 
 const STORAGE_KEY = 'rascunho_treino_ativo'
 
-export default function Execucao({ onFinish }) {
+export default function Execucao({ user, onFinish }) {
   const [step, setStep] = useState('select')
   const [rotinaKey, setRotinaKey] = useState(null)
   const [topSetData, setTopSetData] = useState([])
@@ -54,7 +54,7 @@ export default function Execucao({ onFinish }) {
 
     try {
       const snap = await getDocs(
-        query(collection(db, 'historico_treinos'), where('rotina_id', '==', key), orderBy('data', 'desc'), limit(1))
+        query(collection(db, 'users', user.uid, 'historico_treinos'), where('rotina_id', '==', key), orderBy('data', 'desc'), limit(1))
       )
       const ultimo = !snap.empty ? snap.docs[0].data() : null
 
@@ -84,7 +84,7 @@ export default function Execucao({ onFinish }) {
   const finalizarTreino = async () => {
     setSaving(true); setErro(null)
     try {
-      await addDoc(collection(db, 'historico_treinos'), {
+      await addDoc(collection(db, 'users', user.uid, 'historico_treinos'), {
         rotina_id: rotinaKey,
         data: new Date(),
         exercicios: topSetData.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
