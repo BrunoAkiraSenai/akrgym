@@ -636,6 +636,7 @@ Refeição do usuário: "${aiInput}"`
           mesDocs={mesDocs}
           carregarMes={carregarMes}
           userMetas={userMetas}
+          refs={refs}
           mesAtual={mesAtual}
           setMesAtual={setMesAtual}
           podeAvancar={podeAvancar}
@@ -646,7 +647,7 @@ Refeição do usuário: "${aiInput}"`
   )
 }
 
-function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
+function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
   useEffect(() => {
     carregarMes(mesAtual.ano, mesAtual.mes)
   }, [mesAtual])
@@ -655,20 +656,17 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesA
   const totalDias = diasNoMes(ano, mes)
   const primeiroDia = new Date(ano, mes - 1, 1).getDay()
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-  const META_KCAL = userMetas?.kcal || 1970
-
   const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     .replace(/^(\w)/, l => l.toUpperCase())
 
   function corDia(dataStr) {
     const doc = diasMap[dataStr]
-    if (!doc) return 'bg-neutral-800'
+    if (!doc) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
     const kcal = kcalDoDia(doc)
-    if (kcal === 0) return 'bg-neutral-800'
-    const diff = Math.abs(kcal - META_KCAL)
-    if (diff <= 100) return 'bg-emerald-500/40'
-    if (diff <= 200) return 'bg-amber-500/40'
-    return 'bg-red-500/40'
+    if (kcal === 0) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
+    if (kcal <= 2000) return { backgroundColor: 'rgb(34 197 94 / 0.4)' }
+    if (kcal <= 2250) return { backgroundColor: 'rgb(245 158 11 / 0.4)' }
+    return { backgroundColor: 'rgb(239 68 68 / 0.4)' }
   }
 
   function kcalDoDia(doc) {
@@ -676,12 +674,15 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesA
     let total = 0
     Object.entries(doc.refeicoes).forEach(([id, r]) => {
       if (!r || r.status === 'pendente' || r.status === 'pulado') return
-      const ref = REF_BASE.find(m => m.id === id)
+      const ref = refs.find(m => m.id === id)
       if (r.status === 'customizado' && r.substituto) {
         total += (Number(r.substituto.proteinas) * 4 + Number(r.substituto.carboidratos) * 4 + Number(r.substituto.gorduras) * 9)
       } else if ((r.status === 'limpo' || r.status === 'livre') && ref) {
         total += ref.kcal
       }
+      ;(r.extra || []).forEach(e => {
+        total += (Number(e.proteinas) * 4 + Number(e.carboidratos) * 4 + Number(e.gorduras) * 9)
+      })
     })
     ;(doc.extras_globais || []).forEach(e => { total += Number(e.kcal) || 0 })
     return total
@@ -705,6 +706,8 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesA
     else if (temCustom || temPulado) yellowDays++
     else greenDays++
   })
+
+  console.log('🔍 mesDocs length:', mesDocs.length)
 
   const aderencia = totalDiasComDado > 0 ? Math.round((greenDays / totalDiasComDado) * 100) : 0
 
@@ -768,15 +771,16 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, mesAtual, setMesA
           {Array.from({ length: primeiroDia }).map((_, i) => <div key={`e-${i}`} />)}
           {diasArray.map(({ dia, data }) => (
             <button key={data} onClick={() => onDayClick?.(data)}
-              className={`aspect-square rounded-md flex items-center justify-center transition-all active:scale-90 ${corDia(data)}`}>
+              className={`aspect-square rounded-md flex items-center justify-center transition-all active:scale-90`}
+              style={corDia(data)}>
               <span className="text-[9px] text-neutral-400 font-mono">{dia}</span>
             </button>
           ))}
         </div>
         <div className="flex items-center justify-center gap-3 mt-2 text-[9px] text-neutral-600">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ±100kcal</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> ±200kcal</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;200kcal</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ≤2000</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> 2001-2250</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;2250</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neutral-800" /> Sem dados</span>
         </div>
       </div>

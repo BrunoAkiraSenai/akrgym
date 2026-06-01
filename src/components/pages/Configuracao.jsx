@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle } from 'lucide-react'
 
 const CONFIG_REF = (uid) => doc(db, 'users', uid, 'config', 'data')
 
@@ -89,6 +89,21 @@ export default function Configuracao({ user }) {
   return (
     <div className="flex flex-col gap-3 pt-2 pb-4">
       <h1 className="text-xl font-bold tracking-tight text-white mb-1">Configurações</h1>
+
+      <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 flex items-center gap-3">
+        <UserCircle size={40} className="text-neutral-400 shrink-0" />
+        <div className="min-w-0">
+          <div className="text-white font-medium truncate">
+            {user.isAnonymous ? 'Visitante' : user.email}
+          </div>
+          <div className={`text-sm ${user.isAnonymous ? 'text-amber-400' : 'text-emerald-400'}`}>
+            {user.isAnonymous ? 'Conta anônima — sem sincronização' : 'Conta sincronizada'}
+          </div>
+          <div className="text-white/30 text-xs font-mono mt-0.5 truncate">
+            {user.uid.slice(0, 8)}...
+          </div>
+        </div>
+      </div>
 
       <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-1 flex">
         <button onClick={() => setAba('treinos')}
