@@ -39,29 +39,34 @@ export default function App() {
   const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
 
   useEffect(() => {
+    let cancelado = false
     const unsub = onAuthStateChanged(auth, async (u) => {
+      if (cancelado) return
       if (u) {
+        try { await ensureUserConfig(u.uid) }
+        catch (e) { console.warn('ensureUserConfig falhou:', e) }
+        setUser(u)
+        setLoading(false)
+        setInitializing(false)
+      } else {
+        // Só tenta anônimo se realmente não houver sessão
         try {
-          await ensureUserConfig(u.uid)
-        } catch (e) {
-          console.warn('ensureUserConfig falhou:', e)
+          const anon = await signInAnonymously(auth)
+          if (!cancelado && anon?.user) {
+            await ensureUserConfig(anon.user.uid)
+            setUser(anon.user)
+          }
+        } catch (err) {
+          console.warn('Login anônimo não disponível:', err.code)
+        }
+        if (!cancelado) {
+          setLoading(false)
+          setInitializing(false)
         }
       }
-      setUser(u)
-      setLoading(false)
     })
-    return () => unsub()
+    return () => { cancelado = true; unsub() }
   }, [])
-
-  useEffect(() => {
-    if (!user && !loading) {
-      signInAnonymously(auth).catch((err) => {
-        console.warn('Login anônimo falhou:', err)
-      }).finally(() => setInitializing(false))
-    } else {
-      setInitializing(false)
-    }
-  }, [user, loading])
 
   if (loading || initializing) {
     return (
