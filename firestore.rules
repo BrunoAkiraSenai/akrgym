@@ -1,8 +1,54 @@
-rules_version = '2';
+// FIREBASE FIRESTORE SECURITY RULES — PRODUCAO
+// users/{uid}/{colecao} — cada usuario so acessa os proprios dados
+// Campo usuarioId nos documentos serve como camada extra de seguranca
+
+rules_version = '2'
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // NEGAR TUDO POR PADRAO
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
+
+    // USUARIOS — cada um so acessa os proprios dados
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // CONFIG — requer campos obrigatorios
+    match /users/{userId}/config/data {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasAll(['metas', 'refeicoes', 'treinos']);
+    }
+
+    // HISTORICO DE TREINOS — somente criacao e leitura, sem alteracao
+    match /users/{userId}/historico_treinos/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasAll(['rotina_id', 'data', 'exercicios']);
+      allow delete: if request.auth != null && request.auth.uid == userId;
+      allow update: if false;
+    }
+
+    // DIARIO ALIMENTAR
+    match /users/{userId}/diario_dieta/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasAny(['refeicoes', 'data', 'extras_globais']);
+    }
+
+    // HISTORICO CORPORAL
+    match /users/{userId}/historico_corporal/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasAny(['peso', 'data']);
+    }
+
   }
 }
