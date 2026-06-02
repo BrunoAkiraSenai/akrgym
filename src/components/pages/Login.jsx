@@ -153,7 +153,7 @@ export default function Login() {
               onChange={e => setPassword(e.target.value)}
               className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
             <button type="submit" disabled={loading || !email.trim() || !password.trim()}
-              className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-4 rounded-xl text-sm transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2">
+              className="btn-primary w-full py-4 flex items-center justify-center gap-2">
               {loading ? <><Loader size={18} className="animate-spin" /> Entrando...</> : 'Entrar'}
             </button>
             <p className="text-center text-sm text-white/50">
@@ -176,7 +176,7 @@ export default function Login() {
               onChange={e => setConfirmarSenha(e.target.value)}
               className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
             <button type="submit" disabled={loading || !email.trim() || !password.trim() || !confirmarSenha.trim()}
-              className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-4 rounded-xl text-sm transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2">
+              className="btn-primary w-full py-4 flex items-center justify-center gap-2">
               {loading ? <><Loader size={18} className="animate-spin" /> Criando conta...</> : 'Criar conta'}
             </button>
             <p className="text-center text-sm text-white/50">

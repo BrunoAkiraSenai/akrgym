@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { collection, getDocs, query, orderBy, addDoc, deleteDoc, updateDoc, doc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
+import { useUser } from '../../context/UserContext'
 import {
   Dumbbell, BarChart3, AlertTriangle, Trophy, Target, Flame,
   Activity, Save, ChevronDown, ChevronUp, Minus, Weight, Trash, Pencil, X,
@@ -44,7 +45,8 @@ const CAMPOS_MEDIDA = [
   { key: 'coxa_dir', label: 'Coxa', unidade: 'cm', lowerBetter: false },
 ]
 
-export default function Evolucao({ user }) {
+export default function Evolucao() {
+  const user = useUser()
   const [aba, setAba] = useState('treino')
 
   const [todosTreinos, setTodosTreinos] = useState([])
@@ -91,13 +93,24 @@ export default function Evolucao({ user }) {
 
   useEffect(() => { carregarTreinos() }, [carregarTreinos])
 
+  function validarMedida(valor, min, max, nome) {
+    const v = parseFloat(String(valor || '').replace(',', '.'))
+    if (isNaN(v) || v < min || v > max) { setErro(`${nome} inválido — deve ser entre ${min} e ${max}.`); return null }
+    return v
+  }
+
   const registrarMedida = async () => {
     const camposPreenchidos = CAMPOS_MEDIDA.every(c => novaMedida[c.key] !== '')
     if (!camposPreenchidos) return
     setSavingMedida(true); setErro(null)
+    const limites = { peso: [0, 500], cintura: [0, 200], abdomen: [0, 200], braco_dir: [0, 100], peito: [0, 200], coxa_dir: [0, 100] }
+    const registro = { data: new Date(medidaData + 'T12:00:00') }
+    for (const c of CAMPOS_MEDIDA) {
+      const v = validarMedida(novaMedida[c.key], ...limites[c.key], c.label)
+      if (v === null) { setSavingMedida(false); return }
+      registro[c.key] = v
+    }
     try {
-      const registro = { data: new Date(medidaData + 'T12:00:00') }
-      CAMPOS_MEDIDA.forEach(c => { registro[c.key] = Number(novaMedida[c.key]) })
       if (editandoId) {
         await updateDoc(doc(db, 'users', user.uid, 'historico_corporal', editandoId), registro)
       } else {
@@ -252,13 +265,13 @@ export default function Evolucao({ user }) {
 
               {selecionado && dadosTreino.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col items-center justify-center text-center gap-1">
+                  <div className="card-premium p-3 flex flex-col items-center justify-center text-center gap-1">
                     <Trophy size={16} className="text-cyan-400" />
                     <span className="text-lg font-bold text-white tracking-tight">{recorde} <span className="text-xs font-normal text-neutral-400">kg</span></span>
                     <span className="text-[9px] text-neutral-500 uppercase tracking-wider">Recorde Absoluto</span>
                   </div>
 
-                  <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-3 flex flex-col items-center justify-center text-center gap-1">
+                  <div className="card-premium p-3 flex flex-col items-center justify-center text-center gap-1">
                     <Flame size={16} className="text-emerald-400" />
                     <span className="text-lg font-bold text-white tracking-tight">
                       {ultimoTreino.carga} <span className="text-xs font-normal text-neutral-400">kg</span>
@@ -283,7 +296,7 @@ export default function Evolucao({ user }) {
               {!selecionado && <p className="text-neutral-600 text-center py-8 text-sm">Escolha um exercício.</p>}
 
               {selecionado && dadosTreino.length < 2 && (
-                <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-6 text-center">
+                <div className="card-premium p-6 text-center">
                   <Dumbbell size={28} className="mx-auto text-neutral-700 mb-3" />
                   <p className="text-neutral-500 text-sm">
                     {dadosTreino.length === 0 ? 'Sem dados ainda. Vá treinar!' : 'Mais um treino para gerar o gráfico.'}
@@ -292,7 +305,7 @@ export default function Evolucao({ user }) {
               )}
 
               {selecionado && dadosTreino.length >= 2 && chartDims && (
-                <div className="relative bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-2">
+                <div className="relative card-premium p-2">
                   <svg viewBox={`0 0 ${chartDims.w} ${H}`} className="w-full h-auto" style={{ touchAction: 'manipulation' }}>
                     <defs>
                       <filter id="line-glow">
@@ -332,7 +345,7 @@ export default function Evolucao({ user }) {
               )}
 
               {selecionado && dadosTreino.length >= 2 && (
-                <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+                <div className="card-premium p-4">
                   <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Últimos registros</span>
                   <div className="space-y-1 mt-2">
                     {[...dadosTreino].reverse().slice(0, 5).map((d, i) => (
@@ -349,7 +362,7 @@ export default function Evolucao({ user }) {
         </>
       ) : (
         <>
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
+            <div className="card-premium p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
                 <Activity size={12} className="text-cyan-400" /> {editandoId ? 'Editar Medida' : 'Novo Registro'}
@@ -378,14 +391,14 @@ export default function Evolucao({ user }) {
               ))}
             </div>
             <button onClick={registrarMedida} disabled={savingMedida || CAMPOS_MEDIDA.some(c => novaMedida[c.key] === '')}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-3 rounded-xl text-sm transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed">
+              className="w-full flex items-center justify-center gap-2 btn-primary w-full py-3 flex items-center justify-center gap-2">
               {savingMedida ? <><Save size={16} className="animate-spin" /> Salvando...</>
               : <><Save size={16} /> {editandoId ? 'Atualizar Medida' : 'Registrar Medidas'}</>}
             </button>
           </div>
 
           {medidas.length > 0 && ultimaMedida && (
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+            <div className="card-premium p-4">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-3">
                 <Weight size={12} className="text-cyan-400" /> Último Registro
               </span>
@@ -418,7 +431,7 @@ export default function Evolucao({ user }) {
           )}
 
           {medidas.length >= 2 && (
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+            <div className="card-premium p-4">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Evolução Gráfica
               </span>
@@ -490,7 +503,7 @@ export default function Evolucao({ user }) {
           )}
 
           {medidas.length >= 1 && (
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+            <div className="card-premium p-4">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Histórico
               </span>

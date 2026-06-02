@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
+import { useUser } from '../../context/UserContext'
 import { Dumbbell, Calendar, Zap, TrendingUp, Clock } from 'lucide-react'
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -41,7 +42,8 @@ function fimSemana(data) {
   return d
 }
 
-export default function Home({ user, onStartWorkout }) {
+export default function Home({ onStartWorkout }) {
+  const user = useUser()
   const [ultimoTreino, setUltimoTreino] = useState(null)
   const [totalTreinos, setTotalTreinos] = useState(0)
   const [diasComTreino, setDiasComTreino] = useState([])
@@ -98,14 +100,14 @@ export default function Home({ user, onStartWorkout }) {
 
       <button
         onClick={onStartWorkout}
-        className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-lg py-5 rounded-2xl transition-all active:scale-[0.97] hover:opacity-90 shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-3"
+        className="w-full btn-primary w-full text-lg py-5 flex items-center justify-center gap-3"
       >
         <Zap size={22} />
         Iniciar Treino do Dia
       </button>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+        <div className="card-premium p-4">
           <div className="flex items-center gap-2 mb-3">
             <Clock size={14} className="text-cyan-400" />
             <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Último</span>
@@ -124,7 +126,7 @@ export default function Home({ user, onStartWorkout }) {
           )}
         </div>
 
-        <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+        <div className="card-premium p-4">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp size={14} className="text-cyan-400" />
             <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Total</span>
@@ -134,7 +136,7 @@ export default function Home({ user, onStartWorkout }) {
         </div>
       </div>
 
-      <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+      <div className="card-premium p-4">
         <div className="flex items-center gap-2 mb-3">
           <Calendar size={14} className="text-cyan-400" />
           <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Esta Semana</span>

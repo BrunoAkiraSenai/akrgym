@@ -3,6 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
 import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw } from 'lucide-react'
+import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 
 function gerarIdRefeicao() {
@@ -11,7 +12,8 @@ function gerarIdRefeicao() {
 
 const CONFIG_REF = (uid) => doc(db, 'users', uid, 'config', 'data')
 
-export default function Configuracao({ user, abaInicial }) {
+export default function Configuracao({ abaInicial }) {
+  const user = useUser()
   const [config, setConfig] = useState({ treinos: {}, refeicoes: [], metas: {} })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -44,14 +46,41 @@ export default function Configuracao({ user, abaInicial }) {
 
   useEffect(() => { if (aba === 'dieta') { console.log('🔍 aba:', aba); console.log('🔍 refeicoes:', config.refeicoes); console.log('🔍 config:', config) } }, [aba, config])
 
+  function validarNumero(valor, min, max, nome) {
+    const v = parseFloat(String(valor || '').replace(',', '.'))
+    if (isNaN(v) || v < min || v > max) {
+      throw new Error(`${nome} inválido — deve ser entre ${min} e ${max}.`)
+    }
+    return v
+  }
+
   const salvar = async (novo) => {
     setSaving(true); setErro(null); setSucesso(null)
     try {
-      await setDoc(CONFIG_REF(user.uid), novo)
-      setConfig(novo)
+      const sanitizado = { ...novo, metas: { ...(novo.metas || {}) }, refeicoes: [...(novo.refeicoes || [])] }
+      if (sanitizado.metas) {
+        sanitizado.metas.kcal = validarNumero(sanitizado.metas.kcal, 0, 99999, 'Kcal')
+        sanitizado.metas.proteinas = validarNumero(sanitizado.metas.proteinas, 0, 9999, 'Proteínas')
+        sanitizado.metas.carboidratos = validarNumero(sanitizado.metas.carboidratos, 0, 9999, 'Carboidratos')
+        sanitizado.metas.gorduras = validarNumero(sanitizado.metas.gorduras, 0, 9999, 'Gorduras')
+      }
+      sanitizado.refeicoes = sanitizado.refeicoes.map(r => ({
+        ...r,
+        kcal: validarNumero(r.kcal, 0, 99999, `Kcal de "${r.nome}"`),
+        proteinas: validarNumero(r.proteinas, 0, 9999, `Proteínas de "${r.nome}"`),
+        carboidratos: validarNumero(r.carboidratos, 0, 9999, `Carboidratos de "${r.nome}"`),
+        gorduras: validarNumero(r.gorduras, 0, 9999, `Gorduras de "${r.nome}"`),
+      }))
+      if (sanitizado.treinos) {
+        for (const key of Object.keys(sanitizado.treinos)) {
+          sanitizado.treinos[key] = { ...sanitizado.treinos[key], exercicios: (sanitizado.treinos[key].exercicios || []).map(ex => ({ ...ex, base_top: validarNumero(ex.base_top, 0, 9999, `Base Top de "${ex.nome}"`) })) }
+        }
+      }
+      await setDoc(CONFIG_REF(user.uid), sanitizado)
+      setConfig(sanitizado)
       setSucesso('Salvo!')
       setTimeout(() => setSucesso(null), 2000)
-    } catch (err) { setErro(`Erro: ${err.message}`) }
+    } catch (err) { setErro(err.message); setSaving(false); return }
     setSaving(false)
   }
 
@@ -129,9 +158,11 @@ export default function Configuracao({ user, abaInicial }) {
     const texto = textoAlimentos[idx]
     if (!texto?.trim()) return
     setAiLoadingIdx(idx)
-    try {
-      const macros = await calcularMacrosIA(texto)
-      console.log('🔍 macros da IA:', JSON.stringify(macros))
+    const macros = await calcularMacrosIA(texto)
+    if (macros._erro) {
+      setErro(macros._erro)
+      setTimeout(() => setErro(null), 3000)
+    } else {
       setConfig(prev => ({
         ...prev,
         refeicoes: (prev.refeicoes || []).map((r, i) => i === idx
@@ -139,9 +170,6 @@ export default function Configuracao({ user, abaInicial }) {
           : r
         ),
       }))
-    } catch (err) {
-      setErro(err.message)
-      setTimeout(() => setErro(null), 3000)
     }
     setAiLoadingIdx(null)
   }
@@ -150,7 +178,7 @@ export default function Configuracao({ user, abaInicial }) {
     <div className="flex flex-col gap-3 pt-2 pb-4">
       <h1 className="text-xl font-bold tracking-tight text-white mb-1">Configurações</h1>
 
-      <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 flex items-center gap-3">
+      <div className="card-premium p-4 flex items-center gap-3">
         <UserCircle size={40} className="text-neutral-400 shrink-0" />
         <div className="min-w-0">
           <div className="text-white font-medium truncate">
@@ -189,7 +217,7 @@ export default function Configuracao({ user, abaInicial }) {
             </div>
 
             {showNewRoutine && (
-              <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-2">
+              <div className="card-premium p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-300">Nova Divisão</span>
                   <button onClick={() => setShowNewRoutine(false)} className="text-neutral-500 hover:text-white"><X size={16} /></button>
@@ -199,9 +227,9 @@ export default function Configuracao({ user, abaInicial }) {
                 <input type="text" placeholder="Nome (ex: UPPER C)" value={newNome} onChange={e => setNewNome(e.target.value)}
                   className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500/30" />
                 <div className="flex gap-2">
-                  <button onClick={() => setShowNewRoutine(false)} className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold py-2.5 rounded-xl text-xs transition-all active:scale-95">Cancelar</button>
+                  <button onClick={() => setShowNewRoutine(false)} className="btn-secondary flex-1 py-2.5 text-xs">Cancelar</button>
                   <button onClick={addRoutine} disabled={!newKey.trim() || !newNome.trim()}
-                    className="flex-1 bg-emerald-500/10 text-emerald-400 font-semibold py-2.5 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30 border border-emerald-500/20">Criar</button>
+                    className="btn-primary flex-1 py-2.5 text-xs">Criar</button>
                 </div>
               </div>
             )}
@@ -209,7 +237,7 @@ export default function Configuracao({ user, abaInicial }) {
             {Object.entries(config.treinos || {}).map(([key, rotina]) => {
               const isOpen = expandedKey === key
               return (
-                <div key={key} className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden">
+                <div key={key} className="card-premium overflow-hidden">
                   <button onClick={() => setExpandedKey(isOpen ? null : key)}
                     className="w-full flex items-center justify-between p-4 transition-all active:scale-[0.99] text-left">
                     <div className="flex items-center gap-3">
@@ -245,13 +273,9 @@ export default function Configuracao({ user, abaInicial }) {
                         </div>
                       ))}
                       <button onClick={() => addExercise(key)}
-                        className="w-full flex items-center justify-center gap-1 bg-neutral-800/50 hover:bg-neutral-800 text-neutral-400 font-semibold py-2.5 rounded-xl text-xs transition-all active:scale-[0.97] border border-white/5">
-                        <Plus size={14} /> Adicionar Exercício
-                      </button>
+                        className="btn-secondary w-full py-2.5 text-xs">Adicionar Exercício</button>
                       <button onClick={() => deleteRoutine(key)}
-                        className="w-full flex items-center justify-center gap-1 bg-red-500/5 hover:bg-red-500/10 text-red-400/80 font-semibold py-2.5 rounded-xl text-xs transition-all active:scale-[0.97] border border-red-500/10">
-                        <Trash size={14} /> Excluir Divisão
-                      </button>
+                        className="btn-danger w-full py-2.5 text-xs">Excluir Divisão</button>
                     </div>
                   )}
                 </div>
@@ -259,7 +283,7 @@ export default function Configuracao({ user, abaInicial }) {
             })}
             <button onClick={() => salvar(config)}
               disabled={saving}
-              className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-lg py-5 rounded-2xl transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2 mt-1">
+              className="btn-primary w-full text-lg py-5 flex items-center justify-center gap-2 mt-1">
               {saving ? <><Loader size={20} className="animate-spin" /> Salvando...</> : <><Save size={20} /> Salvar Treinos</>}
             </button>
           </>
@@ -267,7 +291,7 @@ export default function Configuracao({ user, abaInicial }) {
       ) : (
         <div className="flex flex-col gap-3">
           {console.log('🔍 DIETA RENDERIZOU — refeicoes:', config.refeicoes?.length)}
-          <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-2">
+          <div className="card-premium p-4 space-y-2">
             <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Metas Diárias</span>
             <div className="grid grid-cols-4 gap-1.5">
               {[
@@ -307,7 +331,7 @@ export default function Configuracao({ user, abaInicial }) {
             </button>
           </div>
 
-          <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-2">
+          <div className="card-premium p-4 space-y-2">
             <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Refeições</span>
             {(config.refeicoes || []).length === 0 && (
               <div className="bg-black/30 rounded-xl p-3 text-center border border-white/5">
@@ -358,23 +382,21 @@ export default function Configuracao({ user, abaInicial }) {
               </div>
             ))}
             <button onClick={addRefeicao}
-              className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-3 rounded-xl text-xs transition-all active:scale-[0.97] hover:opacity-90 shadow-[0_0_12px_rgba(52,211,153,0.1)] mt-1">
+              className="btn-primary w-full py-3 flex items-center justify-center gap-1.5 mt-1">
               <Plus size={14} /> Nova Refeição
             </button>
           </div>
 
           <button onClick={() => salvar(config)}
             disabled={saving}
-            className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-lg py-5 rounded-2xl transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2 mt-1">
+            className="btn-primary w-full text-lg py-5 flex items-center justify-center gap-2 mt-1">
             {saving ? <><Loader size={20} className="animate-spin" /> Salvando...</> : <><Save size={20} /> Salvar Tudo</>}
           </button>
         </div>
       )}
 
       <button onClick={() => signOut(auth)}
-        className="w-full flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 font-semibold py-4 rounded-xl text-sm transition-all active:scale-[0.97] mt-2 border border-white/5">
-        <LogOut size={16} /> Sair da conta
-      </button>
+        className="btn-secondary w-full py-4 text-sm mt-2">Sair da conta</button>
     </div>
   )
 }

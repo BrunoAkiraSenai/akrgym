@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
+import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
@@ -75,7 +76,8 @@ function clonarRefs(refs) {
   return refs.map(r => ({ ...r }))
 }
 
-export default function Dieta({ user, onIrParaConfig }) {
+export default function Dieta({ onIrParaConfig }) {
+  const user = useUser()
   const [aba, setAba] = useState('diario')
   const [dataAtiva, setDataAtiva] = useState(hojeId())
   const [hoje, setHoje] = useState(null)
@@ -196,16 +198,26 @@ export default function Dieta({ user, onIrParaConfig }) {
     setFormCustom({ proteinas: String(ref.proteinas), carboidratos: String(ref.carboidratos), gorduras: String(ref.gorduras) })
   }
 
+  function validarNumero(valor, min, max, nome) {
+    const v = parseFloat(String(valor || '').replace(',', '.'))
+    if (isNaN(v) || v < min || v > max) { setErro(`${nome} inválido — deve ser entre ${min} e ${max}.`); return null }
+    return v
+  }
+
   const salvarCustom = (id) => {
+    const p = validarNumero(formCustom.proteinas, 0, 9999, 'Proteínas')
+    const c = validarNumero(formCustom.carboidratos, 0, 9999, 'Carboidratos')
+    const g = validarNumero(formCustom.gorduras, 0, 9999, 'Gorduras')
+    if (p === null || c === null || g === null) return
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
     if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     n.refeicoes[id] = {
       ...n.refeicoes[id], status: 'customizado',
       substituto: {
         nome: refs.find(r => r.id === id)?.nome || '',
-        proteinas: Number(formCustom.proteinas),
-        carboidratos: Number(formCustom.carboidratos),
-        gorduras: Number(formCustom.gorduras),
+        proteinas: p,
+        carboidratos: c,
+        gorduras: g,
       },
     }
     salvarHoje(dataAtiva, n)
@@ -216,8 +228,13 @@ export default function Dieta({ user, onIrParaConfig }) {
   // Extra global: adicionar ou editar
   const adicionarExtraGlobal = () => {
     if (!extraGlobal.nome.trim()) return
+    const kcal = validarNumero(extraGlobal.kcal, 0, 99999, 'Kcal')
+    const p = validarNumero(extraGlobal.proteinas, 0, 9999, 'Proteínas')
+    const c = validarNumero(extraGlobal.carboidratos, 0, 9999, 'Carboidratos')
+    const g = validarNumero(extraGlobal.gorduras, 0, 9999, 'Gorduras')
+    if (kcal === null || p === null || c === null || g === null) return
     const n = { ...hoje, extras_globais: [...(hoje.extras_globais || [])] }
-    const item = { ...extraGlobal, kcal: Number(extraGlobal.kcal), proteinas: Number(extraGlobal.proteinas), carboidratos: Number(extraGlobal.carboidratos), gorduras: Number(extraGlobal.gorduras) }
+    const item = { ...extraGlobal, kcal, proteinas: p, carboidratos: c, gorduras: g }
     if (editandoExtraIdx !== null) {
       n.extras_globais[editandoExtraIdx] = item
     } else {
@@ -256,8 +273,10 @@ export default function Dieta({ user, onIrParaConfig }) {
   const analisarComIA = async () => {
     if (!aiInput.trim() || aiLoading) return
     setAiLoading(true); setErro(null)
-    try {
-      const parsed = await calcularMacrosIA(aiInput)
+    const parsed = await calcularMacrosIA(aiInput)
+    if (parsed._erro) {
+      setErro(parsed._erro)
+    } else {
       setExtraGlobal({
         nome: parsed.nome || 'Analisado por IA',
         kcal: String(parsed.kcal || 0),
@@ -267,8 +286,6 @@ export default function Dieta({ user, onIrParaConfig }) {
       })
       setAiInput('')
       showToast('✓ Campos preenchidos automaticamente', 'sucesso')
-    } catch (err) {
-      setErro(`Erro na análise: ${err.message}`)
     }
     setAiLoading(false)
   }
@@ -333,7 +350,7 @@ export default function Dieta({ user, onIrParaConfig }) {
                 </button>
               </div>
             )}
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
+            <div className="card-premium p-4 space-y-3">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Progresso Hoje</span>
               {[
                 { key: 'kcal', label: 'Calorias', atual: Math.round(totais.kcal), meta: userMetas.kcal, u: 'kcal' },
@@ -441,13 +458,11 @@ export default function Dieta({ user, onIrParaConfig }) {
               <div className="flex gap-2">
                 {editandoExtraIdx !== null && (
                   <button onClick={cancelarExtra}
-                    className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95">
-                    Cancelar
-                  </button>
+                    className="btn-secondary flex-1 py-3 text-xs">Cancelar</button>
                 )}
                 <button onClick={adicionarExtraGlobal}
                   disabled={!extraGlobal.nome.trim()}
-                  className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30">
+                  className="flex-1 btn-primary w-full py-3 flex items-center justify-center gap-1">
                   <Plus size={14} /> {editandoExtraIdx !== null ? 'Atualizar' : 'Adicionar'}
                 </button>
               </div>
@@ -475,7 +490,7 @@ export default function Dieta({ user, onIrParaConfig }) {
               </button>
             </div>
 
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+            <div className="card-premium p-4">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Total do Dia</span>
               <div className="grid grid-cols-4 gap-2 mt-2">
                 {[
@@ -594,17 +609,17 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, s
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 text-center">
+        <div className="card-premium p-4 text-center">
           <span className="text-2xl font-bold text-white">{totalDiasComDado}</span>
           <span className="text-neutral-500 text-xs block mt-0.5">Dias no mês</span>
         </div>
-        <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 text-center">
+        <div className="card-premium p-4 text-center">
           <span className="text-2xl font-bold text-emerald-400">{aderencia}%</span>
           <span className="text-neutral-500 text-xs block mt-0.5">Aderência</span>
         </div>
       </div>
 
-      <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-2">
+      <div className="card-premium p-4 space-y-2">
         <div className="flex items-center justify-between text-xs">
           <span className="text-emerald-400 font-medium">{greenDays} Dias 🟢</span>
           <span className="text-yellow-400 font-medium">{yellowDays} Dias 🟡</span>
@@ -617,7 +632,7 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, s
         </div>
       </div>
 
-      <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+      <div className="card-premium p-4">
         <div className="flex items-center justify-between mb-2">
           <button onClick={voltarMes}
             className="border border-white/10 rounded-xl p-2 text-white/60 hover:text-white transition-all active:scale-90">

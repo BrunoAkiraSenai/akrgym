@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   collection, getDocs, query, where, orderBy, limit, addDoc, doc, getDoc, setDoc,
 } from 'firebase/firestore'
+import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import {
@@ -9,7 +10,8 @@ import {
   Flame, Thermometer, Zap, RefreshCw, Info,
 } from 'lucide-react'
 
-export default function Execucao({ user, onFinish }) {
+export default function Execucao({ onFinish }) {
+  const user = useUser()
   const STORAGE_KEY = `rascunho_treino_${user.uid}`
   const [step, setStep] = useState('select')
   const [rotinaKey, setRotinaKey] = useState(null)
@@ -152,7 +154,7 @@ export default function Execucao({ user, onFinish }) {
             <button
               key={key}
               onClick={() => iniciarTreino(key)}
-              className="w-full flex items-center justify-between bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-5 transition-all active:scale-[0.97] hover:border-white/10 text-left"
+              className="w-full flex items-center justify-between card-premium p-5 transition-all active:scale-[0.97] hover:border-white/10 text-left"
             >
               <div>
                 <span className="text-white font-semibold text-base tracking-tight">{r?.nome || key}</span>
@@ -188,9 +190,7 @@ export default function Execucao({ user, onFinish }) {
             setRotinaKey(null)
             setTopSetData([])
             setErro(null); setSucesso(null)
-          }} className="text-neutral-500 hover:text-neutral-300 text-[11px] font-semibold bg-neutral-800 px-3 py-1.5 rounded-lg transition-all active:scale-90">
-            Descartar
-          </button>
+          }} className="btn-secondary text-[11px] px-3 py-1.5">Descartar</button>
         </div>
       )}
 
@@ -224,7 +224,7 @@ export default function Execucao({ user, onFinish }) {
             : null
 
           return (
-            <div key={ex.nome} className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3 transition-all">
+            <div key={ex.nome} className="card-premium p-4 space-y-3 transition-all">
               <div className="flex items-center justify-between">
                 <h2 className="text-white font-semibold text-sm tracking-tight">{ex.nome}</h2>
                 <span className="text-neutral-500 text-[11px] font-mono">meta {ex.meta_reps}</span>
@@ -307,8 +307,7 @@ export default function Execucao({ user, onFinish }) {
       <button
         onClick={finalizarTreino}
         disabled={!podeFinalizar || saving}
-        className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-lg py-5 rounded-2xl transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2 mt-1"
-      >
+        className="btn-primary w-full text-lg py-5 flex items-center justify-center gap-2 mt-1">
         {saving ? <><Loader size={20} className="animate-spin" /> Salvando...</>
         : <><CheckCircle size={20} /> Finalizar Treino</>}
       </button>
