@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
 import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw } from 'lucide-react'
@@ -44,7 +44,6 @@ export default function Configuracao({ abaInicial }) {
 
   useEffect(() => { carregar() }, [carregar])
 
-  useEffect(() => { if (aba === 'dieta') { console.log('🔍 aba:', aba); console.log('🔍 refeicoes:', config.refeicoes); console.log('🔍 config:', config) } }, [aba, config])
 
   function validarNumero(valor, min, max, nome) {
     const v = parseFloat(String(valor || '').replace(',', '.'))
@@ -195,9 +194,9 @@ export default function Configuracao({ abaInicial }) {
 
       <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-1 flex">
         <button onClick={() => setAba('treinos')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'treinos' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'}`}>Treinos</button>
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'treinos' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Treinos</button>
         <button onClick={() => setAba('dieta')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'dieta' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'}`}>Dieta</button>
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'dieta' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Dieta</button>
       </div>
 
       {erro && <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
@@ -205,7 +204,7 @@ export default function Configuracao({ abaInicial }) {
 
       {aba === 'treinos' ? (
         loading ? (
-          <p className="text-neutral-600 text-center py-8 text-sm">Carregando...</p>
+          <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
         ) : (
           <>
             <div className="flex items-center justify-between">
@@ -254,7 +253,7 @@ export default function Configuracao({ abaInicial }) {
                             <input type="text" value={ex.nome}
                               onChange={e => updateExercise(key, idx, 'nome', e.target.value)}
                               className="flex-1 bg-transparent text-white font-medium text-xs outline-none border-b border-neutral-800 pb-0.5 focus:border-emerald-500/50" />
-                            <button onClick={() => deleteExercise(key, idx)} className="text-red-400/70 hover:text-red-400 p-1 shrink-0 transition-all active:scale-90"><Trash size={14} /></button>
+                            <button onClick={() => deleteExercise(key, idx)} className="text-red-400/70 hover:text-red-400 p-1 shrink-0 icon-hover"><Trash size={14} /></button>
                           </div>
                           <div className="grid grid-cols-2 gap-1.5">
                             <div>
@@ -290,7 +289,7 @@ export default function Configuracao({ abaInicial }) {
         )
       ) : (
         <div className="flex flex-col gap-3">
-          {console.log('🔍 DIETA RENDERIZOU — refeicoes:', config.refeicoes?.length)}
+          
           <div className="card-premium p-4 space-y-2">
             <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Metas Diárias</span>
             <div className="grid grid-cols-4 gap-1.5">
@@ -347,7 +346,7 @@ export default function Configuracao({ abaInicial }) {
                   <input type="text" value={ref.horario || ''}
                     onChange={e => updateRefeicao(i, 'horario', e.target.value)}
                     className="bg-transparent text-neutral-500 text-[10px] font-mono outline-none border-b border-neutral-800 pb-0.5 w-14 text-center focus:border-cyan-500/50" />
-                  <button onClick={() => deleteRefeicao(i)} className="text-red-400/70 hover:text-red-400 p-1 shrink-0 transition-all active:scale-90">
+                  <button onClick={() => deleteRefeicao(i)} className="text-red-400/70 hover:text-red-400 p-1 shrink-0 icon-hover">
                     <Trash size={14} />
                   </button>
                 </div>

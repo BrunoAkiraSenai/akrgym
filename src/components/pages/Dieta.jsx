@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase/firestore'
+import { doc, getDoc, setDoc, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
 import { useUser } from '../../context/UserContext'
@@ -99,7 +99,6 @@ export default function Dieta({ onIrParaConfig }) {
   const [aiKeyVisible, setAiKeyVisible] = useState(false)
   const [userMetas, setUserMetas] = useState(METAS_DIARIAS)
   const [toast, setToast] = useState(null)
-  const [glowCardId, setGlowCardId] = useState(null)
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -161,7 +160,7 @@ export default function Dieta({ onIrParaConfig }) {
 
   const salvarHoje = useCallback(async (data, novo) => {
     try {
-      await setDoc(doc(db, 'users', user.uid, 'diario_dieta', data), { ...novo, data })
+      await setDoc(doc(db, 'users', user.uid, 'diario_dieta', data), { ...novo, data, updatedAt: serverTimestamp() })
       setHoje(novo)
       showToast('✓ Salvo', 'sucesso')
       recarregarMes()
@@ -326,23 +325,23 @@ export default function Dieta({ onIrParaConfig }) {
         <h1 className="text-xl font-bold tracking-tight text-white">Dieta</h1>
         <div className="flex items-center gap-1">
           <button onClick={() => onIrParaConfig?.()}
-            className="text-neutral-500 hover:text-neutral-300 p-2 rounded-xl transition-all active:scale-90"><Settings size={16} /></button>
+            className="text-neutral-500 hover:text-neutral-300 icon-hover p-2 rounded-xl"><Settings size={16} /></button>
           <Apple size={18} className="text-cyan-400" />
         </div>
       </div>
 
       <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-1 flex">
         <button onClick={() => setAba('diario')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'diario' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'}`}>Diário</button>
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'diario' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Diário</button>
         <button onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes) }}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'estatisticas' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'estatisticas' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
       </div>
 
       {erro && <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
 
       {aba === 'diario' ? (
         loading ? (
-          <p className="text-neutral-600 text-center py-8 text-sm">Carregando...</p>
+          <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
         ) : (
           <>
             {dataAtiva !== hojeId() && (
@@ -387,8 +386,6 @@ export default function Dieta({ onIrParaConfig }) {
 
               return (
                 <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`card-premium p-4 space-y-2 transition-all ${
-                  glowCardId === ref.id ? 'card-complete-glow' : ''
-                } ${
                   eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'opacity-40' : ''
                 }`}>
                   <div className="flex items-center justify-between">
@@ -430,7 +427,7 @@ export default function Dieta({ onIrParaConfig }) {
                     <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] text-neutral-400">Customizar Macros</span>
-                        <button onClick={() => { setEditando(null); setFormCustom({ proteinas: '', carboidratos: '', gorduras: '' }) }} className="text-neutral-500 hover:text-white"><X size={14} /></button>
+                        <button onClick={() => { setEditando(null); setFormCustom({ proteinas: '', carboidratos: '', gorduras: '' }) }} className="text-neutral-500 hover:text-white" aria-label="Fechar"><X size={14} /></button>
                       </div>
                       {['proteinas', 'carboidratos', 'gorduras'].map(c => (
                         <div key={c}>
@@ -478,7 +475,7 @@ export default function Dieta({ onIrParaConfig }) {
                 <div key={i} className="flex items-center justify-between bg-cyan-500/5 rounded-lg px-3 py-1.5 font-mono text-[11px] text-cyan-400/80 border border-cyan-500/10">
                   <span>+ {e.nome} — {e.kcal || 0} kcal · P: {e.proteinas || 0} · C: {e.carboidratos || 0} · G: {e.gorduras || 0}</span>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => editarExtra(i)} className="text-amber-400/70 hover:text-amber-400 transition-all active:scale-90"><Pencil size={13} /></button>
+                    <button onClick={() => editarExtra(i)} className="icon-hover text-amber-400/70"><Pencil size={13} /></button>
                     <button onClick={() => removerExtraGlobal(i)} className="text-red-400/60 hover:text-red-400 transition-all active:scale-90"><X size={13} /></button>
                   </div>
                 </div>
@@ -593,7 +590,7 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, s
     else greenDays++
   })
 
-  console.log('🔍 mesDocs length:', mesDocs.length)
+  
 
   const aderencia = totalDiasComDado > 0 ? Math.round((greenDays / totalDiasComDado) * 100) : 0
 

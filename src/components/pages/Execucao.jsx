@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  collection, getDocs, query, where, orderBy, limit, addDoc, doc, getDoc, setDoc,
+  collection, getDocs, query, where, orderBy, limit, addDoc, doc, getDoc, setDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
@@ -134,6 +134,7 @@ export default function Execucao({ onFinish }) {
       await addDoc(collection(db, 'users', user.uid, 'historico_treinos'), {
         rotina_id: rotinaKey,
         data: new Date(),
+        createdAt: serverTimestamp(),
         exercicios: topSetData.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
       })
       localStorage.removeItem(STORAGE_KEY)
@@ -215,7 +216,7 @@ export default function Execucao({ onFinish }) {
       )}
 
       {loadingHistorico ? (
-        <p className="text-neutral-600 text-center py-8 text-sm">Carregando...</p>
+        <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
       ) : topSetData.length === 0 ? (
         <p className="text-neutral-600 text-center py-4 text-sm">Nenhum exercício.</p>
       ) : (

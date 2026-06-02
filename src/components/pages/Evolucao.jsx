@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { collection, getDocs, query, orderBy, addDoc, deleteDoc, updateDoc, doc } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, addDoc, deleteDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
@@ -112,9 +112,9 @@ export default function Evolucao() {
     }
     try {
       if (editandoId) {
-        await updateDoc(doc(db, 'users', user.uid, 'historico_corporal', editandoId), registro)
+        await updateDoc(doc(db, 'users', user.uid, 'historico_corporal', editandoId), { ...registro, updatedAt: serverTimestamp() })
       } else {
-        await addDoc(collection(db, 'users', user.uid, 'historico_corporal'), registro)
+        await addDoc(collection(db, 'users', user.uid, 'historico_corporal'), { ...registro, createdAt: serverTimestamp() })
       }
       setNovaMedida({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
       setEditandoId(null)
@@ -214,7 +214,7 @@ export default function Evolucao() {
         <button
           onClick={() => setAba('treino')}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-            aba === 'treino' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'
+            aba === 'treino' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'
           }`}
         >
           Gráficos de Treino
@@ -222,7 +222,7 @@ export default function Evolucao() {
         <button
           onClick={() => { setAba('corporal'); if (medidas.length === 0) carregarMedidas() }}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-            aba === 'corporal' ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.08)]' : 'text-neutral-500 hover:text-neutral-300'
+            aba === 'corporal' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'
           }`}
         >
           Medidas Corporais
@@ -234,7 +234,7 @@ export default function Evolucao() {
       {aba === 'treino' ? (
         <>
           {loading ? (
-            <p className="text-neutral-600 text-center py-8 text-sm">Carregando...</p>
+            <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
           ) : !exercicios.length ? (
             <p className="text-neutral-600 text-center py-8 text-sm">Nenhum treino registrado ainda.</p>
           ) : (
@@ -533,7 +533,7 @@ export default function Evolucao() {
                           <button onClick={() => deletarMedida(
                             m.id,
                             m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                          )} className="text-red-400/70 hover:text-red-400 p-1.5 transition-all active:scale-90">
+                          )} className="icon-hover text-red-400/70 p-1.5">
                             <Trash size={14} />
                           </button>
                         </td>
