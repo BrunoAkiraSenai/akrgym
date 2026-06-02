@@ -4,6 +4,10 @@ import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
 import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle } from 'lucide-react'
 
+function gerarIdRefeicao() {
+  return `refeicao_${Date.now()}`
+}
+
 const CONFIG_REF = (uid) => doc(db, 'users', uid, 'config', 'data')
 
 export default function Configuracao({ user }) {
@@ -35,6 +39,8 @@ export default function Configuracao({ user }) {
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
+
+  useEffect(() => { if (aba === 'dieta') { console.log('🔍 aba:', aba); console.log('🔍 refeicoes:', config.refeicoes); console.log('🔍 config:', config) } }, [aba, config])
 
   const salvar = async (novo) => {
     setSaving(true); setErro(null); setSucesso(null)
@@ -90,6 +96,19 @@ export default function Configuracao({ user }) {
 
   const updateRefeicao = (idx, campo, valor) => {
     const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, [campo]: valor } : r) }
+    setConfig(n)
+  }
+
+  const addRefeicao = () => {
+    const n = { ...config, refeicoes: [...(config.refeicoes || []), { id: gerarIdRefeicao(), nome: 'Nova Refeição', horario: '00:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }] }
+    setConfig(n)
+  }
+
+  const deleteRefeicao = (idx) => {
+    const ref = (config.refeicoes || [])[idx]
+    if (!ref) return
+    if (!window.confirm(`Deseja excluir a refeição "${ref.nome}"? Os dados históricos não serão afetados.`)) return
+    const n = { ...config, refeicoes: (config.refeicoes || []).filter((_, i) => i !== idx) }
     setConfig(n)
   }
 
@@ -213,6 +232,7 @@ export default function Configuracao({ user }) {
         )
       ) : (
         <div className="flex flex-col gap-3">
+          {console.log('🔍 DIETA RENDERIZOU — refeicoes:', config.refeicoes?.length)}
           <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-2">
             <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Metas Diárias</span>
             <div className="grid grid-cols-4 gap-1.5">
@@ -248,6 +268,9 @@ export default function Configuracao({ user }) {
                   <input type="text" value={ref.horario || ''}
                     onChange={e => updateRefeicao(i, 'horario', e.target.value)}
                     className="bg-transparent text-neutral-500 text-[10px] font-mono outline-none border-b border-neutral-800 pb-0.5 w-14 text-center focus:border-cyan-500/50" />
+                  <button onClick={() => deleteRefeicao(i)} className="text-red-400/70 hover:text-red-400 p-1 shrink-0 transition-all active:scale-90">
+                    <Trash size={14} />
+                  </button>
                 </div>
                 <input type="text" value={textoAlimentos[i] ?? (ref.alimentos || []).join(', ')}
                   onChange={e => setTextoAlimentos(p => ({ ...p, [i]: e.target.value }))}
@@ -271,6 +294,10 @@ export default function Configuracao({ user }) {
                 </div>
               </div>
             ))}
+            <button onClick={addRefeicao}
+              className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-3 rounded-xl text-xs transition-all active:scale-[0.97] hover:opacity-90 shadow-[0_0_12px_rgba(52,211,153,0.1)] mt-1">
+              <Plus size={14} /> Nova Refeição
+            </button>
           </div>
 
           <button onClick={() => salvar(config)}

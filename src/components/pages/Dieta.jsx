@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
@@ -31,9 +31,10 @@ function refeicaoVazia() {
   return { status: 'pendente', substituto: null, extra: [] }
 }
 
-function diaVazio(data) {
+function diaVazio(data, refs) {
   const obj = {}
-  REF_BASE.forEach(r => { obj[r.id] = refeicaoVazia() })
+  const base = refs?.length > 0 ? refs : REF_BASE
+  base.forEach(r => { obj[r.id] = refeicaoVazia() })
   return { data: data || hojeId(), refeicoes: obj, extras_globais: [] }
 }
 
@@ -83,6 +84,8 @@ export default function Dieta({ user }) {
   const [editando, setEditando] = useState(null)
   const [formCustom, setFormCustom] = useState({ proteinas: '', carboidratos: '', gorduras: '' })
   const [refs, setRefs] = useState(clonarRefs(REF_BASE))
+  const refsRef = useRef(refs)
+  useEffect(() => { refsRef.current = refs }, [refs])
   const [confAberto, setConfAberto] = useState(false)
   const [extraGlobal, setExtraGlobal] = useState({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
   const [editandoExtraIdx, setEditandoExtraIdx] = useState(null)
@@ -112,9 +115,10 @@ export default function Dieta({ user }) {
       if (snap.exists()) {
         const data = snap.data()
         if (!data.refeicoes) data.refeicoes = {}
-        REF_BASE.forEach(r => { if (!data.refeicoes[r.id]) data.refeicoes[r.id] = refeicaoVazia() })
+        // Sincroniza refeições que o usuário criou depois deste dia
+        refsRef.current.forEach(r => { if (!data.refeicoes[r.id]) data.refeicoes[r.id] = refeicaoVazia() })
         setHoje(data)
-      } else setHoje(diaVazio(dataAtiva))
+      } else setHoje(diaVazio(dataAtiva, refsRef.current))
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
   }, [dataAtiva])
@@ -141,7 +145,8 @@ export default function Dieta({ user }) {
     } catch (err) { setErro(`Erro: ${err.message}`) }
   }, [])
 
-  useEffect(() => { carregarHoje(); carregarBase() }, [carregarHoje, carregarBase])
+  useEffect(() => { carregarBase() }, [carregarBase])
+  useEffect(() => { carregarHoje() }, [carregarHoje])
 
   // Carrega dados do mês ativo no mount para o heatmap
   useEffect(() => { carregarMes(mesAtual.ano, mesAtual.mes) }, [])
