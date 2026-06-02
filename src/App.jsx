@@ -13,24 +13,13 @@ import Dieta from './components/pages/Dieta'
 import Execucao from './components/pages/Execucao'
 import Evolucao from './components/pages/Evolucao'
 import Configuracao from './components/pages/Configuracao'
-import { REFEICOES, METAS_DIARIAS } from './config/dieta'
-import PROTOCOLO_BASE from './config/protocolo'
 
 const USER_CONFIG = (uid) => doc(db, 'users', uid, 'config', 'data')
-
-const SEED_CONFIG = {
-  metas: METAS_DIARIAS,
-  refeicoes: REFEICOES,
-  treinos: PROTOCOLO_BASE,
-  onboardingConcluido: false,
-}
 
 async function ensureUserConfig(uid) {
   const snap = await getDoc(USER_CONFIG(uid))
   if (snap.exists()) return
-  // Se houver migração de dados anônimos em andamento,
-  // o seed será sobrescrito pelos dados reais — sem perda de dados.
-  await setDoc(USER_CONFIG(uid), SEED_CONFIG)
+  await setDoc(USER_CONFIG(uid), { onboardingConcluido: false, criadoEm: new Date().toISOString() })
 }
 
 export default function App() {

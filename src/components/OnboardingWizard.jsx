@@ -151,13 +151,18 @@ export default function OnboardingWizard({ onComplete }) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
       const data = snap.data() || {}
-      // Ignora treinos/refeicoes — usa apenas a flag onboardingConcluido
       if (data.onboardingConcluido === true) {
         onComplete()
         return
       }
+      // Fallback: se tem treinos com exercícios, considera onboarding feito
+      const temTreinos = data.treinos && Object.keys(data.treinos).length > 0
+      if (temTreinos) {
+        onComplete()
+        return
+      }
     } catch {
-      // Se falhar ao ler, assume primeiro acesso e mostra wizard
+      // Falha ao ler → assume primeiro acesso
     }
     setVerificando(false)
   }, [user.uid, onComplete])
