@@ -488,3 +488,28 @@ input:focus, textarea:focus, select:focus {
     border-color: rgba(255, 255, 255, 0.08);
   }
 }
+
+/* ========================================
+   TRANSIÇÃO DE ABAS
+   ======================================== */
+
+.transition-page {
+  width: 100%;
+}
+
+.fade-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.fade-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.fade-exit-active {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 200ms ease-in, transform 200ms ease-in;
+}

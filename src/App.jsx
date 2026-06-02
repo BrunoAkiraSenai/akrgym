@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { UserContext } from './context/UserContext'
+import PageTransition from './components/PageTransition'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Login from './components/pages/Login'
 import Home from './components/pages/Home'
@@ -62,34 +65,42 @@ export default function App() {
 
   if (loading || initializing) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#050505]">
-        <div className="animate-spin w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full" />
-      </div>
+      <ErrorBoundary>
+        <div className="flex items-center justify-center h-full bg-[#050505]">
+          <div className="animate-spin w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full" />
+        </div>
+      </ErrorBoundary>
     )
   }
 
-  if (!user) return <Login />
+  if (!user) return <ErrorBoundary><Login /></ErrorBoundary>
 
   const renderPage = () => {
     switch (activeTab) {
       case 'home':
-        return <Home user={user} onStartWorkout={() => setActiveTab('treinar')} />
+        return <Home onStartWorkout={() => setActiveTab('treinar')} />
       case 'dieta':
-        return <Dieta user={user} onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} />
+        return <Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} />
       case 'treinar':
-        return <Execucao user={user} onFinish={() => setActiveTab('home')} />
+        return <Execucao onFinish={() => setActiveTab('home')} />
       case 'evolucao':
-        return <Evolucao user={user} />
+        return <Evolucao />
       case 'configurar':
-        return <Configuracao user={user} abaInicial={abaInicialConfig} />
+        return <Configuracao abaInicial={abaInicialConfig} />
       default:
-        return <Home user={user} onStartWorkout={() => setActiveTab('treinar')} />
+        return <Home onStartWorkout={() => setActiveTab('treinar')} />
     }
   }
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-      {renderPage()}
-    </Layout>
+    <UserContext.Provider value={user}>
+      <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+        <ErrorBoundary>
+          <PageTransition activeTab={activeTab}>
+            {renderPage()}
+          </PageTransition>
+        </ErrorBoundary>
+      </Layout>
+    </UserContext.Provider>
   )
 }
