@@ -3,6 +3,7 @@ import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { UserContext } from './context/UserContext'
+import OnboardingWizard from './components/OnboardingWizard'
 import PageTransition from './components/PageTransition'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
@@ -37,6 +38,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [initializing, setInitializing] = useState(true)
   const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
+  const [mostrarOnboarding, setMostrarOnboarding] = useState(true)
 
   useEffect(() => {
     let cancelado = false
@@ -99,13 +101,17 @@ export default function App() {
 
   return (
     <UserContext.Provider value={user}>
-      <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-        <ErrorBoundary>
-          <PageTransition activeTab={activeTab}>
-            {renderPage()}
-          </PageTransition>
-        </ErrorBoundary>
-      </Layout>
+      {mostrarOnboarding ? (
+        <OnboardingWizard onComplete={() => setMostrarOnboarding(false)} />
+      ) : (
+        <Layout activeTab={activeTab} onTabChange={setActiveTab}>
+          <ErrorBoundary>
+            <PageTransition activeTab={activeTab}>
+              {renderPage()}
+            </PageTransition>
+          </ErrorBoundary>
+        </Layout>
+      )}
     </UserContext.Provider>
   )
 }
