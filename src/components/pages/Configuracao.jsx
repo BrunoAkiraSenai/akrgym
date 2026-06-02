@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw } from 'lucide-react'
 import { calcularMacrosIA } from '../../utils/gemini'
 
 function gerarIdRefeicao() {
@@ -112,6 +112,17 @@ export default function Configuracao({ user, abaInicial }) {
     if (!window.confirm(`Deseja excluir a refeição "${ref.nome}"? Os dados históricos não serão afetados.`)) return
     const n = { ...config, refeicoes: (config.refeicoes || []).filter((_, i) => i !== idx) }
     setConfig(n)
+  }
+
+  const sincronizarMetas = () => {
+    const refeicoes = config.refeicoes || []
+    const total = refeicoes.reduce((acc, r) => ({
+      kcal: acc.kcal + (Number(r.kcal) || 0),
+      proteinas: acc.proteinas + (Number(r.proteinas) || 0),
+      carboidratos: acc.carboidratos + (Number(r.carboidratos) || 0),
+      gorduras: acc.gorduras + (Number(r.gorduras) || 0),
+    }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
+    setConfig(prev => ({ ...prev, metas: total }))
   }
 
   const calcularMacrosRefeicao = async (idx) => {
@@ -273,6 +284,27 @@ export default function Configuracao({ user, abaInicial }) {
                 </div>
               ))}
             </div>
+            {(() => {
+              const somaRefeicoes = (config.refeicoes || []).reduce((acc, r) => ({
+                kcal: acc.kcal + (Number(r.kcal) || 0),
+                proteinas: acc.proteinas + (Number(r.proteinas) || 0),
+                carboidratos: acc.carboidratos + (Number(r.carboidratos) || 0),
+                gorduras: acc.gorduras + (Number(r.gorduras) || 0),
+              }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
+              return (
+                <div className="text-xs text-white/30 flex gap-2 items-center pt-1">
+                  <span className="shrink-0">Total refeições:</span>
+                  <span>{somaRefeicoes.kcal} kcal</span>
+                  <span>{somaRefeicoes.proteinas}g P</span>
+                  <span>{somaRefeicoes.carboidratos}g C</span>
+                  <span>{somaRefeicoes.gorduras}g G</span>
+                </div>
+              )
+            })()}
+            <button onClick={sincronizarMetas}
+              className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-cyan-500/30 text-cyan-400 text-xs hover:bg-cyan-500/10 active:scale-[0.97] transition-all">
+              <RefreshCw size={12} /> Sincronizar com refeições
+            </button>
           </div>
 
           <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-2">
