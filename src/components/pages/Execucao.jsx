@@ -22,6 +22,7 @@ export default function Execucao({ onFinish }) {
   const [recuperado, setRecuperado] = useState(false)
   const [sucesso, setSucesso] = useState(null)
   const [treinosState, setTreinosState] = useState(null)
+  const [filtroBusca, setFiltroBusca] = useState('')
 
   useEffect(() => {
     ;(async () => {
@@ -115,6 +116,7 @@ export default function Execucao({ onFinish }) {
   }
 
   const finalizarTreino = async () => {
+    if (!window.confirm('Finalizar o treino? Os dados serão salvos no histórico.')) return
     const container = document.querySelector('.treino-container')
     if (container) {
       container.classList.add('card-complete-glow')
@@ -219,8 +221,16 @@ export default function Execucao({ onFinish }) {
         <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
       ) : topSetData.length === 0 ? (
         <p className="text-neutral-600 text-center py-4 text-sm">Nenhum exercício.</p>
-      ) : (
-        topSetData.map((ex, exIdx) => {
+      ) : (() => {
+        const exercicios = topSetData.filter(ex => !filtroBusca || ex.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
+        const busca = (
+        <div className="relative">
+          <input type="text" placeholder="Buscar exercício..." value={filtroBusca}
+            onChange={e => setFiltroBusca(e.target.value)}
+            className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500/30 pl-9" />
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={14} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>)
+        const cards = exercicios.map((ex, exIdx) => {
           const isAgachamento = ex.IsAgachamento || ex.nome?.toLowerCase().includes('agachamento')
           const aqPeso = ex.tem_aquecimento && !isAgachamento ? Math.round(ex.ref * 0.6) : null
           const prepPeso = Math.round(ex.ref * 0.85)
@@ -308,7 +318,13 @@ export default function Execucao({ onFinish }) {
             </div>
           )
         })
-      )}
+        return (
+        <div className="flex flex-col gap-2">
+          {busca}
+          {cards}
+        </div>
+        )
+      })()}
 
       <button
         onClick={finalizarTreino}

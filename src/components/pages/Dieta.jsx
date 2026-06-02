@@ -176,6 +176,7 @@ export default function Dieta({ onIrParaConfig }) {
       card.classList.add('card-complete-glow')
       setTimeout(() => card.classList.remove('card-complete-glow'), 500)
     }
+    const anterior = hoje?.refeicoes?.[id] || null
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
     if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     const a = n.refeicoes[id]
@@ -183,6 +184,16 @@ export default function Dieta({ onIrParaConfig }) {
       ? { status: 'pendente', substituto: null, extra: a.extra || [] }
       : { ...a, status: 'limpo', substituto: null }
     salvarHoje(dataAtiva, n)
+    if (a.status !== 'limpo') {
+      setToast({ msg: 'Refeição concluída!', tipo: 'sucesso', acao: () => {
+        const revertido = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
+        revertido.refeicoes[id] = a.status === 'limpo'
+          ? { status: 'pendente', substituto: null, extra: a.extra || [] }
+          : { ...a, status: a.status || 'pendente', substituto: null, extra: a.extra || [] }
+        salvarHoje(dataAtiva, revertido)
+        setToast({ msg: '✓ Desfeito!', tipo: 'sucesso', acao: null })
+      }})
+    }
   }
 
   const pular = (id) => {
@@ -313,10 +324,16 @@ export default function Dieta({ onIrParaConfig }) {
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-24 left-4 right-4 z-50 flex items-center justify-center pointer-events-none`}>
-          <div className={`px-4 py-2.5 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md ${
+          <div className={`px-4 py-2.5 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md flex items-center gap-3 ${
             toast.tipo === 'sucesso' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
           }`}>
-            {toast.msg}
+            <span>{toast.msg}</span>
+            {toast.acao && (
+              <button onClick={() => { toast.acao(); setToast(null) }}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold px-3 py-1 rounded-lg text-[10px] transition-all active:scale-90">
+                Desfazer
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { collection, getDocs, query, orderBy, addDoc, deleteDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
+import TrendChart from '../../components/TrendChart'
 import {
   Dumbbell, BarChart3, AlertTriangle, Trophy, Target, Flame,
   Activity, Save, ChevronDown, ChevronUp, Minus, Weight, Trash, Pencil, X,
@@ -63,6 +64,7 @@ export default function Evolucao() {
   const [savingMedida, setSavingMedida] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
   const [medidaGrafico, setMedidaGrafico] = useState('peso')
+  const [filtroPeriodo, setFiltroPeriodo] = useState('tudo')
 
   const carregarTreinos = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -197,6 +199,15 @@ export default function Evolucao() {
 
   const ultimaMedida = medidas[0]
   const medidaAnterior = medidas[1]
+
+  const medidasFiltradas = useMemo(() => {
+    if (filtroPeriodo === 'tudo') return [...medidas]
+    const corte = new Date()
+    corte.setDate(corte.getDate() - (filtroPeriodo === 'semana' ? 7 : 30))
+    return medidas.filter(m => m.data >= corte)
+  }, [medidas, filtroPeriodo])
+
+  const primeiraMedida = medidasFiltradas.length > 0 ? medidasFiltradas[medidasFiltradas.length - 1] : null
 
   function diffValor(atual, anterior) {
     if (atual == null || anterior == null) return null
@@ -397,6 +408,19 @@ export default function Evolucao() {
             </button>
           </div>
 
+          <div className="flex gap-1.5">
+            {[
+              { key: 'semana', label: 'Semana' },
+              { key: 'mes', label: 'Mês' },
+              { key: 'tudo', label: 'Tudo' },
+            ].map(p => (
+              <button key={p.key} onClick={() => setFiltroPeriodo(p.key)}
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${filtroPeriodo === p.key ? 'tab-active bg-emerald-500/10' : 'text-neutral-500 hover:text-neutral-300'}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+
           {medidas.length > 0 && ultimaMedida && (
             <div className="card-premium p-4">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-3">
@@ -423,6 +447,29 @@ export default function Evolucao() {
                           {Math.abs(diff).toFixed(1)}
                         </div>
                       )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {primeiraMedida && ultimaMedida && (
+            <div className="card-premium p-4">
+              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-3">
+                <BarChart3 size={12} className="text-cyan-400" /> Comparação
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {CAMPOS_MEDIDA.map(c => {
+                  const diff = ultimaMedida[c.key] - primeiraMedida[c.key]
+                  if (diff === 0) return null
+                  const melhorou = c.lowerBetter ? diff < 0 : diff > 0
+                  return (
+                    <div key={c.key} className="bg-black/30 rounded-xl p-2 text-center border border-white/5">
+                      <div className="text-[9px] text-neutral-500">{c.label}</div>
+                      <div className={`text-sm font-bold ${melhorou ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {diff > 0 ? '+' : ''}{diff.toFixed(1)} <span className="text-[9px] font-normal text-neutral-500">{c.unidade}</span>
+                      </div>
                     </div>
                   )
                 })}
@@ -499,6 +546,21 @@ export default function Evolucao() {
                   </svg>
                 )
               })()}
+            </div>
+          )}
+
+          {medidasFiltradas.length >= 2 && (
+            <div className="card-premium p-4">
+              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                <Activity size={12} className="text-cyan-400" /> Tendência de Peso
+              </span>
+              <div className="flex justify-center">
+                <TrendChart
+                  data={[...medidasFiltradas].sort((a, b) => a.data - b.data).filter(m => m.peso != null).map(m => ({ data: m.data, valor: m.peso }))}
+                  width={Math.max(window.innerWidth - 96, 240)}
+                  height={200}
+                  cor="#10b981" />
+              </div>
             </div>
           )}
 
