@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   collection, getDocs, query, orderBy, limit, where,
 } from 'firebase/firestore'
@@ -50,7 +50,6 @@ export default function Home({ onStartWorkout }) {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [treinos, setTreinos] = useState([])
-  const streak = useMemo(() => calcularStreak(treinos), [treinos])
 
   const hoje = new Date()
 
@@ -179,14 +178,14 @@ export default function Home({ onStartWorkout }) {
       <div className="card-premium p-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-neutral-400 flex items-center gap-1">🔥 Sequência atual</span>
-          <span className="text-emerald-400 font-bold text-lg">{streak} {streak === 1 ? 'dia' : 'dias'}</span>
+          <span className="text-emerald-400 font-bold text-lg">{calcularStreak(treinos)} {calcularStreak(treinos) === 1 ? 'dia' : 'dias'}</span>
         </div>
         <div className="h-2 bg-neutral-700 rounded-full overflow-hidden">
           <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500"
-               style={{ width: `${Math.min((streak / 7) * 100, 100)}%` }} />
+               style={{ width: `${Math.min((calcularStreak(treinos) / 7) * 100, 100)}%` }} />
         </div>
         <p className="text-neutral-500 text-xs mt-2">
-          {streak >= 7 ? '🔥 Incrível! Uma semana completa!' : 'Treine hoje para manter a sequência'}
+          {calcularStreak(treinos) >= 7 ? '🔥 Incrível! Uma semana completa!' : 'Treine hoje para manter a sequência'}
         </p>
       </div>
     </div>
