@@ -3,6 +3,7 @@ import {
   collection, getDocs, query, where, orderBy, limit, addDoc, doc, getDoc, setDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { useUser } from '../../context/UserContext'
+import ConfirmModal from '../../components/ConfirmModal'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import {
@@ -23,6 +24,7 @@ export default function Execucao({ onFinish }) {
   const [sucesso, setSucesso] = useState(null)
   const [treinosState, setTreinosState] = useState(null)
   const [filtroBusca, setFiltroBusca] = useState('')
+  const [showConfirm, setShowConfirm] = useState(false)
 
   useEffect(() => {
     ;(async () => {
@@ -116,7 +118,11 @@ export default function Execucao({ onFinish }) {
   }
 
   const finalizarTreino = async () => {
-    if (!window.confirm('Finalizar o treino? Os dados serão salvos no histórico.')) return
+    setShowConfirm(true)
+  }
+
+  const confirmarFinalizar = async () => {
+    setShowConfirm(false)
     const container = document.querySelector('.treino-container')
     if (container) {
       container.classList.add('card-complete-glow')
@@ -333,6 +339,14 @@ export default function Execucao({ onFinish }) {
         {saving ? <><Loader size={20} className="animate-spin" /> Salvando...</>
         : <><CheckCircle size={20} /> Finalizar Treino</>}
       </button>
+
+      <ConfirmModal
+        aberto={showConfirm}
+        titulo="Finalizar treino?"
+        mensagem="Os dados serão salvos no histórico. Deseja continuar?"
+        onConfirm={confirmarFinalizar}
+        onCancel={() => setShowConfirm(false)}
+      />
     </div>
   )
 }

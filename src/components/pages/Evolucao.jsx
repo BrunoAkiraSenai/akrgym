@@ -65,6 +65,7 @@ export default function Evolucao() {
   const [editandoId, setEditandoId] = useState(null)
   const [medidaGrafico, setMedidaGrafico] = useState('peso')
   const [filtroPeriodo, setFiltroPeriodo] = useState('tudo')
+  const [limiteRegistros, setLimiteRegistros] = useState(5)
 
   const carregarTreinos = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -359,13 +360,19 @@ export default function Evolucao() {
                 <div className="card-premium p-4">
                   <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Últimos registros</span>
                   <div className="space-y-1 mt-2">
-                    {[...dadosTreino].reverse().slice(0, 5).map((d, i) => (
+                    {[...dadosTreino].reverse().slice(0, limiteRegistros).map((d, i) => (
                       <div key={i} className="flex items-center justify-between text-sm py-1">
                         <span className="text-neutral-500 font-mono text-xs">{d.data.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
                         <span className="text-white font-semibold text-sm">{d.carga} kg</span>
                       </div>
                     ))}
                   </div>
+                  {dadosTreino.length > limiteRegistros && (
+                    <button onClick={() => setLimiteRegistros(p => p + 5)}
+                      className="btn-secondary w-full py-2 text-xs mt-2">
+                      Carregar mais ({dadosTreino.length - limiteRegistros} restantes)
+                    </button>
+                  )}
                 </div>
               )}
             </>

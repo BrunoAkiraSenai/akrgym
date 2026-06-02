@@ -396,6 +396,10 @@ export default function Configuracao({ abaInicial }) {
 
       <button onClick={() => signOut(auth)}
         className="btn-secondary w-full py-4 text-sm mt-2">Sair da conta</button>
+
+      <div className="text-center text-neutral-600 text-[10px] font-mono mt-4">
+        AkrGym v{import.meta.env.VITE_APP_VERSION || '3.1'} · {new Date().getFullYear()}
+      </div>
     </div>
   )
 }
