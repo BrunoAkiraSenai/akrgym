@@ -120,10 +120,14 @@ export default function Configuracao({ user, abaInicial }) {
     setAiLoadingIdx(idx)
     try {
       const macros = await calcularMacrosIA(texto)
-      updateRefeicao(idx, 'kcal', macros.kcal)
-      updateRefeicao(idx, 'proteinas', macros.proteinas)
-      updateRefeicao(idx, 'carboidratos', macros.carboidratos)
-      updateRefeicao(idx, 'gorduras', macros.gorduras)
+      console.log('🔍 macros da IA:', JSON.stringify(macros))
+      setConfig(prev => ({
+        ...prev,
+        refeicoes: (prev.refeicoes || []).map((r, i) => i === idx
+          ? { ...r, kcal: macros.kcal, proteinas: macros.proteinas, carboidratos: macros.carboidratos, gorduras: macros.gorduras }
+          : r
+        ),
+      }))
     } catch (err) {
       setErro(err.message)
       setTimeout(() => setErro(null), 3000)
