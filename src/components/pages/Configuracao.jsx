@@ -17,12 +17,19 @@ export default function Configuracao({ user }) {
   const [showNewRoutine, setShowNewRoutine] = useState(false)
   const [newKey, setNewKey] = useState('')
   const [newNome, setNewNome] = useState('')
+  const [textoAlimentos, setTextoAlimentos] = useState({})
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro(null)
     try {
       const snap = await getDoc(CONFIG_REF(user.uid))
-      if (snap.exists()) setConfig(snap.data())
+      if (snap.exists()) {
+        setConfig(snap.data())
+        const refs = snap.data().refeicoes || []
+        const init = {}
+        refs.forEach((r, i) => { init[i] = (r.alimentos || []).join(', ') })
+        setTextoAlimentos(init)
+      }
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
   }, [])
@@ -242,8 +249,9 @@ export default function Configuracao({ user }) {
                     onChange={e => updateRefeicao(i, 'horario', e.target.value)}
                     className="bg-transparent text-neutral-500 text-[10px] font-mono outline-none border-b border-neutral-800 pb-0.5 w-14 text-center focus:border-cyan-500/50" />
                 </div>
-                <input type="text" value={(ref.alimentos || []).join(', ')}
-                  onChange={e => updateRefeicao(i, 'alimentos', e.target.value.split(', ').map(s => s.trim()).filter(Boolean))}
+                <input type="text" value={textoAlimentos[i] ?? (ref.alimentos || []).join(', ')}
+                  onChange={e => setTextoAlimentos(p => ({ ...p, [i]: e.target.value }))}
+                  onBlur={e => updateRefeicao(i, 'alimentos', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                   placeholder="Alimentos separados por vírgula"
                   className="w-full bg-neutral-800 text-white placeholder-neutral-600 text-[10px] p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30" />
                 <div className="grid grid-cols-4 gap-1.5">

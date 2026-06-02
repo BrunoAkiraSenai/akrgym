@@ -15,29 +15,33 @@ import PROTOCOLO_BASE from './config/protocolo'
 const USER_CONFIG = (uid) => doc(db, 'users', uid, 'config', 'data')
 
 const SEED_CONFIG = {
-  metas: { kcal: 1970, proteinas: 165, carboidratos: 226, gorduras: 43 },
+  metas: METAS_DIARIAS,
   refeicoes: REFEICOES,
   treinos: PROTOCOLO_BASE,
 }
 
 async function ensureUserConfig(uid) {
   const snap = await getDoc(USER_CONFIG(uid))
-  if (!snap.exists()) {
-    await setDoc(USER_CONFIG(uid), SEED_CONFIG)
-  }
+  if (snap.exists()) return
+  // Se houver migração de dados anônimos em andamento,
+  // o seed será sobrescrito pelos dados reais — sem perda de dados.
+  await setDoc(USER_CONFIG(uid), SEED_CONFIG)
 }
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [isAnonymous, setIsAnonymous] = useState(false)
   const [activeTab, setActiveTab] = useState('home')
+  const [initializing, setInitializing] = useState(true)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
-        setIsAnonymous(u.isAnonymous)
-        await ensureUserConfig(u.uid)
+        try {
+          await ensureUserConfig(u.uid)
+        } catch (e) {
+          console.warn('ensureUserConfig falhou:', e)
+        }
       }
       setUser(u)
       setLoading(false)
@@ -47,11 +51,15 @@ export default function App() {
 
   useEffect(() => {
     if (!user && !loading) {
-      signInAnonymously(auth).catch(() => {})
+      signInAnonymously(auth).catch((err) => {
+        console.warn('Login anônimo falhou:', err)
+      }).finally(() => setInitializing(false))
+    } else {
+      setInitializing(false)
     }
   }, [user, loading])
 
-  if (loading) {
+  if (loading || initializing) {
     return (
       <div className="flex items-center justify-center h-full bg-[#050505]">
         <div className="animate-spin w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full" />
@@ -74,7 +82,7 @@ export default function App() {
       case 'configurar':
         return <Configuracao user={user} />
       default:
-        return null
+        return <Home user={user} onStartWorkout={() => setActiveTab('treinar')} />
     }
   }
 

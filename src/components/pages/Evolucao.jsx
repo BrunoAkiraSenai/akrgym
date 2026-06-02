@@ -25,6 +25,10 @@ function encontrarMeta(nome) {
   return null
 }
 
+function nomeRotina(id) {
+  return PROTOCOLO_BASE[id]?.nome || id
+}
+
 function parseMetaTeto(meta) {
   if (!meta) return Infinity
   const parts = meta.split('-').map(Number)
@@ -46,6 +50,7 @@ export default function Evolucao({ user }) {
   const [todosTreinos, setTodosTreinos] = useState([])
   const [exercicios, setExercicios] = useState([])
   const [selecionado, setSelecionado] = useState('')
+  const [rotinaFiltro, setRotinaFiltro] = useState('todas')
   const [tooltip, setTooltip] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
@@ -133,9 +138,12 @@ export default function Evolucao({ user }) {
     } catch (err) { setErro(`Erro ao deletar: ${err.message}`) }
   }
 
+  const rotinasDisponiveis = [...new Set(todosTreinos.map(t => t.rotina_id).filter(Boolean))]
+
   const dadosTreino = (() => {
     if (!selecionado) return []
     return todosTreinos
+      .filter(t => rotinaFiltro === 'todas' || t.rotina_id === rotinaFiltro)
       .filter(t => t.exercicios?.some(ex => ex.nome === selecionado))
       .map(t => {
         const ex = t.exercicios.find(e => e.nome === selecionado)
@@ -228,6 +236,19 @@ export default function Evolucao({ user }) {
                   <Dumbbell size={16} />
                 </div>
               </div>
+
+              {rotinasDisponiveis.length > 1 && (
+                <div className="relative">
+                  <select value={rotinaFiltro} onChange={e => { setRotinaFiltro(e.target.value); setTooltip(null) }}
+                    className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white p-3 rounded-2xl text-sm appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all">
+                    <option value="todas">Todas as rotinas</option>
+                    {rotinasDisponiveis.map(id => <option key={id} value={id}>{nomeRotina(id)}</option>)}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-neutral-500">
+                    <BarChart3 size={14} />
+                  </div>
+                </div>
+              )}
 
               {selecionado && dadosTreino.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">

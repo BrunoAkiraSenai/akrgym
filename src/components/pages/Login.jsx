@@ -4,59 +4,94 @@ import { auth, db, provider } from '../../firebase'
 import { writeBatch, collection, getDocs, getDoc, doc } from 'firebase/firestore'
 import { Apple, Loader } from 'lucide-react'
 
+function traduzirErro(code) {
+  const erros = {
+    'auth/invalid-credential':               'E-mail ou senha incorretos.',
+    'auth/user-not-found':                   'Nenhuma conta encontrada com este e-mail.',
+    'auth/wrong-password':                   'Senha incorreta.',
+    'auth/email-already-in-use':             'Este e-mail já está cadastrado. Tente entrar.',
+    'auth/invalid-email':                    'E-mail inválido.',
+    'auth/weak-password':                    'A senha deve ter pelo menos 6 caracteres.',
+    'auth/too-many-requests':                'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
+    'auth/network-request-failed':           'Sem conexão. Verifique sua internet.',
+    'auth/popup-blocked':                    'Popup bloqueado pelo navegador. Permita popups e tente novamente.',
+    'auth/cancelled-popup-request':          'Login cancelado.',
+    'auth/account-exists-with-different-credential': 'Este e-mail já está cadastrado com outro método. Tente entrar com Google ou e-mail e senha.',
+  }
+  return erros[code] || 'Ocorreu um erro. Tente novamente.'
+}
+
 async function migrateAnonymousData(anonymousUid, newUid) {
-  const batch = writeBatch(db)
   const collections = ['historico_treinos', 'diario_dieta', 'historico_corporal']
-
-  for (const colName of collections) {
-    const snap = await getDocs(collection(db, 'users', anonymousUid, colName))
-    snap.docs.forEach(d => {
-      batch.set(doc(db, 'users', newUid, colName, d.id), d.data())
-      batch.delete(doc(db, 'users', anonymousUid, colName, d.id))
-    })
+  const operations = []
+  for (const col of collections) {
+    const snap = await getDocs(collection(db, 'users', anonymousUid, col))
+    snap.forEach(d => operations.push({ ref: doc(db, 'users', newUid, col, d.id), data: d.data() }))
   }
-
-  const configDoc = await getDoc(doc(db, 'users', anonymousUid, 'config', 'data'))
-  if (configDoc.exists()) {
-    batch.set(doc(db, 'users', newUid, 'config', 'data'), configDoc.data())
-    batch.delete(doc(db, 'users', anonymousUid, 'config', 'data'))
+  const configSnap = await getDoc(doc(db, 'users', anonymousUid, 'config', 'data'))
+  if (configSnap.exists()) {
+    operations.push({ ref: doc(db, 'users', newUid, 'config', 'data'), data: configSnap.data() })
   }
-
-  await batch.commit()
+  const CHUNK = 400
+  for (let i = 0; i < operations.length; i += CHUNK) {
+    const batch = writeBatch(db)
+    operations.slice(i, i + CHUNK).forEach(op => batch.set(op.ref, op.data))
+    await batch.commit()
+  }
 }
 
 export default function Login() {
+  const [modo, setModo] = useState('entrar')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmarSenha, setConfirmarSenha] = useState('')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState(null)
 
-  const trySignInOrCreate = async (email, password) => {
-    try {
-      await signInWithEmailAndPassword(auth, email, password)
-      return true
-    } catch (err) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        try {
-          await createUserWithEmailAndPassword(auth, email, password)
-          return true
-        } catch (regErr) {
-          throw new Error(regErr.message)
-        }
-      } else {
-        throw new Error(err.message)
-      }
-    }
+  const trocarModo = () => {
+    setModo(modo === 'entrar' ? 'cadastrar' : 'entrar')
+    setPassword('')
+    setConfirmarSenha('')
+    setErro(null)
   }
 
-  const fazerLogin = async (e) => {
+  const handleEntrar = async (e) => {
     e.preventDefault()
     if (!email.trim() || !password.trim()) return
     setLoading(true); setErro(null)
     try {
-      await trySignInOrCreate(email.trim(), password)
+      const anonymousUid = auth.currentUser?.isAnonymous ? auth.currentUser.uid : null
+      const result = await signInWithEmailAndPassword(auth, email.trim(), password)
+      if (anonymousUid && result.user.uid !== anonymousUid) {
+        await migrateAnonymousData(anonymousUid, result.user.uid)
+      }
     } catch (err) {
-      setErro(`Erro: ${err.message}`)
+      setErro(traduzirErro(err.code))
+    }
+    setLoading(false)
+  }
+
+  const handleCadastrar = async (e) => {
+    e.preventDefault()
+    if (!email.trim() || !password.trim() || !confirmarSenha.trim()) return
+    setErro(null)
+    if (password.length < 6) {
+      setErro('A senha deve ter pelo menos 6 caracteres')
+      return
+    }
+    if (password !== confirmarSenha) {
+      setErro('As senhas não coincidem')
+      return
+    }
+    setLoading(true)
+    try {
+      const anonymousUid = auth.currentUser?.isAnonymous ? auth.currentUser.uid : null
+      const result = await createUserWithEmailAndPassword(auth, email.trim(), password)
+      if (anonymousUid && result.user.uid !== anonymousUid) {
+        await migrateAnonymousData(anonymousUid, result.user.uid)
+      }
+    } catch (err) {
+      setErro(traduzirErro(err.code))
     }
     setLoading(false)
   }
@@ -71,7 +106,7 @@ export default function Login() {
       }
     } catch (err) {
       if (err.code === 'auth/popup-closed-by-user') return
-      setErro(`Erro: ${err.message}`)
+      setErro(traduzirErro(err.code))
     }
     setLoading(false)
   }
@@ -84,7 +119,9 @@ export default function Login() {
             <Apple size={32} className="text-emerald-400" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">AkrGym</h1>
-          <p className="text-neutral-500 text-sm">Crie sua conta ou entre</p>
+          <p className="text-neutral-500 text-sm">
+            {modo === 'entrar' ? 'Entre na sua conta' : 'Crie sua conta'}
+          </p>
         </div>
 
         {erro && (
@@ -107,18 +144,50 @@ export default function Login() {
           <div className="relative flex justify-center"><span className="bg-[#050505] px-3 text-[10px] text-neutral-600">ou</span></div>
         </div>
 
-        <form onSubmit={fazerLogin} className="space-y-3">
-          <input type="email" placeholder="E-mail" value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
-          <input type="password" placeholder="Senha" value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
-          <button type="submit" disabled={loading || !email.trim() || !password.trim()}
-            className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-4 rounded-xl text-sm transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2">
-            {loading ? <><Loader size={18} className="animate-spin" /> Entrando...</> : 'Entrar / Cadastrar'}
-          </button>
-        </form>
+        {modo === 'entrar' ? (
+          <form onSubmit={handleEntrar} className="space-y-3">
+            <input type="email" placeholder="E-mail" value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+            <input type="password" placeholder="Senha" value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+            <button type="submit" disabled={loading || !email.trim() || !password.trim()}
+              className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-4 rounded-xl text-sm transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2">
+              {loading ? <><Loader size={18} className="animate-spin" /> Entrando...</> : 'Entrar'}
+            </button>
+            <p className="text-center text-sm text-white/50">
+              Não tem conta?{' '}
+              <button type="button" onClick={trocarModo}
+                className="text-emerald-400 font-medium hover:text-emerald-300 transition-all">
+                Criar conta
+              </button>
+            </p>
+          </form>
+        ) : (
+          <form onSubmit={handleCadastrar} className="space-y-3">
+            <input type="email" placeholder="E-mail" value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+            <input type="password" placeholder="Senha" value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+            <input type="password" placeholder="Confirmar senha" value={confirmarSenha}
+              onChange={e => setConfirmarSenha(e.target.value)}
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+            <button type="submit" disabled={loading || !email.trim() || !password.trim() || !confirmarSenha.trim()}
+              className="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold py-4 rounded-xl text-sm transition-all active:scale-[0.97] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(52,211,153,0.15)] flex items-center justify-center gap-2">
+              {loading ? <><Loader size={18} className="animate-spin" /> Criando conta...</> : 'Criar conta'}
+            </button>
+            <p className="text-center text-sm text-white/50">
+              Já tem conta?{' '}
+              <button type="button" onClick={trocarModo}
+                className="text-emerald-400 font-medium hover:text-emerald-300 transition-all">
+                Entrar
+              </button>
+            </p>
+          </form>
+        )}
       </div>
     </div>
   )

@@ -5,7 +5,7 @@ import {
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import {
-  Play, CheckCircle, Loader, ChevronLeft, AlertTriangle,
+  Play, CheckCircle, Loader, ChevronLeft, AlertTriangle, X,
   Flame, Thermometer, Zap, RefreshCw, Info,
 } from 'lucide-react'
 
@@ -18,6 +18,7 @@ export default function Execucao({ user, onFinish }) {
   const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [erro, setErro] = useState(null)
   const [recuperado, setRecuperado] = useState(false)
+  const [sucesso, setSucesso] = useState(null)
   const [treinosState, setTreinosState] = useState(null)
 
   useEffect(() => {
@@ -30,8 +31,9 @@ export default function Execucao({ user, onFinish }) {
           await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { treinos: PROTOCOLO_BASE }, { merge: true })
           setTreinosState(PROTOCOLO_BASE)
         }
-      } catch {
+      } catch (err) {
         setTreinosState(PROTOCOLO_BASE)
+        setErro('Erro ao carregar treinos. Usando protocolo padrão.')
       }
     })()
   }, [])
@@ -42,21 +44,27 @@ export default function Execucao({ user, onFinish }) {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return
       const draft = JSON.parse(raw)
-      if (draft?.rotinaKey && draft?.topSetData?.length > 0 && treinosState[draft.rotinaKey]) {
-        setRotinaKey(draft.rotinaKey)
-        setTopSetData(draft.topSetData)
-        setStep('active')
-        setRecuperado(true)
+      if (!draft?.rotinaKey || !draft?.topSetData?.length) return
+      if (!treinosState[draft.rotinaKey]) {
+        localStorage.removeItem(STORAGE_KEY)
+        return
       }
+      setRotinaKey(draft.rotinaKey)
+      setTopSetData(draft.topSetData)
+      setStep('active')
+      setRecuperado(true)
     } catch {}
   }, [treinosState])
 
   const keys = treinosState ? Object.keys(treinosState) : []
 
   useEffect(() => {
-    if (step === 'active' && rotinaKey && topSetData.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rotinaKey, topSetData }))
-    }
+    const timer = setTimeout(() => {
+      if (step === 'active' && rotinaKey && topSetData.length > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ rotinaKey, topSetData }))
+      }
+    }, 500)
+    return () => clearTimeout(timer)
   }, [rotinaKey, topSetData, step])
 
   const iniciarTreino = useCallback(async (key) => {
@@ -73,7 +81,7 @@ export default function Execucao({ user, onFinish }) {
     setRotinaKey(key)
     setStep('active')
     setLoadingHistorico(true)
-    setErro(null)
+    setErro(null); setSucesso(null)
 
     try {
       const snap = await getDocs(
@@ -105,7 +113,16 @@ export default function Execucao({ user, onFinish }) {
   }
 
   const finalizarTreino = async () => {
-    setSaving(true); setErro(null)
+    setSaving(true); setErro(null); setSucesso(null)
+    for (const ex of topSetData) {
+      const carga = Number(ex.carga)
+      const reps = Number(ex.reps)
+      if (isNaN(carga) || isNaN(reps) || carga <= 0 || reps <= 0) {
+        setErro('Carga e repetições devem ser números válidos e maiores que zero.')
+        setSaving(false)
+        return
+      }
+    }
     try {
       await addDoc(collection(db, 'users', user.uid, 'historico_treinos'), {
         rotina_id: rotinaKey,
@@ -113,11 +130,14 @@ export default function Execucao({ user, onFinish }) {
         exercicios: topSetData.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
       })
       localStorage.removeItem(STORAGE_KEY)
+      setSucesso('✓ Treino salvo!')
+      setSaving(false)
+      await new Promise(r => setTimeout(r, 1000))
       onFinish()
     } catch (err) { setErro(`Erro ao salvar: ${err.message}`); setSaving(false) }
   }
 
-  const podeFinalizar = topSetData.length > 0 && topSetData.every(ex => ex.carga !== '' && ex.reps !== '')
+  const podeFinalizar = topSetData.length > 0 && topSetData.every(ex => Number(ex.carga) > 0 && Number(ex.reps) > 0)
 
   if (step === 'select') {
     return (
@@ -151,7 +171,7 @@ export default function Execucao({ user, onFinish }) {
   return (
     <div className="flex flex-col gap-3 pt-1 pb-4">
       <div className="flex items-center gap-2 mb-1">
-        <button onClick={() => { setStep('select'); setRotinaKey(null); setErro(null) }}
+        <button onClick={() => { setStep('select'); setRotinaKey(null); setErro(null); setRecuperado(false); setSucesso(null) }}
           className="text-neutral-500 hover:text-white p-1 transition-all active:scale-90">
           <ChevronLeft size={22} />
         </button>
@@ -167,7 +187,7 @@ export default function Execucao({ user, onFinish }) {
             setStep('select')
             setRotinaKey(null)
             setTopSetData([])
-            setErro(null)
+            setErro(null); setSucesso(null)
           }} className="text-neutral-500 hover:text-neutral-300 text-[11px] font-semibold bg-neutral-800 px-3 py-1.5 rounded-lg transition-all active:scale-90">
             Descartar
           </button>
@@ -175,7 +195,18 @@ export default function Execucao({ user, onFinish }) {
       )}
 
       {erro && (
-        <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
+        <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs flex items-start gap-2">
+          <span className="flex-1">{erro}</span>
+          <button onClick={() => setErro(null)} className="text-red-400 hover:text-red-300 shrink-0 transition-all active:scale-90">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {sucesso && (
+        <div className="bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 rounded-2xl p-3 text-emerald-400 text-xs flex items-center gap-2">
+          <CheckCircle size={14} /> {sucesso}
+        </div>
       )}
 
       {loadingHistorico ? (
@@ -184,11 +215,12 @@ export default function Execucao({ user, onFinish }) {
         <p className="text-neutral-600 text-center py-4 text-sm">Nenhum exercício.</p>
       ) : (
         topSetData.map((ex, exIdx) => {
-          const aqPeso = ex.tem_aquecimento ? Math.round(ex.ref * 0.6) : null
+          const isAgachamento = ex.IsAgachamento || ex.nome?.toLowerCase().includes('agachamento')
+          const aqPeso = ex.tem_aquecimento && !isAgachamento ? Math.round(ex.ref * 0.6) : null
           const prepPeso = Math.round(ex.ref * 0.85)
           const cargaHoje = Number(ex.carga)
           const backoffPeso = cargaHoje > 0
-            ? (ex.IsAgachamento ? Math.round(cargaHoje * 0.9) : Math.round(cargaHoje * 0.85))
+            ? (isAgachamento ? Math.round(cargaHoje * 0.9) : Math.round(cargaHoje * 0.85))
             : null
 
           return (
@@ -221,7 +253,7 @@ export default function Execucao({ user, onFinish }) {
                       <RefreshCw size={11} className="text-blue-400/70" /> Aquec.
                     </span>
                     <span className="text-neutral-400 font-mono">
-                      {ex.IsAgachamento ? 'Barra Olímpica × 10' : `${aqPeso}kg × 10`}
+                      {isAgachamento ? 'Barra Olímpica × 10' : `${aqPeso}kg × 10`}
                     </span>
                   </div>
                 )}
@@ -262,7 +294,7 @@ export default function Execucao({ user, onFinish }) {
                       <RefreshCw size={11} className="text-purple-400/70" /> Back-Off
                     </span>
                     <span className="text-purple-300/80 font-mono font-semibold">
-                      {ex.IsAgachamento ? `-10%: ${backoffPeso}kg × 6-8` : `${backoffPeso}kg × 8-10`}
+                      {isAgachamento ? `-10%: ${backoffPeso}kg × 6-8` : `${backoffPeso}kg × 8-10`}
                     </span>
                   </div>
                 )}
