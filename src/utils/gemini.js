@@ -25,5 +25,5 @@ Arredonde para números inteiros.`
 
   if (parsed.kcal == null || parsed.p == null) throw new Error('Resposta incompleta da IA.')
 
-  return { kcal: Math.round(parsed.kcal), proteinas: Math.round(parsed.p), carboidratos: Math.round(parsed.c), gorduras: Math.round(parsed.g) }
+  return { nome: textoAlimentos.trim(), kcal: Math.round(parsed.kcal), proteinas: Math.round(parsed.p), carboidratos: Math.round(parsed.c), gorduras: Math.round(parsed.g) }
 }

@@ -255,28 +255,22 @@ export default function Dieta({ user, onIrParaConfig }) {
   // IA Gemini via SDK direto (Cloud Function requer plano Blaze)
   const analisarComIA = async () => {
     if (!aiInput.trim() || aiLoading) return
-    setAiLoading(true); setAiResult(null); setErro(null)
+    setAiLoading(true); setErro(null)
     try {
       const parsed = await calcularMacrosIA(aiInput)
-      setAiResult(parsed)
       setExtraGlobal({
-        nome: 'Analisado por IA',
+        nome: parsed.nome || 'Analisado por IA',
         kcal: String(parsed.kcal || 0),
         proteinas: String(parsed.proteinas || 0),
         carboidratos: String(parsed.carboidratos || 0),
         gorduras: String(parsed.gorduras || 0),
       })
+      setAiInput('')
+      showToast('✓ Campos preenchidos automaticamente', 'sucesso')
     } catch (err) {
       setErro(`Erro na análise: ${err.message}`)
     }
     setAiLoading(false)
-  }
-
-  const aplicarResultadoIA = () => {
-    if (!aiResult) return
-    adicionarExtraGlobal()
-    setAiInput('')
-    setAiResult(null)
   }
 
   const totais = calcularTotais(hoje, refs)
@@ -479,21 +473,6 @@ export default function Dieta({ user, onIrParaConfig }) {
                 className="w-full flex items-center justify-center gap-2 bg-purple-500/10 text-purple-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30 border border-purple-500/20">
                 {aiLoading ? <><Loader size={14} className="animate-spin" /> Analisando...</> : <><Sparkles size={14} /> Analisar Prato 🚀</>}
               </button>
-              {aiResult && (
-                <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-purple-500/20">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-white font-medium">Analisado por IA</span>
-                    <button onClick={aplicarResultadoIA}
-                      className="text-emerald-400 hover:text-emerald-300 font-semibold text-[10px] bg-emerald-500/10 px-3 py-1.5 rounded-lg transition-all active:scale-90">+ Adicionar</button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1 text-[11px] font-mono text-center">
-                    <div><span className="text-neutral-500">Kcal</span><br /><span className="text-white">{aiResult.kcal}</span></div>
-                    <div><span className="text-neutral-500">P</span><br /><span className="text-white">{aiResult.proteinas}g</span></div>
-                    <div><span className="text-neutral-500">C</span><br /><span className="text-white">{aiResult.carboidratos}g</span></div>
-                    <div><span className="text-neutral-500">G</span><br /><span className="text-white">{aiResult.gorduras}g</span></div>
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4">
