@@ -33,6 +33,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('home')
   const [initializing, setInitializing] = useState(true)
+  const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -74,13 +75,13 @@ export default function App() {
       case 'home':
         return <Home user={user} onStartWorkout={() => setActiveTab('treinar')} />
       case 'dieta':
-        return <Dieta user={user} />
+        return <Dieta user={user} onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} />
       case 'treinar':
         return <Execucao user={user} onFinish={() => setActiveTab('home')} />
       case 'evolucao':
         return <Evolucao user={user} />
       case 'configurar':
-        return <Configuracao user={user} />
+        return <Configuracao user={user} abaInicial={abaInicialConfig} />
       default:
         return <Home user={user} onStartWorkout={() => setActiveTab('treinar')} />
     }
