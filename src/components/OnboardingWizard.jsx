@@ -151,9 +151,8 @@ export default function OnboardingWizard({ onComplete }) {
     try {
       const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
       const data = snap.data() || {}
-      const temTreinos = data.treinos && Object.keys(data.treinos).length > 0
-      const onboardingFeito = data.onboardingConcluido === true
-      if (temTreinos || onboardingFeito) {
+      // Ignora treinos/refeicoes — usa apenas a flag onboardingConcluido
+      if (data.onboardingConcluido === true) {
         onComplete()
         return
       }

@@ -22,6 +22,7 @@ const SEED_CONFIG = {
   metas: METAS_DIARIAS,
   refeicoes: REFEICOES,
   treinos: PROTOCOLO_BASE,
+  onboardingConcluido: false,
 }
 
 async function ensureUserConfig(uid) {
