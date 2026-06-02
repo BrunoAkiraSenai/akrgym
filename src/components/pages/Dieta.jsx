@@ -99,6 +99,7 @@ export default function Dieta({ onIrParaConfig }) {
   const [aiKeyVisible, setAiKeyVisible] = useState(false)
   const [userMetas, setUserMetas] = useState(METAS_DIARIAS)
   const [toast, setToast] = useState(null)
+  const [glowCardId, setGlowCardId] = useState(null)
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -171,6 +172,11 @@ export default function Dieta({ onIrParaConfig }) {
   }, [recarregarMes])
 
   const confirmar = (id) => {
+    const card = document.getElementById(`refeicao-card-${id}`)
+    if (card) {
+      card.classList.add('card-complete-glow')
+      setTimeout(() => card.classList.remove('card-complete-glow'), 500)
+    }
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
     if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     const a = n.refeicoes[id]
@@ -380,8 +386,10 @@ export default function Dieta({ onIrParaConfig }) {
               const ePulado = r.status === 'pulado'
 
               return (
-                <div key={ref.id} className={`bg-neutral-900/50 backdrop-blur-md border rounded-2xl p-4 space-y-2 transition-all ${
-                  eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'border-white/5 opacity-40' : 'border-white/5'
+                <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`card-premium p-4 space-y-2 transition-all ${
+                  glowCardId === ref.id ? 'card-complete-glow' : ''
+                } ${
+                  eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'opacity-40' : ''
                 }`}>
                   <div className="flex items-center justify-between">
                     <div>

@@ -49,8 +49,22 @@ export default function Home({ onStartWorkout }) {
   const [diasComTreino, setDiasComTreino] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
+  const [treinos, setTreinos] = useState([])
 
   const hoje = new Date()
+
+  const calcularStreak = (listaTreinos) => {
+    if (!listaTreinos || listaTreinos.length === 0) return 0
+    const hojeInicio = new Date(); hojeInicio.setHours(0, 0, 0, 0)
+    const datas = listaTreinos.map(t => {
+      let d = t.data?.toDate ? t.data.toDate() : new Date(t.data)
+      d.setHours(0, 0, 0, 0)
+      return d.getTime()
+    })
+    let streak = 0, dia = hojeInicio.getTime()
+    while (datas.includes(dia)) { streak++; dia -= 86400000 }
+    return streak
+  }
 
   const carregarDados = useCallback(async () => {
     setLoading(true)
@@ -72,6 +86,7 @@ export default function Home({ onStartWorkout }) {
         dias.add(t.getDay())
       })
       setDiasComTreino([...dias])
+      setTreinos(totalSnap.docs.map(d => d.data()))
     } catch (err) { setErro(err.message) }
     setLoading(false)
   }, [])
@@ -158,6 +173,20 @@ export default function Home({ onStartWorkout }) {
             )
           })}
         </div>
+      </div>
+
+      <div className="card-premium p-4">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm text-neutral-400 flex items-center gap-1">🔥 Sequência atual</span>
+          <span className="text-emerald-400 font-bold text-lg">{calcularStreak(treinos)} {calcularStreak(treinos) === 1 ? 'dia' : 'dias'}</span>
+        </div>
+        <div className="h-2 bg-neutral-700 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500"
+               style={{ width: `${Math.min((calcularStreak(treinos) / 7) * 100, 100)}%` }} />
+        </div>
+        <p className="text-neutral-500 text-xs mt-2">
+          {calcularStreak(treinos) >= 7 ? '🔥 Incrível! Uma semana completa!' : 'Treine hoje para manter a sequência'}
+        </p>
       </div>
     </div>
   )

@@ -115,6 +115,11 @@ export default function Execucao({ onFinish }) {
   }
 
   const finalizarTreino = async () => {
+    const container = document.querySelector('.treino-container')
+    if (container) {
+      container.classList.add('card-complete-glow')
+      setTimeout(() => container.classList.remove('card-complete-glow'), 400)
+    }
     setSaving(true); setErro(null); setSucesso(null)
     for (const ex of topSetData) {
       const carga = Number(ex.carga)
@@ -171,7 +176,7 @@ export default function Execucao({ onFinish }) {
   const rotina = treinosState?.[rotinaKey]
 
   return (
-    <div className="flex flex-col gap-3 pt-1 pb-4">
+    <div className="flex flex-col gap-3 pt-1 pb-4 treino-container">
       <div className="flex items-center gap-2 mb-1">
         <button onClick={() => { setStep('select'); setRotinaKey(null); setErro(null); setRecuperado(false); setSucesso(null) }}
           className="text-neutral-500 hover:text-white p-1 transition-all active:scale-90">
