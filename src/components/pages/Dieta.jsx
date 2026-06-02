@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, setDoc, getDocs, collection, query, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { calcularMacrosIA } from '../../utils/gemini'
 import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
 function hojeId() {
@@ -75,7 +75,7 @@ function clonarRefs(refs) {
   return refs.map(r => ({ ...r }))
 }
 
-export default function Dieta({ user }) {
+export default function Dieta({ user, onIrParaConfig }) {
   const [aba, setAba] = useState('diario')
   const [dataAtiva, setDataAtiva] = useState(hojeId())
   const [hoje, setHoje] = useState(null)
@@ -86,7 +86,6 @@ export default function Dieta({ user }) {
   const [refs, setRefs] = useState(clonarRefs(REF_BASE))
   const refsRef = useRef(refs)
   useEffect(() => { refsRef.current = refs }, [refs])
-  const [confAberto, setConfAberto] = useState(false)
   const [extraGlobal, setExtraGlobal] = useState({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
   const [editandoExtraIdx, setEditandoExtraIdx] = useState(null)
   const [mesDocs, setMesDocs] = useState([])
@@ -168,14 +167,6 @@ export default function Dieta({ user }) {
       showToast('Erro ao salvar. Verifique sua conexão.', 'erro')
     }
   }, [recarregarMes])
-
-  const salvarBase = async (novasRefs) => {
-    try {
-      await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { refeicoes: novasRefs, metas: userMetas }, { merge: true })
-      setRefs(novasRefs); setConfAberto(false)
-      showToast('✓ Salvo', 'sucesso')
-    } catch (err) { setErro(`Erro: ${err.message}`) }
-  }
 
   const confirmar = (id) => {
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
@@ -266,49 +257,15 @@ export default function Dieta({ user }) {
     if (!aiInput.trim() || aiLoading) return
     setAiLoading(true); setAiResult(null); setErro(null)
     try {
-      const key = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY
-      if (!key) { setErro('Configure sua chave da API Gemini nas configurações.'); setAiLoading(false); return }
-      const genAI = new GoogleGenerativeAI(key)
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-      const prompt = `Você é um assistente de nutrição de alta precisão focado estritamente no mercado de alimentação do BRASIL.
-Ao analisar a refeição descrita pelo usuário, siga estas diretrizes estritas:
-1. Priorize como fontes de dados a tabela TACO (Unicamp), TBCA (USP) e os menus nutricionais oficiais das filiais brasileiras de marcas de fast-food (ex: McDonald's Brasil, Burger King Brasil, Subway Brasil).
-2. Se o usuário mencionar pratos regionais ou estabelecimentos locais (ex: 'parmegiana do Omatutinho'), estime o peso e os macros com base no modo de preparo e tamanho de porção tradicional de restaurantes brasileiros.
-3. Responda SOMENTE com o objeto JSON puro. Nenhum texto antes ou depois. Nenhum bloco de código markdown. Apenas o JSON começando com { e terminando com }. Sem \`\`\`json, sem \`\`\`, sem comentários. As chaves devem ser exatamente:
-{
-  "nome": string,
-  "kcal": number,
-  "p": number,
-  "c": number,
-  "g": number
-}
-Não adicione nenhum texto explicativo fora do JSON.
-
-Refeição do usuário: "${aiInput}"`
-      const result = await model.generateContent(prompt)
-      const raw = result.response.text().trim()
-      // Remove markdown code blocks se a IA ignorar a instrução
-      const cleaned = raw.replace(/```json?/gi, '').replace(/```/g, '').trim()
-      let parsed
-      try {
-        parsed = JSON.parse(cleaned)
-      } catch {
-        showToast('IA retornou resposta inválida. Tente novamente.', 'erro')
-        setAiLoading(false)
-        return
-      }
-      if (parsed.kcal != null && parsed.p != null) {
-        setAiResult(parsed)
-        setExtraGlobal({
-          nome: parsed.nome || 'Analisado por IA',
-          kcal: String(parsed.kcal || 0),
-          proteinas: String(parsed.p || 0),
-          carboidratos: String(parsed.c || 0),
-          gorduras: String(parsed.g || 0),
-        })
-      } else {
-        setErro('Resposta inválida da IA. Tente novamente.')
-      }
+      const parsed = await calcularMacrosIA(aiInput)
+      setAiResult(parsed)
+      setExtraGlobal({
+        nome: 'Analisado por IA',
+        kcal: String(parsed.kcal || 0),
+        proteinas: String(parsed.proteinas || 0),
+        carboidratos: String(parsed.carboidratos || 0),
+        gorduras: String(parsed.gorduras || 0),
+      })
     } catch (err) {
       setErro(`Erro na análise: ${err.message}`)
     }
@@ -351,7 +308,7 @@ Refeição do usuário: "${aiInput}"`
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-xl font-bold tracking-tight text-white">Dieta</h1>
         <div className="flex items-center gap-1">
-          <button onClick={() => { setConfAberto(true); const c = clonarRefs(refs); setRefs(c) }}
+          <button onClick={() => onIrParaConfig?.()}
             className="text-neutral-500 hover:text-neutral-300 p-2 rounded-xl transition-all active:scale-90"><Settings size={16} /></button>
           <Apple size={18} className="text-cyan-400" />
         </div>
@@ -365,84 +322,6 @@ Refeição do usuário: "${aiInput}"`
       </div>
 
       {erro && <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
-
-      {confAberto && (
-        <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-neutral-300">Configurar Base</span>
-            <button onClick={() => { setConfAberto(false); setRefs(clonarRefs(REF_BASE)) }} className="text-neutral-500 hover:text-white"><X size={16} /></button>
-          </div>
-          <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
-            <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">Metas Diárias</span>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[
-                { key: 'kcal', label: 'Kcal', value: userMetas.kcal },
-                { key: 'proteinas', label: 'P (g)', value: userMetas.proteinas },
-                { key: 'carboidratos', label: 'C (g)', value: userMetas.carboidratos },
-                { key: 'gorduras', label: 'G (g)', value: userMetas.gorduras },
-              ].map(c => (
-                <div key={c.key}>
-                  <label className="text-[8px] text-neutral-600 block mb-0.5">{c.label}</label>
-                  <input type="number" value={c.value}
-                    onChange={e => setUserMetas(p => ({ ...p, [c.key]: Number(e.target.value) }))}
-                    className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
-                </div>
-              ))}
-            </div>
-          </div>
-          {refs.map((ref, i) => (
-            <div key={ref.id} className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
-              <span className="text-xs text-white font-medium">{ref.nome}</span>
-              <div className="grid grid-cols-4 gap-1.5">
-                {[ {key:'kcal',label:'Kcal'}, {key:'proteinas',label:'P'}, {key:'carboidratos',label:'C'}, {key:'gorduras',label:'G'} ].map(c => (
-                  <div key={c.key}>
-                    <label className="text-[8px] text-neutral-600 block mb-0.5">{c.label}</label>
-                    <input type="number" value={ref[c.key]}
-                      onChange={e => { const n = [...refs]; n[i] = { ...n[i], [c.key]: Number(e.target.value) }; setRefs(n) }}
-                      className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <div className="grid grid-cols-4 gap-1.5">
-            {[ {key:'kcal',label:'Kcal'}, {key:'proteinas',label:'P'}, {key:'carboidratos',label:'C'}, {key:'gorduras',label:'G'} ].map(c => (
-              <div key={c.key} className="bg-black/30 rounded-xl p-2 text-center border border-white/5">
-                <div className="text-[8px] text-neutral-500">{c.label}</div>
-                <div className="text-xs font-bold text-white">{refs.reduce((s, r) => s + r[c.key], 0)}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t border-white/5 pt-3 space-y-1.5">
-            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">🤖 IA Gemini</span>
-            {localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY ? (
-              <div className="flex items-center justify-between bg-emerald-500/10 rounded-xl px-3 py-2.5 border border-emerald-500/20">
-                <span className="text-emerald-400 text-xs font-medium flex items-center gap-1.5">🔑 Chave de IA Configurada</span>
-                <button onClick={() => { localStorage.removeItem('gemini_api_key'); setAiKey(''); setAiKeyVisible(false) }}
-                  className="text-neutral-500 hover:text-neutral-300 text-[10px] font-semibold bg-neutral-800 px-2.5 py-1.5 rounded-lg transition-all active:scale-90">Alterar</button>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <input type={aiKeyVisible ? 'text' : 'password'} placeholder="Sua chave da API Gemini"
-                    value={aiKey} onChange={e => setAiKey(e.target.value)}
-                    className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30 pr-9" />
-                  <button onClick={() => setAiKeyVisible(!aiKeyVisible)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300">
-                    {aiKeyVisible ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-                <button onClick={() => { localStorage.setItem('gemini_api_key', aiKey); setErro(null); setAiKey(aiKey) }}
-                  className="w-full bg-cyan-500/10 text-cyan-400 font-semibold py-2 rounded-xl text-xs transition-all active:scale-95 border border-cyan-500/20">Salvar Chave API</button>
-              </>
-            )}
-          </div>
-
-          <button onClick={() => salvarBase(refs)}
-            className="w-full bg-cyan-500/10 text-cyan-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 border border-cyan-500/20">Salvar Tudo</button>
-        </div>
-      )}
 
       {aba === 'diario' ? (
         loading ? (
@@ -603,15 +482,15 @@ Refeição do usuário: "${aiInput}"`
               {aiResult && (
                 <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-purple-500/20">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-white font-medium">{aiResult.nome}</span>
+                    <span className="text-white font-medium">Analisado por IA</span>
                     <button onClick={aplicarResultadoIA}
                       className="text-emerald-400 hover:text-emerald-300 font-semibold text-[10px] bg-emerald-500/10 px-3 py-1.5 rounded-lg transition-all active:scale-90">+ Adicionar</button>
                   </div>
                   <div className="grid grid-cols-4 gap-1 text-[11px] font-mono text-center">
                     <div><span className="text-neutral-500">Kcal</span><br /><span className="text-white">{aiResult.kcal}</span></div>
-                    <div><span className="text-neutral-500">P</span><br /><span className="text-white">{aiResult.p}g</span></div>
-                    <div><span className="text-neutral-500">C</span><br /><span className="text-white">{aiResult.c}g</span></div>
-                    <div><span className="text-neutral-500">G</span><br /><span className="text-white">{aiResult.g}g</span></div>
+                    <div><span className="text-neutral-500">P</span><br /><span className="text-white">{aiResult.proteinas}g</span></div>
+                    <div><span className="text-neutral-500">C</span><br /><span className="text-white">{aiResult.carboidratos}g</span></div>
+                    <div><span className="text-neutral-500">G</span><br /><span className="text-white">{aiResult.gorduras}g</span></div>
                   </div>
                 </div>
               )}

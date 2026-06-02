@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles } from 'lucide-react'
+import { calcularMacrosIA } from '../../utils/gemini'
 
 function gerarIdRefeicao() {
   return `refeicao_${Date.now()}`
@@ -10,18 +11,19 @@ function gerarIdRefeicao() {
 
 const CONFIG_REF = (uid) => doc(db, 'users', uid, 'config', 'data')
 
-export default function Configuracao({ user }) {
+export default function Configuracao({ user, abaInicial }) {
   const [config, setConfig] = useState({ treinos: {}, refeicoes: [], metas: {} })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState(null)
   const [sucesso, setSucesso] = useState(null)
-  const [aba, setAba] = useState('treinos')
+  const [aba, setAba] = useState(abaInicial || 'treinos')
   const [expandedKey, setExpandedKey] = useState(null)
   const [showNewRoutine, setShowNewRoutine] = useState(false)
   const [newKey, setNewKey] = useState('')
   const [newNome, setNewNome] = useState('')
   const [textoAlimentos, setTextoAlimentos] = useState({})
+  const [aiLoadingIdx, setAiLoadingIdx] = useState(null)
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -110,6 +112,23 @@ export default function Configuracao({ user }) {
     if (!window.confirm(`Deseja excluir a refeição "${ref.nome}"? Os dados históricos não serão afetados.`)) return
     const n = { ...config, refeicoes: (config.refeicoes || []).filter((_, i) => i !== idx) }
     setConfig(n)
+  }
+
+  const calcularMacrosRefeicao = async (idx) => {
+    const texto = textoAlimentos[idx]
+    if (!texto?.trim()) return
+    setAiLoadingIdx(idx)
+    try {
+      const macros = await calcularMacrosIA(texto)
+      updateRefeicao(idx, 'kcal', macros.kcal)
+      updateRefeicao(idx, 'proteinas', macros.proteinas)
+      updateRefeicao(idx, 'carboidratos', macros.carboidratos)
+      updateRefeicao(idx, 'gorduras', macros.gorduras)
+    } catch (err) {
+      setErro(err.message)
+      setTimeout(() => setErro(null), 3000)
+    }
+    setAiLoadingIdx(null)
   }
 
   return (
@@ -272,11 +291,19 @@ export default function Configuracao({ user }) {
                     <Trash size={14} />
                   </button>
                 </div>
-                <input type="text" value={textoAlimentos[i] ?? (ref.alimentos || []).join(', ')}
-                  onChange={e => setTextoAlimentos(p => ({ ...p, [i]: e.target.value }))}
-                  onBlur={e => updateRefeicao(i, 'alimentos', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                  placeholder="Alimentos separados por vírgula"
-                  className="w-full bg-neutral-800 text-white placeholder-neutral-600 text-[10px] p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                <div className="flex items-center gap-2">
+                  <input type="text" value={textoAlimentos[i] ?? (ref.alimentos || []).join(', ')}
+                    onChange={e => setTextoAlimentos(p => ({ ...p, [i]: e.target.value }))}
+                    onBlur={e => updateRefeicao(i, 'alimentos', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                    placeholder="Alimentos separados por vírgula"
+                    className="flex-1 bg-neutral-800 text-white placeholder-neutral-600 text-[10px] p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                  <button onClick={() => calcularMacrosRefeicao(i)}
+                    disabled={!textoAlimentos[i]?.trim() || aiLoadingIdx === i}
+                    className="shrink-0 flex items-center gap-1 p-2 rounded-lg border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-90"
+                    title="Calcular macros com IA">
+                    {aiLoadingIdx === i ? <Loader size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                  </button>
+                </div>
                 <div className="grid grid-cols-4 gap-1.5">
                   {[
                     { key: 'kcal', label: 'Kcal', val: ref.kcal },
