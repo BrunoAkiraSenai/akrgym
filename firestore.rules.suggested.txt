@@ -1,0 +1,70 @@
+# ===============================================================
+# FIREBASE FIRESTORE SECURITY RULES — SUGESTÃO PARA PRODUÇÃO
+# ===============================================================
+# Como implantar:
+#   1. Substitua o conteúdo de firestore.rules por este
+#   2. Execute: firebase deploy --only firestore
+# ===============================================================
+
+rules_version = '2'
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    # ===========================================================
+    # REGRA GERAL — NEGAR TUDO POR PADRÃO
+    # ===========================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    # ===========================================================
+    # USUÁRIOS — cada um só acessa os próprios dados
+    # ===========================================================
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    # ===========================================================
+    # REGRAS DETALHADAS POR SUBCOLEÇÃO (OPCIONAL — mais restritivo)
+    # ===========================================================
+    match /users/{userId}/config/data {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasAll(['metas', 'refeicoes', 'treinos']);
+    }
+
+    # ===========================================================
+    # HISTÓRICO DE TREINOS
+    # ===========================================================
+    match /users/{userId}/historico_treinos/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasAll(['rotina_id', 'data', 'exercicios']);
+      allow delete: if request.auth != null && request.auth.uid == userId;
+      allow update: if false;  # histórico não deve ser alterado
+    }
+
+    # ===========================================================
+    # DIÁRIO ALIMENTAR
+    # ===========================================================
+    match /users/{userId}/diario_dieta/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasAny(['refeicoes', 'data', 'extras_globais']);
+    }
+
+    # ===========================================================
+    # HISTÓRICO CORPORAL
+    # ===========================================================
+    match /users/{userId}/historico_corporal/{docId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.data.keys().hasAny(['peso', 'data']);
+    }
+
+  }
+}
