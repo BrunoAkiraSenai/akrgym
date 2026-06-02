@@ -5,3 +5,9 @@ dist
 .DS_Store
 ios/
 .env\n.env.local
+
+# Environment
+.env
+
+# Firebase service account
+serviceAccountKey.json
