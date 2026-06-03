@@ -101,6 +101,9 @@ export default function Dieta({ onIrParaConfig }) {
   const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
   const [toast, setToast] = useState(null)
   const [pularConfirmId, setPularConfirmId] = useState(null)
+  const [analisando, setAnalisando] = useState(false)
+  const [ultimaAnalise, setUltimaAnalise] = useState({})
+  const ultimoRequisicaoTime = useRef(0)
 
   // Toast auto-dismiss
   useEffect(() => {
@@ -292,23 +295,56 @@ export default function Dieta({ onIrParaConfig }) {
 
   // IA Gemini via SDK direto (Cloud Function requer plano Blaze)
   const analisarComIA = async () => {
-    if (!aiInput.trim() || aiLoading) return
+    if (!aiInput.trim()) return
+    if (analisando) {
+      showToast('Aguarde, já estou analisando...', 'sucesso')
+      return
+    }
+    const agora = Date.now()
+    const segundosDesdeUltima = (agora - ultimoRequisicaoTime.current) / 1000
+    if (segundosDesdeUltima < 3) {
+      showToast(`Aguarde ${(3 - segundosDesdeUltima).toFixed(0)} segundos para nova análise.`, 'sucesso')
+      return
+    }
+    const cacheKey = aiInput.trim().toLowerCase()
+    if (ultimaAnalise[cacheKey] && (agora - ultimaAnalise[cacheKey].timestamp) < 10000) {
+      showToast('Análise recente já feita. Use o resultado anterior.', 'sucesso')
+      return
+    }
+    setAnalisando(true)
+    ultimoRequisicaoTime.current = agora
     setAiLoading(true); setErro(null)
-    const parsed = await calcularMacrosIA(aiInput)
-    if (parsed._erro) {
-      setErro(parsed._erro)
-    } else {
-      setExtraGlobal({
-        nome: parsed.nome || 'Analisado por IA',
-        kcal: String(parsed.kcal || 0),
-        proteinas: String(parsed.proteinas || 0),
-        carboidratos: String(parsed.carboidratos || 0),
-        gorduras: String(parsed.gorduras || 0),
-      })
-      setAiInput('')
-      showToast('✓ Campos preenchidos automaticamente', 'sucesso')
+    try {
+      const parsed = await calcularMacrosIA(aiInput)
+      if (parsed._erro) {
+        if (parsed._erro.includes('429') || parsed._erro.includes('Too Many Requests') || parsed._erro.includes('RESOURCE_EXHAUSTED')) {
+          setErro('Limite de análises excedido. Tente novamente em alguns minutos.')
+        } else {
+          setErro(parsed._erro)
+        }
+      } else {
+        setExtraGlobal({
+          nome: parsed.nome || 'Analisado por IA',
+          kcal: String(parsed.kcal || 0),
+          proteinas: String(parsed.proteinas || 0),
+          carboidratos: String(parsed.carboidratos || 0),
+          gorduras: String(parsed.gorduras || 0),
+        })
+        setUltimaAnalise(prev => ({ ...prev, [cacheKey]: { timestamp: agora, resultado: parsed } }))
+        setAiInput('')
+        showToast('Análise concluída!', 'sucesso')
+      }
+    } catch (err) {
+      const msg = err.message || ''
+      if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('RESOURCE_EXHAUSTED') || err.status === 429) {
+        setErro('Limite de análises excedido. Tente novamente em alguns minutos.')
+      } else {
+        setErro('Erro ao analisar prato. Tente novamente.')
+      }
+      console.error('Erro Gemini:', err)
     }
     setAiLoading(false)
+    setTimeout(() => setAnalisando(false), 2000)
   }
 
   const totais = calcularTotais(hoje, refs)
