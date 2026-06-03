@@ -1,26 +1,19 @@
-import { useEffect } from 'react'
+import React from 'react';
 
-export default function ConfirmModal({ aberto, titulo, mensagem, onConfirm, onCancel }) {
-  useEffect(() => {
-    if (!aberto) return
-    const timer = setTimeout(() => {
-      const el = document.querySelector('.modal-container')
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [aberto])
-
-  if (!aberto) return null
+const ConfirmModal = ({ isOpen, onConfirm, onCancel, title = 'Confirmar', message = 'Tem certeza?' }) => {
+  if (!isOpen) return null;
   return (
-    <div className="modal-container fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
-      <div className="bg-neutral-900 border border-white/10 rounded-2xl p-5 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-        <h3 className="text-white font-bold text-sm mb-1">{titulo}</h3>
-        <p className="text-neutral-400 text-xs mb-4">{mensagem}</p>
-        <div className="flex gap-2">
-          <button onClick={onCancel} className="btn-secondary flex-1 py-2.5 text-xs">Cancelar</button>
-          <button onClick={onConfirm} className="btn-primary flex-1 py-2.5 text-xs">Confirmar</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6 w-80 max-w-[90%] shadow-xl">
+        <h3 className="text-lg font-bold text-white mb-2">{title}</h3>
+        <p className="text-neutral-300 mb-6">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button onClick={onCancel} className="px-4 py-2 rounded-full bg-neutral-800 text-white">Cancelar</button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 text-white">Confirmar</button>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default ConfirmModal;

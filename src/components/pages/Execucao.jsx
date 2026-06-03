@@ -1,17 +1,16 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   collection, getDocs, query, where, orderBy, limit, addDoc, doc, getDoc, setDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { useUser } from '../../context/UserContext'
-import ConfirmModal from '../../components/ConfirmModal'
 import { db } from '../../firebase'
-import PROTOCOLO_BASE from '../../config/protocolo'
+import ConfirmModal from '../ConfirmModal'
 import {
   Play, CheckCircle, Loader, ChevronLeft, AlertTriangle, X,
   Flame, Thermometer, Zap, RefreshCw, Info,
 } from 'lucide-react'
 
-export default function Execucao({ onFinish }) {
+export default function Execucao({ onFinish, activeTab }) {
   const user = useUser()
   const STORAGE_KEY = `rascunho_treino_${user.uid}`
   const [step, setStep] = useState('select')
@@ -25,23 +24,42 @@ export default function Execucao({ onFinish }) {
   const [treinosState, setTreinosState] = useState(null)
   const [filtroBusca, setFiltroBusca] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
+  const isPrimeiroRender = useRef(true)
 
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
-        if (snap.exists() && snap.data().treinos) {
-          setTreinosState(snap.data().treinos)
+  const carregarTreinos = useCallback(async () => {
+    try {
+      const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
+      if (snap.exists()) {
+        const treinosData = snap.data().treinos
+        if (treinosData && Object.keys(treinosData).length > 0) {
+          setTreinosState(treinosData)
         } else {
-          await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { treinos: PROTOCOLO_BASE }, { merge: true })
-          setTreinosState(PROTOCOLO_BASE)
+          setTreinosState({})
         }
-      } catch (err) {
-        setTreinosState(PROTOCOLO_BASE)
-        setErro('Erro ao carregar treinos. Usando protocolo padrão.')
+      } else {
+        await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { treinos: {}, onboardingConcluido: true })
+        setTreinosState({})
       }
-    })()
-  }, [])
+    } catch (err) {
+      console.error('Erro ao carregar treinos:', err)
+      setErro('Erro ao carregar treinos. Verifique sua conexão.')
+    }
+  }, [user.uid])
+
+  // Carrega treinos na montagem
+  useEffect(() => { carregarTreinos() }, [carregarTreinos])
+
+  // Recarrega sempre que a aba Treinar for reativada (ex: depois de criar treino em Config)
+  useEffect(() => {
+    if (isPrimeiroRender.current) {
+      isPrimeiroRender.current = false
+      return
+    }
+    setStep('select')
+    setRotinaKey(null)
+    setTopSetData([])
+    carregarTreinos()
+  }, [activeTab, carregarTreinos])
 
   useEffect(() => {
     if (!treinosState) return
@@ -75,10 +93,6 @@ export default function Execucao({ onFinish }) {
   const iniciarTreino = useCallback(async (key) => {
     if (loadingHistorico) return
     if (!treinosState?.[key]) {
-      if (PROTOCOLO_BASE[key]) {
-        await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { treinos: PROTOCOLO_BASE }, { merge: true })
-        setTreinosState(PROTOCOLO_BASE)
-      }
       setErro('Rotina não encontrada.')
       return
     }
@@ -122,6 +136,7 @@ export default function Execucao({ onFinish }) {
   }
 
   const confirmarFinalizar = async () => {
+    console.log('🔍 confirmarFinalizar chamada')
     setShowConfirm(false)
     const container = document.querySelector('.treino-container')
     if (container) {
@@ -133,7 +148,7 @@ export default function Execucao({ onFinish }) {
       const carga = Number(ex.carga)
       const reps = Number(ex.reps)
       if (isNaN(carga) || isNaN(reps) || carga <= 0 || reps <= 0) {
-        setErro('Carga e repetições devem ser números válidos e maiores que zero.')
+        setErro('Preencha carga e repetições de todos os exercícios')
         setSaving(false)
         return
       }
@@ -146,11 +161,15 @@ export default function Execucao({ onFinish }) {
         exercicios: topSetData.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
       })
       localStorage.removeItem(STORAGE_KEY)
-      setSucesso('✓ Treino salvo!')
+      setSucesso('Treino finalizado com sucesso!')
       setSaving(false)
       await new Promise(r => setTimeout(r, 1000))
       onFinish()
-    } catch (err) { setErro(`Erro ao salvar: ${err.message}`); setSaving(false) }
+    } catch (err) {
+      console.error('Erro ao salvar treino:', err)
+      setErro('Erro ao salvar treino. Tente novamente.')
+      setSaving(false)
+    }
   }
 
   const podeFinalizar = topSetData.length > 0 && topSetData.every(ex => Number(ex.carga) > 0 && Number(ex.reps) > 0)
@@ -162,7 +181,12 @@ export default function Execucao({ onFinish }) {
         {erro && (
           <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
         )}
-        {keys.map(key => {
+        {keys.length === 0 ? (
+          <div className="card-premium p-6 text-center">
+            <p className="text-neutral-500 text-sm">Nenhum treino configurado.</p>
+            <p className="text-neutral-600 text-xs mt-1">Vá em Configurações para criar seus treinos.</p>
+          </div>
+        ) : keys.map(key => {
           const r = treinosState[key]
           return (
             <button
@@ -341,9 +365,9 @@ export default function Execucao({ onFinish }) {
       </button>
 
       <ConfirmModal
-        aberto={showConfirm}
-        titulo="Finalizar treino?"
-        mensagem="Os dados serão salvos no histórico. Deseja continuar?"
+        isOpen={showConfirm}
+        title="Finalizar treino?"
+        message="Os dados serão salvos no histórico. Deseja continuar?"
         onConfirm={confirmarFinalizar}
         onCancel={() => setShowConfirm(false)}
       />

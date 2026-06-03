@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, setDoc, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { REFEICOES as REF_BASE, METAS_DIARIAS } from '../../config/dieta'
+import { REFEICOES as REF_BASE } from '../../config/dieta'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
+import ConfirmModal from '../ConfirmModal'
 import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
 function hojeId() {
@@ -85,7 +86,7 @@ export default function Dieta({ onIrParaConfig }) {
   const [erro, setErro] = useState(null)
   const [editando, setEditando] = useState(null)
   const [formCustom, setFormCustom] = useState({ proteinas: '', carboidratos: '', gorduras: '' })
-  const [refs, setRefs] = useState(clonarRefs(REF_BASE))
+  const [refs, setRefs] = useState([])
   const refsRef = useRef(refs)
   useEffect(() => { refsRef.current = refs }, [refs])
   const [extraGlobal, setExtraGlobal] = useState({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
@@ -97,13 +98,14 @@ export default function Dieta({ onIrParaConfig }) {
   const [aiResult, setAiResult] = useState(null)
   const [aiKey, setAiKey] = useState(localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '')
   const [aiKeyVisible, setAiKeyVisible] = useState(false)
-  const [userMetas, setUserMetas] = useState(METAS_DIARIAS)
+  const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
   const [toast, setToast] = useState(null)
+  const [pularConfirmId, setPularConfirmId] = useState(null)
 
   // Toast auto-dismiss
   useEffect(() => {
     if (!toast) return
-    const t = setTimeout(() => setToast(null), 2000)
+    const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
   }, [toast])
 
@@ -129,8 +131,11 @@ export default function Dieta({ onIrParaConfig }) {
       const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
       if (snap.exists()) {
         const data = snap.data()
-        if (data.refeicoes) setRefs(clonarRefs(data.refeicoes))
-        if (data.metas) setUserMetas(data.metas)
+        setRefs(clonarRefs(data.refeicoes || []))
+        setUserMetas(data.metas || { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
+      } else {
+        setRefs([])
+        setUserMetas({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
       }
     } catch {
       showToast('Erro ao carregar configuração. Usando valores padrão.', 'erro')
@@ -198,7 +203,7 @@ export default function Dieta({ onIrParaConfig }) {
 
   const pular = (id) => {
     const atual = hoje?.refeicoes?.[id]
-    if (atual?.status === 'pendente' && !window.confirm('Tem certeza que deseja pular esta refeição?')) return
+    if (atual?.status === 'pendente') { setPularConfirmId(id); return }
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
     if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     const a = n.refeicoes[id]
@@ -421,18 +426,21 @@ export default function Dieta({ onIrParaConfig }) {
 
                   <div className="flex items-center gap-2 pt-1">
                     <button onClick={() => confirmar(ref.id)}
+                      aria-label={eLimpo ? 'Desfazer conclusão' : 'Confirmar refeição'}
                       className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                         eLimpo ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-emerald-500/30'
                       }`}>
                       {eLimpo ? <><Check size={14} /> Concluído</> : '◯ Confirmar'}
                     </button>
                     <button onClick={() => eCustom ? setEditando(null) : abrirCustom(ref.id)}
+                      aria-label={eCustom ? 'Cancelar edição' : 'Modificar refeição'}
                       className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                         eCustom ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-yellow-500/30'
                       }`}>
                       ✏️ {eCustom ? 'Editando' : 'Modificar'}
                     </button>
                     <button onClick={() => pular(ref.id)}
+                      aria-label={ePulado ? 'Desfazer pulo' : 'Pular refeição'}
                       className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                         ePulado ? 'bg-red-500/20 text-red-400 border border-red-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-red-500/30'
                       }`}>
@@ -543,6 +551,23 @@ export default function Dieta({ onIrParaConfig }) {
           onDayClick={(data) => { setDataAtiva(data); setAba('diario') }}
         />
       )}
+      <ConfirmModal
+        isOpen={pularConfirmId !== null}
+        title="Pular refeição?"
+        message="Tem certeza que deseja pular esta refeição?"
+        onConfirm={() => {
+          const id = pularConfirmId
+          let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
+          if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
+          const a = n.refeicoes[id]
+          n.refeicoes[id] = a.status === 'pulado'
+            ? { status: 'pendente', substituto: null, extra: a.extra || [] }
+            : { status: 'pulado', substituto: null, extra: a.extra || [] }
+          salvarHoje(dataAtiva, n)
+          setPularConfirmId(null)
+        }}
+        onCancel={() => setPularConfirmId(null)}
+      />
     </div>
   )
 }
