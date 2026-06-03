@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useUser } from '../context/UserContext'
+import PROTOCOLO_BASE from '../config/protocolo'
+import { REFEICOES, METAS_DIARIAS } from '../config/dieta'
 import { Dumbbell, Sparkles, Zap, ChevronRight, Check, Loader, Apple } from 'lucide-react'
 
 const ETAPAS_OPCAO_A = ['experiencia', 'objetivo', 'revisao']
@@ -103,40 +105,6 @@ const TEMPLATES = {
   },
 }
 
-function limparTemplateAkr(data) {
-  const limpo = { treinos: {}, refeicoes: [] }
-  if (data.treinos) {
-    for (const [key, val] of Object.entries(data.treinos)) {
-      limpo.treinos[key] = {
-        nome: val.nome,
-        exercicios: (val.exercicios || []).map(ex => ({
-          nome: ex.nome,
-          base_top: 0,
-          meta_reps: ex.meta_reps || '',
-          carga: '',
-          reps: '',
-          tem_aquecimento: ex.tem_aquecimento || false,
-          IsAgachamento: ex.IsAgachamento || false,
-          nota: ex.nota || null,
-        })),
-      }
-    }
-  }
-  if (data.refeicoes) {
-    limpo.refeicoes = data.refeicoes.map(r => ({
-      id: r.id,
-      nome: r.nome,
-      horario: r.horario,
-      alimentos: r.alimentos || [],
-      kcal: r.kcal || 0,
-      proteinas: r.proteinas || 0,
-      carboidratos: r.carboidratos || 0,
-      gorduras: r.gorduras || 0,
-    }))
-  }
-  return limpo
-}
-
 export default function OnboardingWizard({ onComplete }) {
   const user = useUser()
   const [etapa, setEtapa] = useState('opcoes')
@@ -147,27 +115,66 @@ export default function OnboardingWizard({ onComplete }) {
   const [verificando, setVerificando] = useState(true)
 
   const verificarPrimeiroAcesso = useCallback(async () => {
-    setVerificando(true)
     try {
-      const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
-      const data = snap.data() || {}
-      if (data.onboardingConcluido === true) {
-        onComplete()
-        return
-      }
-      // Fallback: se tem treinos com exercícios, considera onboarding feito
-      const temTreinos = data.treinos && Object.keys(data.treinos).length > 0
-      if (temTreinos) {
-        onComplete()
-        return
-      }
-    } catch {
-      // Falha ao ler → assume primeiro acesso
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
+      await Promise.race([
+        (async () => {
+          const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
+          const data = snap.data() || {}
+          if (data.onboardingConcluido === true) {
+            onComplete()
+            return
+          }
+          const temTreinos = data.treinos && Object.keys(data.treinos).length > 0
+          if (temTreinos) {
+            onComplete()
+            return
+          }
+        })(),
+        timeoutPromise,
+      ])
+    } catch (err) {
+      console.error('Erro ao verificar onboarding:', err)
+      setErro('Erro ao carregar configurações. Recarregue a página.')
     }
     setVerificando(false)
   }, [user.uid, onComplete])
 
   useEffect(() => { verificarPrimeiroAcesso() }, [verificarPrimeiroAcesso])
+
+  const salvarOpcaoC = async () => {
+    setSalvando(true)
+    setErro(null)
+    try {
+      const treinosLimpos = {}
+      for (const [chave, treino] of Object.entries(PROTOCOLO_BASE)) {
+        treinosLimpos[chave] = {
+          ...treino,
+          exercicios: treino.exercicios.map(ex => ({
+            ...ex,
+            base_top: '',
+            meta_reps: ex.meta_reps || '',
+            tem_aquecimento: ex.tem_aquecimento || false,
+          })),
+        }
+      }
+      const refeicoesLimpas = REFEICOES.map(ref => ({
+        ...ref,
+        alimentos: ref.alimentos ? [...ref.alimentos] : [],
+      }))
+      await setDoc(doc(db, 'users', user.uid, 'config', 'data'), {
+        onboardingConcluido: true,
+        treinos: treinosLimpos,
+        refeicoes: refeicoesLimpas,
+        metas: METAS_DIARIAS,
+      })
+      onComplete()
+    } catch (err) {
+      console.error('Erro ao salvar template Akr:', err)
+      setErro('Erro ao copiar template. Tente novamente ou escolha outra opção.')
+    }
+    setSalvando(false)
+  }
 
   const salvarOpcaoA = async () => {
     setSalvando(true)
@@ -192,41 +199,13 @@ export default function OnboardingWizard({ onComplete }) {
     setSalvando(true)
     setErro(null)
     try {
-      const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
-      const atual = snap.exists() ? snap.data() : {}
+      // Limpa tudo — salva apenas a flag
       await setDoc(doc(db, 'users', user.uid, 'config', 'data'), {
-        ...atual,
         onboardingConcluido: true,
       })
       onComplete()
     } catch (err) {
       setErro('Erro ao salvar. Tente novamente.')
-    }
-    setSalvando(false)
-  }
-
-  const salvarOpcaoC = async () => {
-    setSalvando(true)
-    setErro(null)
-    try {
-      const snap = await getDoc(doc(db, 'users', 'pmeUSpgnZxgCQh1M7sQe2043Wql2', 'config', 'data'))
-      if (!snap.exists()) {
-        setErro('Template do Akr não encontrado. Tente outra opção.')
-        setSalvando(false)
-        return
-      }
-      const data = limparTemplateAkr(snap.data())
-      const configAtual = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
-      const atual = configAtual.exists() ? configAtual.data() : {}
-      await setDoc(doc(db, 'users', user.uid, 'config', 'data'), {
-        ...atual,
-        treinos: data.treinos,
-        refeicoes: data.refeicoes,
-        onboardingConcluido: true,
-      })
-      onComplete()
-    } catch (err) {
-      setErro('Erro ao buscar template do Akr. Tente novamente ou escolha outra opção.')
     }
     setSalvando(false)
   }
