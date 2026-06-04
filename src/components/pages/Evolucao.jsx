@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { collection, getDocs, query, orderBy, addDoc, deleteDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, limit, startAfter, addDoc, deleteDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
@@ -66,19 +66,29 @@ export default function Evolucao() {
   const [medidaGrafico, setMedidaGrafico] = useState('peso')
   const [filtroPeriodo, setFiltroPeriodo] = useState('tudo')
   const [limiteRegistros, setLimiteRegistros] = useState(5)
+  const [lastTreinoDoc, setLastTreinoDoc] = useState(null)
+  const [lastCorporalDoc, setLastCorporalDoc] = useState(null)
+  const [carregandoMaisTreinos, setCarregandoMaisTreinos] = useState(false)
+  const [carregandoMaisCorporais, setCarregandoMaisCorporais] = useState(false)
 
   const carregarTreinos = useCallback(async () => {
     setLoading(true); setErro(null)
     try {
       if (!db) { setErro('Firestore não inicializado.'); setLoading(false); return }
-      const snap = await getDocs(query(collection(db, 'users', user.uid, 'historico_treinos'), orderBy('data', 'asc')))
-      const treinos = snap.docs.map(d => {
+      const q = query(
+        collection(db, 'users', user.uid, 'historico_treinos'),
+        orderBy('data', 'desc'),
+        limit(20)
+      )
+      const snap = await getDocs(q)
+      const docs = snap.docs.map(d => {
         const raw = d.data()
-        return { ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
+        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
       })
-      setTodosTreinos(treinos)
+      setTodosTreinos([...docs].reverse())
+      setLastTreinoDoc(snap.docs[snap.docs.length - 1] || null)
       const nomes = new Set()
-      treinos.forEach(t => { if (t.exercicios) t.exercicios.forEach(ex => { if (ex.nome) nomes.add(ex.nome) }) })
+      docs.forEach(t => { if (t.exercicios) t.exercicios.forEach(ex => { if (ex.nome) nomes.add(ex.nome) }) })
       setExercicios([...nomes].sort())
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
@@ -86,13 +96,65 @@ export default function Evolucao() {
 
   const carregarMedidas = useCallback(async () => {
     try {
-      const snap = await getDocs(query(collection(db, 'users', user.uid, 'historico_corporal'), orderBy('data', 'desc')))
-      setMedidas(snap.docs.map(d => {
+      const q = query(
+        collection(db, 'users', user.uid, 'historico_corporal'),
+        orderBy('data', 'desc'),
+        limit(20)
+      )
+      const snap = await getDocs(q)
+      const docs = snap.docs.map(d => {
         const raw = d.data()
         return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
-      }))
+      })
+      setMedidas(docs)
+      setLastCorporalDoc(snap.docs[snap.docs.length - 1] || null)
     } catch (err) { setErro(`Erro ao carregar medidas: ${err.message}`) }
   }, [])
+
+  const carregarMaisTreinos = async () => {
+    if (!lastTreinoDoc) return
+    setCarregandoMaisTreinos(true)
+    try {
+      const q = query(
+        collection(db, 'users', user.uid, 'historico_treinos'),
+        orderBy('data', 'desc'),
+        startAfter(lastTreinoDoc),
+        limit(20)
+      )
+      const snap = await getDocs(q)
+      const docs = snap.docs.map(d => {
+        const raw = d.data()
+        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
+      })
+      setTodosTreinos(prev => [...docs.reverse(), ...prev])
+      setLastTreinoDoc(snap.docs[snap.docs.length - 1] || null)
+      const nomes = new Set()
+      docs.forEach(t => { if (t.exercicios) t.exercicios.forEach(ex => { if (ex.nome) nomes.add(ex.nome) }) })
+      setExercicios(prev => [...new Set([...prev, ...nomes])].sort())
+    } catch (err) { setErro(`Erro: ${err.message}`) }
+    setCarregandoMaisTreinos(false)
+  }
+
+  const carregarMaisCorporais = async () => {
+    if (!lastCorporalDoc) return
+    setCarregandoMaisCorporais(true)
+    try {
+      const q = query(
+        collection(db, 'users', user.uid, 'historico_corporal'),
+        orderBy('data', 'desc'),
+        startAfter(lastCorporalDoc),
+        limit(20)
+      )
+      const snap = await getDocs(q)
+      const docs = snap.docs.map(d => {
+        const raw = d.data()
+        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
+      })
+      setMedidas(prev => [...prev, ...docs])
+      setLastCorporalDoc(snap.docs[snap.docs.length - 1] || null)
+    } catch (err) { setErro(`Erro: ${err.message}`) }
+    setCarregandoMaisCorporais(false)
+  }
 
   useEffect(() => { carregarTreinos() }, [carregarTreinos])
 
@@ -373,6 +435,12 @@ export default function Evolucao() {
                       Carregar mais ({dadosTreino.length - limiteRegistros} restantes)
                     </button>
                   )}
+                  {lastTreinoDoc && (
+                    <button onClick={carregarMaisTreinos} disabled={carregandoMaisTreinos}
+                      className="btn-secondary w-full py-2 text-xs mt-1">
+                      {carregandoMaisTreinos ? 'Carregando...' : 'Carregar mais treinos'}
+                    </button>
+                  )}
                 </div>
               )}
             </>
@@ -614,6 +682,12 @@ export default function Evolucao() {
             </div>
           )}
 
+          {lastCorporalDoc && (
+            <button onClick={carregarMaisCorporais} disabled={carregandoMaisCorporais}
+              className="btn-secondary w-full py-2 text-xs">
+              {carregandoMaisCorporais ? 'Carregando...' : 'Carregar mais medidas'}
+            </button>
+          )}
           {medidas.length === 0 && !loading && (
             <p className="text-neutral-600 text-center py-8 text-sm">Nenhuma medida registrada ainda.</p>
           )}

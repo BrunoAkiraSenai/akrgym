@@ -55,14 +55,19 @@ export default function Home({ onStartWorkout }) {
 
   const calcularStreak = (listaTreinos) => {
     if (!listaTreinos || listaTreinos.length === 0) return 0
-    const hojeInicio = new Date(); hojeInicio.setHours(0, 0, 0, 0)
-    const datas = listaTreinos.map(t => {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+    const datas = new Set()
+    for (const t of listaTreinos) {
       let d = t.data?.toDate ? t.data.toDate() : new Date(t.data)
       d.setHours(0, 0, 0, 0)
-      return d.getTime()
-    })
-    let streak = 0, dia = hojeInicio.getTime()
-    while (datas.includes(dia)) { streak++; dia -= 86400000 }
+      datas.add(d.getTime())
+    }
+    let streak = 0
+    let dia = hoje.getTime()
+    while (datas.has(dia)) {
+      streak++
+      dia -= 86400000
+    }
     return streak
   }
 

@@ -5,7 +5,7 @@ import { REFEICOES as REF_BASE } from '../../config/dieta'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import ConfirmModal from '../ConfirmModal'
-import { Apple, Plus, X, Check, Settings, Sparkles, Loader, Eye, EyeOff, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { Apple, Plus, X, Check, Settings, Sparkles, Loader, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
 function hojeId() {
   const d = new Date()
@@ -47,7 +47,9 @@ function calcularTotais(dia, refs) {
     const r = dia.refeicoes[ref.id]
     if (!r || r.status === 'pendente') return
     if (r.status === 'customizado' && r.substituto) {
-      t.kcal += (r.substituto.proteinas * 4 + r.substituto.carboidratos * 4 + r.substituto.gorduras * 9)
+      t.kcal += (Number(r.substituto.proteinas) || 0) * 4
+        + (Number(r.substituto.carboidratos) || 0) * 4
+        + (Number(r.substituto.gorduras) || 0) * 9
       t.proteinas += Number(r.substituto.proteinas) || 0
       t.carboidratos += Number(r.substituto.carboidratos) || 0
       t.gorduras += Number(r.substituto.gorduras) || 0
@@ -95,9 +97,6 @@ export default function Dieta({ onIrParaConfig }) {
   const [mesAtual, setMesAtual] = useState({ ano: new Date().getFullYear(), mes: new Date().getMonth() + 1 })
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiResult, setAiResult] = useState(null)
-  const [aiKey, setAiKey] = useState(localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY || '')
-  const [aiKeyVisible, setAiKeyVisible] = useState(false)
   const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
   const [toast, setToast] = useState(null)
   const [pularConfirmId, setPularConfirmId] = useState(null)
@@ -395,7 +394,18 @@ export default function Dieta({ onIrParaConfig }) {
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'estatisticas' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
       </div>
 
-      {erro && <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
+      {erro && (
+        <div className="flex items-center justify-between bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3">
+          <span className="text-red-400 text-xs">{erro}</span>
+          <button
+            onClick={() => setErro(null)}
+            className="text-red-400 hover:text-red-300 transition-all ml-2 shrink-0"
+            aria-label="Fechar erro"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {aba === 'diario' ? (
         loading ? (
