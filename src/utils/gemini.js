@@ -19,16 +19,21 @@ Onde: kcal = calorias totais, p = proteínas em gramas, c = carboidratos em gram
 Arredonde para números inteiros.`
 
     const result = await model.generateContent(prompt)
-    const raw = result.response.text().trim()
-    const cleaned = raw.replace(/```json?/gi, '').replace(/```/g, '').trim()
+
+    const rawText = result.response?.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!rawText) throw new Error('Resposta vazia da IA')
+
+    const cleaned = rawText.replace(/```json?/gi, '').replace(/```/g, '').trim()
 
     let parsed
     try { parsed = JSON.parse(cleaned) }
-    catch { return { ...FALLBACK, nome: textoAlimentos.trim(), _erro: 'IA retornou resposta inválida. Tente novamente.' } }
+    catch { throw new Error('Resposta inválida (não JSON)') }
 
-    if (parsed.kcal == null || parsed.p == null) return { ...FALLBACK, nome: textoAlimentos.trim(), _erro: 'Resposta incompleta da IA.' }
+    if (typeof parsed.kcal !== 'number' || typeof parsed.p !== 'number' || typeof parsed.c !== 'number' || typeof parsed.g !== 'number') {
+      throw new Error('Campos nutricionais ausentes no formato esperado')
+    }
 
-    return { nome: textoAlimentos.trim(), kcal: Math.round(parsed.kcal), proteinas: Math.round(parsed.p), carboidratos: Math.round(parsed.c), gorduras: Math.round(parsed.g), _erro: null }
+    return { nome: textoAlimentos.trim(), kcal: Math.round(parsed.kcal), proteinas: Math.round(parsed.p), carboidratos: Math.round(parsed.c), gorduras: Math.round(parsed.g) }
   } catch (err) {
     return { ...FALLBACK, nome: textoAlimentos.trim(), _erro: `IA indisponível: ${err.message}. Use o formulário manual.` }
   }

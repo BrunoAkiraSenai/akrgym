@@ -51,5 +51,4 @@ export const METAS_DIARIAS = {
 export const STATUS = {
   limpo: 'Limpo 🟢',
   substituido: 'Substituído 🟡',
-  livre: 'Livre 🔴',
 }

@@ -7,6 +7,14 @@
         { "fieldPath": "rotina_id", "order": "ASCENDING" },
         { "fieldPath": "data", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "diario_dieta",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "data", "order": "ASCENDING" }
+      ]
     }
-  ]
+  ],
+  "fieldOverrides": []
 }

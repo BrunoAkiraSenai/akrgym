@@ -124,12 +124,14 @@ export default function Configuracao({ abaInicial }) {
   }
 
   const updateMeta = (campo, valor) => {
-    const n = { ...config, metas: { ...(config.metas || {}), [campo]: valor } }
+    const num = valor === '' ? '' : Number(valor)
+    const n = { ...config, metas: { ...(config.metas || {}), [campo]: num } }
     setConfig(n)
   }
 
   const updateRefeicao = (idx, campo, valor) => {
-    const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, [campo]: valor } : r) }
+    const v = campo === 'nome' || campo === 'horario' || campo === 'alimentos' ? valor : (valor === '' ? '' : Number(valor))
+    const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, [campo]: v } : r) }
     setConfig(n)
   }
 
@@ -320,7 +322,7 @@ export default function Configuracao({ abaInicial }) {
                 <div key={c.key}>
                   <label className="text-[8px] text-neutral-600 block mb-0.5">{c.label}</label>
                   <input type="number" value={c.val}
-                    onChange={e => updateMeta(c.key, Number(e.target.value))}
+                    onChange={e => updateMeta(c.key, e.target.value)}
                     className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
                 </div>
               ))}
@@ -391,7 +393,7 @@ export default function Configuracao({ abaInicial }) {
                     <div key={c.key}>
                       <label className="text-[8px] text-neutral-600 block mb-0.5">{c.label}</label>
                       <input type="number" value={c.val}
-                        onChange={e => updateRefeicao(i, c.key, Number(e.target.value))}
+                        onChange={e => updateRefeicao(i, c.key, e.target.value)}
                         className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
                     </div>
                   ))}

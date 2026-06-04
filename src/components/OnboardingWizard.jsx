@@ -115,27 +115,28 @@ export default function OnboardingWizard({ onComplete }) {
   const [verificando, setVerificando] = useState(true)
 
   const verificarPrimeiroAcesso = useCallback(async () => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
     try {
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
-      await Promise.race([
-        (async () => {
-          const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
-          const data = snap.data() || {}
-          if (data.onboardingConcluido === true) {
-            onComplete()
-            return
-          }
-          const temTreinos = data.treinos && Object.keys(data.treinos).length > 0
-          if (temTreinos) {
-            onComplete()
-            return
-          }
-        })(),
-        timeoutPromise,
-      ])
+      const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
+      clearTimeout(timeoutId)
+      const data = snap.data() || {}
+      if (data.onboardingConcluido === true) {
+        onComplete()
+        return
+      }
+      const temTreinos = data.treinos && Object.keys(data.treinos).length > 0
+      if (temTreinos) {
+        onComplete()
+        return
+      }
     } catch (err) {
+      if (err.name === 'AbortError') {
+        setErro('Tempo limite excedido. Verifique sua conexão.')
+      } else {
+        setErro('Erro ao carregar configurações. Recarregue a página.')
+      }
       console.error('Erro ao verificar onboarding:', err)
-      setErro('Erro ao carregar configurações. Recarregue a página.')
     }
     setVerificando(false)
   }, [user.uid, onComplete])
