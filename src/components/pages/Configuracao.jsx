@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
@@ -83,40 +83,44 @@ export default function Configuracao({ abaInicial }) {
     setSaving(false)
   }
 
-  const addRoutine = () => {
+  const addRoutine = async () => {
     if (!newKey.trim() || !newNome.trim()) return
-    const n = { ...config, treinos: { ...config.treinos } }
-    n.treinos[newKey.trim()] = { nome: newNome.trim(), exercicios: [] }
+    const n = { ...config, treinos: { ...config.treinos, [newKey.trim()]: { nome: newNome.trim(), exercicios: [] } } }
     setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n); setSucesso('Treino criado!'); setTimeout(() => setSucesso(null), 2000) } catch (err) { setErro('Erro ao salvar treino: ' + err.message) }
     setNewKey(''); setNewNome(''); setShowNewRoutine(false)
     setExpandedKey(newKey.trim())
   }
 
-  const deleteRoutine = (key) => {
+  const deleteRoutine = async (key) => {
     const n = { ...config, treinos: { ...config.treinos } }
     delete n.treinos[key]
     setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
     if (expandedKey === key) setExpandedKey(null)
   }
 
-  const addExercise = (key) => {
+  const addExercise = async (key) => {
     const n = { ...config, treinos: { ...config.treinos } }
     n.treinos[key] = { ...n.treinos[key], exercicios: [...(n.treinos[key].exercicios || []), { nome: 'Novo', base_top: 20, meta_reps: '8-10' }] }
     setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
-  const updateExercise = (key, idx, campo, valor) => {
+  const updateExercise = async (key, idx, campo, valor) => {
     const n = { ...config, treinos: { ...config.treinos } }
     const exs = [...(n.treinos[key].exercicios || [])]
     exs[idx] = { ...exs[idx], [campo]: valor }
     n.treinos[key] = { ...n.treinos[key], exercicios: exs }
     setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
-  const deleteExercise = (key, idx) => {
+  const deleteExercise = async (key, idx) => {
     const n = { ...config, treinos: { ...config.treinos } }
     n.treinos[key] = { ...n.treinos[key], exercicios: n.treinos[key].exercicios.filter((_, i) => i !== idx) }
     setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
   const updateMeta = (campo, valor) => {
@@ -129,20 +133,36 @@ export default function Configuracao({ abaInicial }) {
     setConfig(n)
   }
 
-  const addRefeicao = () => {
+  // Debounced save for metas and refeicoes (600ms after last change)
+  const configRef = useRef(config)
+  configRef.current = config
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        await setDoc(CONFIG_REF(user.uid), configRef.current)
+      } catch (err) {
+        setErro('Erro ao salvar: ' + err.message)
+      }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [config.metas, config.refeicoes, user.uid])
+
+  const addRefeicao = async () => {
     const n = { ...config, refeicoes: [...(config.refeicoes || []), { id: gerarIdRefeicao(), nome: 'Nova Refeição', horario: '00:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }] }
     setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
-  const deleteRefeicao = (idx) => {
+  const deleteRefeicao = async (idx) => {
     const ref = (config.refeicoes || [])[idx]
     if (!ref) return
     if (!window.confirm(`Deseja excluir a refeição "${ref.nome}"? Os dados históricos não serão afetados.`)) return
     const n = { ...config, refeicoes: (config.refeicoes || []).filter((_, i) => i !== idx) }
     setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
-  const sincronizarMetas = () => {
+  const sincronizarMetas = async () => {
     const refeicoes = config.refeicoes || []
     const total = refeicoes.reduce((acc, r) => ({
       kcal: acc.kcal + (Number(r.kcal) || 0),
@@ -150,7 +170,9 @@ export default function Configuracao({ abaInicial }) {
       carboidratos: acc.carboidratos + (Number(r.carboidratos) || 0),
       gorduras: acc.gorduras + (Number(r.gorduras) || 0),
     }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
-    setConfig(prev => ({ ...prev, metas: total }))
+    const n = { ...config, metas: total }
+    setConfig(n)
+    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
   const calcularMacrosRefeicao = async (idx) => {
@@ -162,13 +184,9 @@ export default function Configuracao({ abaInicial }) {
       setErro(macros._erro)
       setTimeout(() => setErro(null), 3000)
     } else {
-      setConfig(prev => ({
-        ...prev,
-        refeicoes: (prev.refeicoes || []).map((r, i) => i === idx
-          ? { ...r, kcal: macros.kcal, proteinas: macros.proteinas, carboidratos: macros.carboidratos, gorduras: macros.gorduras }
-          : r
-        ),
-      }))
+      const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, kcal: macros.kcal, proteinas: macros.proteinas, carboidratos: macros.carboidratos, gorduras: macros.gorduras } : r) }
+      setConfig(n)
+      try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
     }
     setAiLoadingIdx(null)
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
@@ -7,12 +7,13 @@ import OnboardingWizard from './components/OnboardingWizard'
 import PageTransition from './components/PageTransition'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
-import Login from './components/pages/Login'
-import Home from './components/pages/Home'
-import Dieta from './components/pages/Dieta'
-import Execucao from './components/pages/Execucao'
-import Evolucao from './components/pages/Evolucao'
-import Configuracao from './components/pages/Configuracao'
+
+const Login = lazy(() => import('./components/pages/Login'))
+const Home = lazy(() => import('./components/pages/Home'))
+const Dieta = lazy(() => import('./components/pages/Dieta'))
+const Execucao = lazy(() => import('./components/pages/Execucao'))
+const Evolucao = lazy(() => import('./components/pages/Evolucao'))
+const Configuracao = lazy(() => import('./components/pages/Configuracao'))
 
 const USER_CONFIG = (uid) => doc(db, 'users', uid, 'config', 'data')
 
@@ -70,29 +71,31 @@ export default function App() {
     )
   }
 
-  if (!user) return <ErrorBoundary><Login /></ErrorBoundary>
+  if (!user) return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login /></Suspense></ErrorBoundary>
 
   const renderPage = () => {
     switch (activeTab) {
       case 'home':
-        return <Home onStartWorkout={() => setActiveTab('treinar')} />
+        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
       case 'dieta':
-        return <Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} />
+        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
       case 'treinar':
-        return <Execucao onFinish={() => setActiveTab('home')} />
+        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} activeTab={activeTab} /></Suspense>
       case 'evolucao':
-        return <Evolucao />
+        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Evolucao /></Suspense>
       case 'configurar':
-        return <Configuracao abaInicial={abaInicialConfig} />
+        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Configuracao abaInicial={abaInicialConfig} /></Suspense>
       default:
-        return <Home onStartWorkout={() => setActiveTab('treinar')} />
+        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
     }
   }
 
   return (
     <UserContext.Provider value={user}>
       {mostrarOnboarding ? (
-        <OnboardingWizard onComplete={() => setMostrarOnboarding(false)} />
+        <ErrorBoundary>
+          <OnboardingWizard onComplete={() => setMostrarOnboarding(false)} />
+        </ErrorBoundary>
       ) : (
         <Layout activeTab={activeTab} onTabChange={setActiveTab}>
           <ErrorBoundary>

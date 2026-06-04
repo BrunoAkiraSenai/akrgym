@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import { initializeFirestore, persistentLocalCache, getFirestore } from 'firebase/firestore'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 
 const firebaseConfig = {
@@ -14,6 +14,16 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 
-export const db = getFirestore(app)
+let db
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ cacheSizeBytes: 104857600 }),
+  })
+} catch (e) {
+  console.warn('Cache persistente não disponível, usando fallback:', e.message)
+  db = getFirestore(app)
+}
+
+export { db }
 export const auth = getAuth(app)
 export const provider = new GoogleAuthProvider()

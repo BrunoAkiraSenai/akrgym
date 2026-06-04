@@ -136,7 +136,6 @@ export default function Execucao({ onFinish, activeTab }) {
   }
 
   const confirmarFinalizar = async () => {
-    console.log('🔍 confirmarFinalizar chamada')
     setShowConfirm(false)
     const container = document.querySelector('.treino-container')
     if (container) {
