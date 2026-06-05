@@ -17,7 +17,7 @@ export default function PageTransition({ activeTab, children }) {
           setClasse('fade-enter-active')
         })
       })
-    }, 180)
+    }, 200)
     return () => clearTimeout(timer)
   }, [activeTab])
 
