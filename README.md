@@ -13,6 +13,59 @@
 
 ---
 
+## 📱 Telas do App
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><strong>🏠 Home</strong></td>
+      <td align="center"><strong>🥗 Dieta</strong></td>
+      <td align="center"><strong>📅 Calendário</strong></td>
+    </tr>
+    <tr>
+      <td><img src="fotos/Home.png" width="220" alt="Home"></td>
+      <td><img src="fotos/Dieta.png" width="220" alt="Dieta"></td>
+      <td><img src="fotos/DietaCalendario.png" width="220" alt="Calendário Dieta"></td>
+    </tr>
+    <tr>
+      <td align="center"><strong>🏋️ Treino</strong></td>
+      <td align="center"><strong>📈 Evolução</strong></td>
+      <td align="center"><strong>📊 Medidas</strong></td>
+    </tr>
+    <tr>
+      <td><img src="fotos/Treino.png" width="220" alt="Execução de Treino"></td>
+      <td><img src="fotos/evolucao.png" width="220" alt="Gráficos de Evolução"></td>
+      <td><img src="fotos/MedidasCorporais.png" width="220" alt="Medidas Corporais"></td>
+    </tr>
+    <tr>
+      <td colspan="3" align="center"><strong>⚙️ Configurações</strong></td>
+    </tr>
+    <tr>
+      <td colspan="3" align="center"><img src="fotos/Configuracoes.png" width="220" alt="Configurações"></td>
+    </tr>
+  </table>
+</div>
+
+### 🏠 Home (Dashboard)
+Painel principal com streak de treinos, frequência semanal, total de treinos, último treino realizado e botão rápido para iniciar um novo treino.
+
+### 🥗 Dieta
+Diário alimentar com 4 refeições fixas (Café, Almoço, Pré-Treino, Jantar), progresso de macros do dia, alimentos extras, análise por IA Gemini e heatmap mensal de calorias.
+
+### 🏋️ Execução de Treino
+Protocolo Top Set / Back-Off com aquecimento (60%), preparatória (85%), top set e back-off. Referência automática do último treino. Regra especial para agachamento.
+
+### 📈 Evolução
+Gráfico SVG de progresso de carga por exercício com tooltips interativos, recorde absoluto, última top set e sugestão de subir carga.
+
+### 📊 Medidas Corporais
+CRUD de medidas (peso, cintura, abdômen, braço, peito, coxa), gráfico Canvas de tendência, comparação com primeira medida, filtro por período.
+
+### ⚙️ Configurações
+Gerenciamento completo de divisões de treino, exercícios, refeições, metas diárias e cálculo de macros por IA.
+
+---
+
 ## ✨ Funcionalidades
 
 ### 🏠 Dashboard
@@ -69,6 +122,7 @@
 
 ```
 AkrGym/
+├── fotos/                  ← Screenshots do app
 ├── src/
 │   ├── App.jsx              ← Router condicional + auth
 │   ├── firebase.js           ← Firebase init + cache offline
