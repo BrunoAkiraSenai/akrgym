@@ -197,7 +197,7 @@ export default function Execucao({ onFinish, activeTab }) {
                 <span className="text-white font-semibold text-base tracking-tight">{r?.nome || key}</span>
                 <span className="text-neutral-500 text-sm block">{r?.exercicios?.length || 0} exercícios</span>
               </div>
-              <Play size={22} className="text-emerald-400 shrink-0 drop-shadow-[0_0_6px_rgba(52,211,153,0.3)]" />
+              <Play size={22} className="text-emerald-400 shrink-0 drop-shadow-[0_0_6px_rgba(244,114,182,0.3)]" />
             </button>
           )
         })}
@@ -322,13 +322,13 @@ export default function Execucao({ onFinish, activeTab }) {
                       type="number" inputMode="numeric" placeholder="kg"
                       value={ex.carga}
                       onChange={e => atualizar(exIdx, 'carga', e.target.value)}
-                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(52,211,153,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(244,114,182,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <input
                       type="number" inputMode="numeric" placeholder="reps"
                       value={ex.reps}
                       onChange={e => atualizar(exIdx, 'reps', e.target.value)}
-                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(52,211,153,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(244,114,182,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 </div>

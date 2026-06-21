@@ -64,7 +64,7 @@ export default function App() {
   if (loading || initializing) {
     return (
       <ErrorBoundary>
-        <div className="flex items-center justify-center h-full bg-[#050505]">
+        <div className="flex items-center justify-center h-full bg-[#07050c]">
           <div className="animate-spin w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full" />
         </div>
       </ErrorBoundary>

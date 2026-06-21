@@ -3,6 +3,7 @@ import { collection, getDocs, query, orderBy, limit, startAfter, addDoc, deleteD
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
+import { useThemeColor } from '../../utils/themes'
 import TrendChart from '../../components/TrendChart'
 import {
   Dumbbell, BarChart3, AlertTriangle, Trophy, Target, Flame,
@@ -70,6 +71,8 @@ export default function Evolucao() {
   const [lastCorporalDoc, setLastCorporalDoc] = useState(null)
   const [carregandoMaisTreinos, setCarregandoMaisTreinos] = useState(false)
   const [carregandoMaisCorporais, setCarregandoMaisCorporais] = useState(false)
+  const brandColor = useThemeColor('--brand')
+  const accentColor = useThemeColor('--accent')
 
   const carregarTreinos = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -398,11 +401,11 @@ export default function Evolucao() {
                         {p.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                       </text>
                     ))}
-                    <polyline fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
+                    <polyline fill="none" stroke={brandColor} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
                       filter="url(#line-glow)" points={chartDims.points.map(p => `${p.x},${p.y}`).join(' ')} />
                     {chartDims.points.map((p, i) => (
-                      <circle key={i} cx={p.x} cy={p.y} r="5" fill="#050505" stroke="#34d399" strokeWidth="2.5"
-                        className="cursor-pointer transition-all" style={{ filter: 'drop-shadow(0 0 4px rgba(52,211,153,0.4))' }}
+                      <circle key={i} cx={p.x} cy={p.y} r="5" fill="#07050c" stroke={brandColor} strokeWidth="2.5"
+                        className="cursor-pointer transition-all" style={{ filter: `drop-shadow(0 0 4px ${brandColor}66)` }}
                         onClick={() => setTooltip(tooltip === i ? null : i)} />
                     ))}
                   </svg>
@@ -612,11 +615,11 @@ export default function Evolucao() {
                         {p.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                       </text>
                     ))}
-                    <polyline fill="none" stroke="#22d3ee" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+                    <polyline fill="none" stroke={accentColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
                       filter="url(#m-glow)" points={pontos.map(p => `${p.x},${p.y}`).join(' ')} />
                     {pontos.map((p, i) => (
-                      <circle key={i} cx={p.x} cy={p.y} r="4" fill="#050505" stroke="#22d3ee" strokeWidth="2"
-                        style={{ filter: 'drop-shadow(0 0 3px rgba(34,211,238,0.4))' }} />
+                      <circle key={i} cx={p.x} cy={p.y} r="4" fill="#07050c" stroke={accentColor} strokeWidth="2"
+                        style={{ filter: `drop-shadow(0 0 3px ${accentColor}66)` }} />
                     ))}
                   </svg>
                 )
@@ -634,7 +637,7 @@ export default function Evolucao() {
                   data={[...medidasFiltradas].sort((a, b) => a.data - b.data).filter(m => m.peso != null).map(m => ({ data: m.data, valor: m.peso }))}
                   width={Math.max(window.innerWidth - 96, 240)}
                   height={200}
-                  cor="#10b981" />
+                  cor={brandColor} />
               </div>
             </div>
           )}
