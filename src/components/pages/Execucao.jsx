@@ -257,7 +257,7 @@ export default function Execucao({ onFinish, activeTab }) {
           <input type="text" placeholder="Buscar exercício..." value={filtroBusca}
             onChange={e => setFiltroBusca(e.target.value)}
             className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500/30 pl-9" />
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={14} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </div>)
         const cards = exercicios.map((ex, exIdx) => {
           const isAgachamento = ex.IsAgachamento || ex.nome?.toLowerCase().includes('agachamento')

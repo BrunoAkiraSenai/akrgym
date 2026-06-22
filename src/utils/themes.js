@@ -102,6 +102,9 @@ export const THEMES = [
     accent: M(indigo),
     accent2Hex: desaturate('#8b5cf6'),
     highlightHex: desaturate('#d946ef'),
+    bgDeep: '#07050c',
+    bgCard: 'rgba(16, 12, 26, 0.55)',
+    textSecondary: '#a89db5',
   },
   {
     id: 'esmeralda',
@@ -111,6 +114,9 @@ export const THEMES = [
     accent: M(cyan),
     accent2Hex: desaturate('#6366f1'),
     highlightHex: desaturate('#f0c75e'),
+    bgDeep: '#050807',
+    bgCard: 'rgba(10, 18, 14, 0.55)',
+    textSecondary: '#9ca3af',
   },
   {
     id: 'oceano',
@@ -120,6 +126,9 @@ export const THEMES = [
     accent: M(sky),
     accent2Hex: desaturate('#06b6d4'),
     highlightHex: desaturate('#2dd4bf'),
+    bgDeep: '#050709',
+    bgCard: 'rgba(10, 14, 20, 0.55)',
+    textSecondary: '#9ca3af',
   },
   {
     id: 'lava',
@@ -129,15 +138,21 @@ export const THEMES = [
     accent: M(red),
     accent2Hex: desaturate('#f59e0b'),
     highlightHex: desaturate('#fbbf24'),
+    bgDeep: '#0a0605',
+    bgCard: 'rgba(20, 12, 8, 0.55)',
+    textSecondary: '#9ca3af',
   },
   {
-    id: 'rosa-neo',
-    name: 'Rosa Neo',
-    emoji: '🩷',
-    brand: M(pink),
-    accent: M(fuchsia),
-    accent2Hex: desaturate('#a855f7'),
-    highlightHex: desaturate('#f472b6'),
+    id: 'original',
+    name: 'Original',
+    emoji: '🎯',
+    brand: emerald,
+    accent: cyan,
+    accent2Hex: '#3b82f6',
+    highlightHex: '#f59e0b',
+    bgDeep: '#050505',
+    bgCard: 'rgba(23, 23, 23, 0.5)',
+    textSecondary: '#a3a3a3',
   },
 ]
 
@@ -161,6 +176,9 @@ function themeToVars(theme) {
   vars['--gold'] = theme.highlightHex
   vars['--text-accent'] = theme.brand[400]
   vars['--text-gold'] = theme.highlightHex
+  if (theme.bgDeep) vars['--bg-deep'] = theme.bgDeep
+  if (theme.bgCard) vars['--bg-card'] = theme.bgCard
+  if (theme.textSecondary) vars['--text-secondary'] = theme.textSecondary
   const shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
   shades.forEach((s) => {
     vars[`--color-emerald-${s}`] = theme.brand[s]
@@ -176,6 +194,7 @@ export function applyTheme(themeId) {
   Object.entries(vars).forEach(([key, value]) => {
     root.style.setProperty(key, value)
   })
+  root.setAttribute('data-theme', theme.id)
   localStorage.setItem(STORAGE_KEY, themeId)
   window.dispatchEvent(new CustomEvent('themechange', { detail: themeId }))
 }

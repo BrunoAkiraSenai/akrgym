@@ -73,6 +73,15 @@ export default function Evolucao() {
   const [carregandoMaisCorporais, setCarregandoMaisCorporais] = useState(false)
   const brandColor = useThemeColor('--brand')
   const accentColor = useThemeColor('--accent')
+  const [containerWidth, setContainerWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 375)
+
+  // Atualiza largura do container no resize/rotação
+  useEffect(() => {
+    const r = () => setContainerWidth(window.innerWidth)
+    window.addEventListener('resize', r)
+    const t = setTimeout(r, 200)
+    return () => { window.removeEventListener('resize', r); clearTimeout(t) }
+  }, [])
 
   const carregarTreinos = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -242,7 +251,7 @@ export default function Evolucao() {
 
   const chartDims = (() => {
     if (dadosTreino.length < 2) return null
-    const w = Math.max(window.innerWidth - 32, 280)
+    const w = Math.max(containerWidth - 32, 280)
     const plotW = w - PAD.left - PAD.right
     const plotH = H - PAD.top - PAD.bottom
     const maxCarga = Math.max(...dadosTreino.map(d => d.carga))
@@ -577,7 +586,7 @@ export default function Evolucao() {
                 const floor = Math.floor(Math.max(minVal - margem, 0) / 5) * 5
                 const gH = 200
                 const gPad = { top: 16, right: 12, bottom: 32, left: 40 }
-                const gW = Math.max(window.innerWidth - 64, 240)
+                const gW = Math.max(containerWidth - 64, 240)
                 const plotW = gW - gPad.left - gPad.right
                 const plotH = gH - gPad.top - gPad.bottom
                 const amplitude = ceiling - floor || 1
@@ -635,7 +644,7 @@ export default function Evolucao() {
               <div className="flex justify-center">
                 <TrendChart
                   data={[...medidasFiltradas].sort((a, b) => a.data - b.data).filter(m => m.peso != null).map(m => ({ data: m.data, valor: m.peso }))}
-                  width={Math.max(window.innerWidth - 96, 240)}
+                  width={Math.max(containerWidth - 96, 240)}
                   height={200}
                   cor={brandColor} />
               </div>
@@ -647,7 +656,8 @@ export default function Evolucao() {
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Histórico
               </span>
-              <div className="overflow-x-auto">
+              {/* Tabela em telas maiores */}
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-neutral-600 border-b border-white/5">
@@ -681,6 +691,38 @@ export default function Evolucao() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              {/* Cards empilhados em telas pequenas */}
+              <div className="sm:hidden space-y-2">
+                {medidas.map((m, i) => (
+                  <div key={m.id || i} className="bg-black/30 rounded-xl p-3 border border-white/5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-neutral-400 font-mono text-xs">
+                        {m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => editarMedida(m)}
+                          className="text-amber-400/70 hover:text-amber-400 p-1.5 transition-all active:scale-90">
+                          <Pencil size={14} />
+                        </button>
+                        <button onClick={() => deletarMedida(
+                          m.id,
+                          m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                        )} className="icon-hover text-red-400/70 p-1.5">
+                          <Trash size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {CAMPOS_MEDIDA.map(c => (
+                        <div key={c.key} className="text-center">
+                          <div className="text-[9px] text-neutral-600">{c.label}</div>
+                          <div className="text-white font-mono text-xs">{m[c.key]}{c.unidade}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

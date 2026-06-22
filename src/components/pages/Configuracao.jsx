@@ -219,7 +219,7 @@ export default function Configuracao({ abaInicial }) {
           <Palette size={16} className="text-emerald-400" />
           <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Aparência</span>
         </div>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {THEMES.map((t) => (
             <button
               key={t.id}
@@ -232,7 +232,7 @@ export default function Configuracao({ abaInicial }) {
                 <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
                 <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
               </div>
-              <span className="text-[9px] font-semibold text-neutral-300 block leading-tight">{t.name}</span>
+              <span className="text-[10px] font-semibold text-neutral-300 block leading-tight">{t.name}</span>
             </button>
           ))}
         </div>

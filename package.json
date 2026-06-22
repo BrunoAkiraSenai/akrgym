@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "npm run build && GOOGLE_APPLICATION_CREDENTIALS=/home/akira/akrgym/keys/akrgym-service-account.json firebase deploy --only hosting --project akrgym"
   },
   "dependencies": {
     "@capacitor/cli": "^8.3.4",
@@ -28,9 +29,11 @@
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
+    "firebase-admin": "^13.10.0",
     "globals": "^17.6.0",
+    "pngjs": "^7.0.0",
     "tailwindcss": "^4.3.0",
     "vite": "^8.0.12",
-    "firebase-admin": "^13.10.0"
+    "vite-plugin-pwa": "^1.3.0"
   }
 }

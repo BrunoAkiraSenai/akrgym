@@ -92,7 +92,8 @@ export default function Layout({ activeTab, onTabChange, children }) {
     <div className="flex flex-col h-full max-w-full md:max-w-2xl lg:max-w-4xl mx-auto md:my-4 md:h-[calc(100vh-2rem)] relative">
       <AetherParticles />
 
-      <main className="flex-1 overflow-y-auto px-4 sm:px-6 pt-6 pb-24 scrollbar-thin">
+      <main className="flex-1 overflow-y-auto px-4 sm:px-6 pt-6 pb-28 scrollbar-thin"
+        style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))' }}>
         {children}
       </main>
 

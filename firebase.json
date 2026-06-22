@@ -9,6 +9,20 @@
   "hosting": {
     "public": "dist",
     "ignore": ["firebase.json", "**/.*"],
+    "headers": [
+      {
+        "source": "**/*.html",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      },
+      {
+        "source": "sw.js",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      }
+    ],
     "rewrites": [
       { "source": "**", "destination": "/index.html" }
     ]

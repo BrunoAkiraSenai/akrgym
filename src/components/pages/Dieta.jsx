@@ -568,7 +568,7 @@ export default function Dieta({ onIrParaConfig }) {
 
             <div className="card-premium p-4">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Total do Dia</span>
-              <div className="grid grid-cols-4 gap-2 mt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
                 {[
                   { label: 'Calorias', v: Math.round(totais.kcal), m: userMetas.kcal, u: 'kcal' },
                   { label: 'Proteínas', v: Math.round(totais.proteinas), m: userMetas.proteinas, u: 'g' },
@@ -748,7 +748,7 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, s
             </button>
           ))}
         </div>
-        <div className="flex items-center justify-center gap-3 mt-2 text-[9px] text-neutral-600">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-2 text-[9px] text-neutral-600">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ≤2000</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> 2001-2250</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;2250</span>

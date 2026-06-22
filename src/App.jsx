@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
@@ -31,10 +31,29 @@ export default function App() {
   const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
   const [mostrarOnboarding, setMostrarOnboarding] = useState(true)
 
+  // Reseta o estado da UI quando o usuário muda (login/logout)
+  const resetUIState = () => {
+    setActiveTab('home')
+    setAbaInicialConfig('treinos')
+    setMostrarOnboarding(true)
+    setLoading(true)
+    setInitializing(true)
+  }
+
+  const prevUidRef = useRef(null)
+
   useEffect(() => {
     let cancelado = false
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (cancelado) return
+
+      const newUid = u?.uid || null
+      // Se o usuário mudou (logout ou troca de conta), reseta a UI
+      if (newUid !== prevUidRef.current) {
+        prevUidRef.current = newUid
+        resetUIState()
+      }
+
       if (u) {
         try { await ensureUserConfig(u.uid) }
         catch (e) { console.warn('ensureUserConfig falhou:', e) }
@@ -74,19 +93,20 @@ export default function App() {
   if (!user) return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login /></Suspense></ErrorBoundary>
 
   const renderPage = () => {
+    const pageKey = user?.uid || 'guest'
     switch (activeTab) {
       case 'home':
-        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
       case 'dieta':
-        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
       case 'treinar':
-        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} activeTab={activeTab} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} activeTab={activeTab} /></Suspense>
       case 'evolucao':
-        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Evolucao /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Evolucao /></Suspense>
       case 'configurar':
-        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Configuracao abaInicial={abaInicialConfig} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Configuracao abaInicial={abaInicialConfig} /></Suspense>
       default:
-        return <Suspense fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
     }
   }
 
