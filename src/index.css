@@ -554,20 +554,20 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--brand); outline-
 
 .aether-nav-indicator {
   position: absolute;
-  top: 4px;
+  top: 6px;
   left: 0;
-  height: calc(100% - 8px);
+  height: calc(100% - 12px);
   border-radius: 1.25rem;
-  background: linear-gradient(135deg, rgba(var(--brand-rgb), 0.18), rgba(var(--accent-rgb), 0.14), rgba(var(--accent2-rgb), 0.12));
-  border: 1px solid rgba(var(--brand-rgb), 0.35);
-  box-shadow: 0 0 18px rgba(var(--brand-rgb), 0.35), inset 0 0 12px rgba(var(--brand-rgb), 0.1);
+  background: linear-gradient(135deg, rgba(var(--brand-rgb), 0.16), rgba(var(--accent-rgb), 0.12), rgba(var(--accent2-rgb), 0.10));
+  border: 1px solid rgba(var(--brand-rgb), 0.3);
+  box-shadow: 0 0 14px rgba(var(--brand-rgb), 0.25), inset 0 0 10px rgba(var(--brand-rgb), 0.08);
   transition: transform 0.45s var(--ease-aether), width 0.45s var(--ease-aether);
   pointer-events: none;
   z-index: 0;
   will-change: transform, width;
 }
 
-.aether-tab-label { font-size: 9px; line-height: 1; font-weight: 600; letter-spacing: 0.02em; }
+.aether-tab-label { font-size: 10px; line-height: 1; font-weight: 600; letter-spacing: 0.02em; }
 @media (min-width: 768px) { .aether-tab { position: relative; } .aether-tab .aether-tab-label { opacity: 1; } }
 
 /* ===== SELETOR DE TEMA ===== */

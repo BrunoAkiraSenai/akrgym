@@ -100,7 +100,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
       <nav
         ref={navRef}
         className="aether-nav fixed bottom-0 left-0 right-0 md:absolute md:bottom-4 md:left-4 md:right-4 rounded-3xl h-16 flex items-center justify-around px-2 mx-3 md:mx-auto md:max-w-2xl lg:max-w-4xl mb-0 md:mb-4 z-50"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 4px)', paddingTop: '4px' }}
+        style={{ paddingBottom: '6px', paddingTop: '6px' }}
       >
         {indicator.ready && (
           <span
@@ -109,27 +109,30 @@ export default function Layout({ activeTab, onTabChange, children }) {
           />
         )}
 
-        {tabs.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            ref={(el) => { tabRefs.current[key] = el }}
-            onClick={() => onTabChange(key)}
-            className={`aether-tab flex flex-col items-center justify-center gap-0.5 h-full flex-1 rounded-2xl transition-all active:scale-90 relative z-10 ${
-              activeTab === key
-                ? 'text-emerald-300'
-                : 'text-neutral-500 hover:text-neutral-200'
-            }`}
-          >
-            {activeTab === key && (
-              <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-gradient-to-r from-fuchsia-400 via-emerald-400 to-cyan-400 rounded-full shadow-[0_0_8px_rgba(244,114,182,0.6)]" />
-            )}
-            <Icon
-              size={20}
-              className={activeTab === key ? 'drop-shadow-[0_0_10px_rgba(244,114,182,0.6)]' : ''}
-            />
-            <span className="aether-tab-label">{label}</span>
-          </button>
-        ))}
+        {tabs.map(({ key, label, icon: Icon }) => {
+          const active = activeTab === key
+          return (
+            <button
+              key={key}
+              ref={(el) => { tabRefs.current[key] = el }}
+              onClick={() => onTabChange(key)}
+              className={`aether-tab flex flex-col items-center justify-center gap-1.5 h-full flex-1 rounded-2xl transition-all active:scale-90 relative z-10 ${
+                active ? 'text-emerald-300' : 'text-neutral-400 hover:text-neutral-200'
+              }`}
+            >
+              <span className="relative flex items-center justify-center" style={{ height: 22, width: 22 }}>
+                {active && (
+                  <span className="absolute inset-0 rounded-full bg-emerald-400/15 blur-[6px]" />
+                )}
+                <Icon
+                  size={active ? 22 : 20}
+                  className={`relative ${active ? 'drop-shadow-[0_0_8px_rgba(244,114,182,0.5)]' : ''}`}
+                />
+              </span>
+              <span className="aether-tab-label">{label}</span>
+            </button>
+          )
+        })}
       </nav>
     </div>
   )
