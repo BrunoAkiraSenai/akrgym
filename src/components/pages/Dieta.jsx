@@ -4,6 +4,7 @@ import { db } from '../../firebase'
 import { REFEICOES as REF_BASE } from '../../config/dieta'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
+import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
 import ConfirmModal from '../ConfirmModal'
 import { Apple, Plus, X, Check, Settings, Sparkles, Loader, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
@@ -359,6 +360,20 @@ export default function Dieta({ onIrParaConfig }) {
   const hojeData = new Date()
   const podeAvancar = mesAtual.ano < hojeData.getFullYear() || (mesAtual.ano === hojeData.getFullYear() && mesAtual.mes < hojeData.getMonth() + 1)
 
+  // Valores animados para a tabela "Progresso Hoje" — contam suavemente de
+  // "o que está sendo exibido" até o novo total quando o usuário confirma
+  // uma refeição (ou adiciona um extra). A barra (width) já anima via CSS.
+  const kcalAnim        = useAnimatedNumber(totais.kcal)
+  const proteinasAnim   = useAnimatedNumber(totais.proteinas)
+  const carboidratosAnim = useAnimatedNumber(totais.carboidratos)
+  const gordurasAnim    = useAnimatedNumber(totais.gorduras)
+  const animados = {
+    kcal:         kcalAnim,
+    proteinas:    proteinasAnim,
+    carboidratos: carboidratosAnim,
+    gorduras:     gordurasAnim,
+  }
+
   return (
     <div className="flex flex-col gap-3 pt-2 pb-4">
       {/* Toast */}
@@ -426,20 +441,30 @@ export default function Dieta({ onIrParaConfig }) {
             <div className="card-premium p-4 space-y-3">
               <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Progresso Hoje</span>
               {[
-                { key: 'kcal', label: 'Calorias', atual: Math.round(totais.kcal), meta: userMetas.kcal, u: 'kcal' },
-                { key: 'proteinas', label: 'Proteínas', atual: Math.round(totais.proteinas), meta: userMetas.proteinas, u: 'g' },
-                { key: 'carboidratos', label: 'Carboidratos', atual: Math.round(totais.carboidratos), meta: userMetas.carboidratos, u: 'g' },
-                { key: 'gorduras', label: 'Gorduras', atual: Math.round(totais.gorduras), meta: userMetas.gorduras, u: 'g' },
+                { key: 'kcal',         label: 'Calorias',     meta: userMetas.kcal,         u: 'kcal' },
+                { key: 'proteinas',    label: 'Proteínas',    meta: userMetas.proteinas,    u: 'g' },
+                { key: 'carboidratos', label: 'Carboidratos', meta: userMetas.carboidratos, u: 'g' },
+                { key: 'gorduras',     label: 'Gorduras',     meta: userMetas.gorduras,     u: 'g' },
               ].map(item => {
-                const pct = Math.min((item.atual / item.meta) * 100, 100)
+                const valorAlvo = ({ kcal: totais.kcal, proteinas: totais.proteinas, carboidratos: totais.carboidratos, gorduras: totais.gorduras })[item.key]
+                const valorExibido = Math.round(animados[item.key])
+                const pctAlvo = Math.min((valorAlvo / item.meta) * 100, 100)
                 return (
                   <div key={item.key}>
                     <div className="flex items-center justify-between text-xs mb-1">
                       <span className="text-neutral-400">{item.label}</span>
-                      <span className="text-white font-semibold font-mono">{item.atual} <span className="text-neutral-500 font-normal">/ {item.meta}{item.u}</span></span>
+                      <span className="text-white font-semibold font-mono">
+                        {valorExibido} <span className="text-neutral-500 font-normal">/ {item.meta}{item.u}</span>
+                      </span>
                     </div>
                     <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full bg-gradient-to-r ${corMeta(item.atual, item.meta)} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                      <div
+                        className={`h-full rounded-full bg-gradient-to-r ${corMeta(valorAlvo, item.meta)}`}
+                        style={{
+                          width: `${pctAlvo}%`,
+                          transition: 'width 600ms cubic-bezier(0.2, 0.7, 0.2, 1)',
+                        }}
+                      />
                     </div>
                   </div>
                 )
