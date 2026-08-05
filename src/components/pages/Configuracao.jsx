@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
+import { THEMES, useTheme } from '../../utils/themes'
 
 function gerarIdRefeicao() {
   return `refeicao_${Date.now()}`
@@ -14,6 +15,7 @@ const CONFIG_REF = (uid) => doc(db, 'users', uid, 'config', 'data')
 
 export default function Configuracao({ abaInicial }) {
   const user = useUser()
+  const [themeId, setThemeId] = useTheme()
   const [config, setConfig] = useState({ treinos: {}, refeicoes: [], metas: {} })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -209,6 +211,30 @@ export default function Configuracao({ abaInicial }) {
           <div className="text-white/30 text-xs font-mono mt-0.5 truncate">
             {user.uid.slice(0, 8)}...
           </div>
+        </div>
+      </div>
+
+      <div className="card-premium p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Palette size={16} className="text-emerald-400" />
+          <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Aparência</span>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setThemeId(t.id)}
+              className={`theme-swatch ${themeId === t.id ? 'active' : ''}`}
+              title={t.name}
+            >
+              <div className="theme-swatch-dots justify-center">
+                <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
+                <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
+                <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
+              </div>
+              <span className="text-[10px] font-semibold text-neutral-300 block leading-tight">{t.name}</span>
+            </button>
+          ))}
         </div>
       </div>
 

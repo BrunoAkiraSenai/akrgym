@@ -168,7 +168,7 @@ export default function Home({ onStartWorkout }) {
               <div key={i} className="flex flex-col items-center gap-1.5">
                 <div className={`w-3 h-3 rounded-full transition-all duration-500 ${
                   ativo
-                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)] glow-dot'
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(244,114,182,0.5)] glow-dot'
                     : 'bg-neutral-800'
                 }`} />
                 <span className={`text-[9px] font-medium ${

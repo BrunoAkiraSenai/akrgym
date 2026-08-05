@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 
-export default function TrendChart({ data, width = 280, height = 200, cor = '#10b981' }) {
+export default function TrendChart({ data, width = 280, height = 200, cor = '#ec4899' }) {
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function TrendChart({ data, width = 280, height = 200, cor = '#10
 
     // Dots
     points.forEach(p => {
-      ctx.fillStyle = '#050505'
+      ctx.fillStyle = '#07050c'
       ctx.strokeStyle = cor
       ctx.lineWidth = 2.5
       ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke()

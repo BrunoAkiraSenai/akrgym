@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth'
+import { useState, useEffect } from 'react'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth'
 import { auth, db, provider } from '../../firebase'
 import { writeBatch, collection, getDocs, getDoc, doc } from 'firebase/firestore'
 import { Apple, Loader } from 'lucide-react'
@@ -47,6 +47,32 @@ export default function Login() {
   const [confirmarSenha, setConfirmarSenha] = useState('')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState(null)
+
+  // Timeout de segurança: nunca fica carregando infinitamente
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => setLoading(false), 15000)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  // Processa resultado do redirect ao montar (app recarrega após login Google via redirect)
+  useEffect(() => {
+    let mounted = true
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!mounted) return
+        if (result?.user) {
+          // Login Google via redirect concluído — onAuthStateChanged no App.jsx cuida do resto
+        }
+      })
+      .catch((err) => {
+        if (!mounted) return
+        if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/operation-not-supported-in-this-environment') {
+          setErro(traduzirErro(err.code))
+        }
+      })
+    return () => { mounted = false }
+  }, [])
 
   const trocarModo = () => {
     setModo(modo === 'entrar' ? 'cadastrar' : 'entrar')
@@ -98,21 +124,32 @@ export default function Login() {
 
   const signInWithGoogle = async () => {
     setLoading(true); setErro(null)
+    const anonymousUid = auth.currentUser?.isAnonymous ? auth.currentUser.uid : null
     try {
-      const anonymousUid = auth.currentUser?.isAnonymous ? auth.currentUser.uid : null
-      const result = await signInWithPopup(auth, provider)
-      if (anonymousUid && result.user.uid !== anonymousUid) {
+      let result
+      try {
+        // Tenta popup primeiro (funciona na web e na maioria dos PWAs)
+        result = await signInWithPopup(auth, provider)
+      } catch (popupErr) {
+        if (popupErr.code === 'auth/popup-blocked' || popupErr.code === 'auth/cannot-create-iframe' || popupErr.code === 'auth/operation-not-supported-in-this-environment') {
+          // Fallback: redirect (abre Safari, volta ao app após login)
+          await signInWithRedirect(auth, provider)
+          return // página redireciona — resultado processado no getRedirectResult
+        }
+        throw popupErr
+      }
+      if (result && anonymousUid && result.user.uid !== anonymousUid) {
         await migrateAnonymousData(anonymousUid, result.user.uid)
       }
     } catch (err) {
-      if (err.code === 'auth/popup-closed-by-user') return
+      if (err.code === 'auth/popup-closed-by-user') { setLoading(false); return }
       setErro(traduzirErro(err.code))
     }
     setLoading(false)
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-[#050505] px-6">
+    <div className="flex flex-col items-center justify-center h-full bg-[#07050c] px-6">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
@@ -141,7 +178,7 @@ export default function Login() {
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5" /></div>
-          <div className="relative flex justify-center"><span className="bg-[#050505] px-3 text-[10px] text-neutral-600">ou</span></div>
+          <div className="relative flex justify-center"><span className="bg-[#07050c] px-3 text-[10px] text-neutral-600">ou</span></div>
         </div>
 
         {modo === 'entrar' ? (
