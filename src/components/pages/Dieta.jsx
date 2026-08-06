@@ -569,21 +569,40 @@ export default function Dieta({ onIrParaConfig }) {
               <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">
                 {editandoExtraIdx !== null ? '✏️ Editar Alimento' : '+ Alimento Extra / Fora da Dieta'}
               </span>
-              <div className="grid grid-cols-2 gap-1.5">
-                <input
-                  ref={extraNomeRef}
-                  type="text"
-                  placeholder="Nome"
-                  value={extraGlobal.nome}
-                  onChange={e => setExtraGlobal(p => ({ ...p, nome: e.target.value }))}
-                  className="col-span-2 w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30"
-                />
-                {['kcal', 'proteinas', 'carboidratos', 'gorduras'].map(c => (
-                  <input key={c} type="number" inputMode="decimal" placeholder={c}
-                    value={extraGlobal[c]}
-                    onChange={e => setExtraGlobal(p => ({ ...p, [c]: e.target.value }))}
-                    className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs text-center outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
-                ))}
+              <div className="space-y-1.5">
+                <div>
+                  <label htmlFor="extra-nome" className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Nome</label>
+                  <input
+                    id="extra-nome"
+                    ref={extraNomeRef}
+                    type="text"
+                    placeholder="ex: banana"
+                    value={extraGlobal.nome}
+                    onChange={e => setExtraGlobal(p => ({ ...p, nome: e.target.value }))}
+                    className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { key: 'kcal',         label: 'Calorias (kcal)' },
+                    { key: 'proteinas',    label: 'Proteína (g)' },
+                    { key: 'carboidratos', label: 'Carboidrato (g)' },
+                    { key: 'gorduras',     label: 'Gordura (g)' },
+                  ].map(({ key, label }) => (
+                    <div key={key}>
+                      <label htmlFor={`extra-${key}`} className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">{label}</label>
+                      <input
+                        id={`extra-${key}`}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={extraGlobal[key]}
+                        onChange={e => setExtraGlobal(p => ({ ...p, [key]: e.target.value }))}
+                        className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-base text-center outline-none focus:ring-2 focus:ring-cyan-400/30 num"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="flex gap-2">
                 {editandoExtraIdx !== null && (
@@ -597,11 +616,31 @@ export default function Dieta({ onIrParaConfig }) {
                 </button>
               </div>
               {(hoje?.extras_globais || []).map((e, i) => (
-                <div key={i} className="flex items-center justify-between bg-cyan-500/5 rounded-lg px-3 py-1.5 font-mono text-[11px] text-cyan-400/80 border border-cyan-500/10">
-                  <span>+ {e.nome} — {e.kcal || 0} kcal · P: {e.proteinas || 0} · C: {e.carboidratos || 0} · G: {e.gorduras || 0}</span>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => editarExtra(i)} className="icon-hover text-amber-400/70"><Pencil size={13} /></button>
-                    <button onClick={() => removerExtraGlobal(i)} className="text-red-400/60 hover:text-red-400 transition-all active:scale-90"><X size={13} /></button>
+                <div key={i} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm text-cyan-300 font-medium">+ {e.nome || '(sem nome)'}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button type="button" onClick={() => editarExtra(i)} aria-label="Editar" className="icon-hover text-amber-400/70"><Pencil size={13} /></button>
+                      <button type="button" onClick={() => removerExtraGlobal(i)} aria-label="Remover" className="text-red-400/60 hover:text-red-400 transition-all active:scale-90"><X size={13} /></button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 text-center font-mono num">
+                    <div className="bg-cyan-500/10 rounded-md py-1">
+                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">kcal</div>
+                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.kcal || 0}</div>
+                    </div>
+                    <div className="bg-cyan-500/10 rounded-md py-1">
+                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">P</div>
+                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.proteinas || 0}</div>
+                    </div>
+                    <div className="bg-cyan-500/10 rounded-md py-1">
+                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">C</div>
+                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.carboidratos || 0}</div>
+                    </div>
+                    <div className="bg-cyan-500/10 rounded-md py-1">
+                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">G</div>
+                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.gorduras || 0}</div>
+                    </div>
                   </div>
                 </div>
               ))}
