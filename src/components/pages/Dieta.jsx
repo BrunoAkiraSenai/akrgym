@@ -5,6 +5,7 @@ import { REFEICOES as REF_BASE } from '../../config/dieta'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
+import { LIMITS, sanitizarTexto, truncar } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
 import { Apple, Plus, X, Check, Settings, Sparkles, Loader, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 
@@ -89,6 +90,9 @@ export default function Dieta({ onIrParaConfig }) {
   const [erro, setErro] = useState(null)
   const [editando, setEditando] = useState(null)
   const [formCustom, setFormCustom] = useState({ proteinas: '', carboidratos: '', gorduras: '' })
+  const extraCardRef = useRef(null)
+  const extraNomeRef = useRef(null)
+  const [extraHighlighted, setExtraHighlighted] = useState(false)
   const [refs, setRefs] = useState([])
   const refsRef = useRef(refs)
   useEffect(() => { refsRef.current = refs }, [refs])
@@ -295,7 +299,11 @@ export default function Dieta({ onIrParaConfig }) {
 
   // IA Gemini via SDK direto (Cloud Function requer plano Blaze)
   const analisarComIA = async () => {
-    if (!aiInput.trim()) return
+    const textoSanitizado = sanitizarTexto(aiInput).slice(0, LIMITS.textoIA)
+    if (!textoSanitizado || textoSanitizado.length < 3) {
+      showToast('Descrição muito curta para a IA.', 'erro')
+      return
+    }
     if (analisando) {
       showToast('Aguarde, já estou analisando...', 'sucesso')
       return
@@ -306,7 +314,7 @@ export default function Dieta({ onIrParaConfig }) {
       showToast(`Aguarde ${(3 - segundosDesdeUltima).toFixed(0)} segundos para nova análise.`, 'sucesso')
       return
     }
-    const cacheKey = aiInput.trim().toLowerCase()
+    const cacheKey = textoSanitizado.toLowerCase()
     if (ultimaAnalise[cacheKey] && (agora - ultimaAnalise[cacheKey].timestamp) < 10000) {
       showToast('Análise recente já feita. Use o resultado anterior.', 'sucesso')
       return
@@ -315,7 +323,7 @@ export default function Dieta({ onIrParaConfig }) {
     ultimoRequisicaoTime.current = agora
     setAiLoading(true); setErro(null)
     try {
-      const parsed = await calcularMacrosIA(aiInput)
+      const parsed = await calcularMacrosIA(textoSanitizado)
       if (parsed._erro) {
         if (parsed._erro.includes('429') || parsed._erro.includes('Too Many Requests') || parsed._erro.includes('RESOURCE_EXHAUSTED')) {
           setErro('Limite de análises excedido. Tente novamente em alguns minutos.')
@@ -332,7 +340,14 @@ export default function Dieta({ onIrParaConfig }) {
         })
         setUltimaAnalise(prev => ({ ...prev, [cacheKey]: { timestamp: agora, resultado: parsed } }))
         setAiInput('')
-        showToast('Análise concluída!', 'sucesso')
+        showToast('Valores preenchidos! Revise e adicione.', 'sucesso')
+        // UX: rolar até o card de extras, destacar e focar no campo nome
+        setExtraHighlighted(true)
+        requestAnimationFrame(() => {
+          extraCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          setTimeout(() => extraNomeRef.current?.focus({ preventScroll: true }), 350)
+        })
+        setTimeout(() => setExtraHighlighted(false), 1600)
       }
     } catch (err) {
       const msg = err.message || ''
@@ -541,14 +556,28 @@ export default function Dieta({ onIrParaConfig }) {
               )
             })}
 
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-cyan-500/20 rounded-2xl p-4 space-y-2">
+            <div
+              ref={extraCardRef}
+              aria-live="polite"
+              className={[
+                'rounded-2xl p-4 space-y-2 transition-shadow duration-300',
+                extraHighlighted
+                  ? 'bg-cyan-500/10 border-2 border-cyan-400 shadow-[0_0_24px_rgba(34,211,238,0.5)]'
+                  : 'bg-neutral-900/50 backdrop-blur-md border border-cyan-500/20',
+              ].join(' ')}
+            >
               <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">
                 {editandoExtraIdx !== null ? '✏️ Editar Alimento' : '+ Alimento Extra / Fora da Dieta'}
               </span>
               <div className="grid grid-cols-2 gap-1.5">
-                <input type="text" placeholder="Nome" value={extraGlobal.nome}
+                <input
+                  ref={extraNomeRef}
+                  type="text"
+                  placeholder="Nome"
+                  value={extraGlobal.nome}
                   onChange={e => setExtraGlobal(p => ({ ...p, nome: e.target.value }))}
-                  className="col-span-2 w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30" />
+                  className="col-span-2 w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30"
+                />
                 {['kcal', 'proteinas', 'carboidratos', 'gorduras'].map(c => (
                   <input key={c} type="number" inputMode="decimal" placeholder={c}
                     value={extraGlobal[c]}
@@ -582,8 +611,9 @@ export default function Dieta({ onIrParaConfig }) {
               <span className="text-[10px] font-semibold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles size={13} /> Destrinchar Refeição com IA
               </span>
-              <textarea rows={2} placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
-                value={aiInput} onChange={e => setAiInput(e.target.value)}
+              <textarea rows={2} maxLength={LIMITS.textoIA}
+                placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
+                value={aiInput} onChange={e => setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA))}
                 className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-400/30 resize-none" />
               <button onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading}
                 className="w-full flex items-center justify-center gap-2 bg-purple-500/10 text-purple-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30 border border-purple-500/20">
