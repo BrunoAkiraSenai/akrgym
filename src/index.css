@@ -108,8 +108,9 @@
   --radius-input: 1.5rem;
 
   /* Fontes */
-  --font-display: 'Syne', 'Inter', system-ui, sans-serif;
-  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Barlow Condensed', 'Manrope', system-ui, sans-serif;
+  --font-body: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
@@ -833,4 +834,48 @@ img, svg, video, canvas { max-width: 100%; }
 }
 [data-theme="original"] ::-webkit-scrollbar-thumb:hover {
   background: rgba(var(--brand-rgb), 0.7);
+}
+
+/* ============================================================
+   SECTION LABEL — substitui o padrão "text-[10px] text-neutral-500 uppercase"
+   que estava em todas as páginas. Muito pequeno, baixo contraste, sem destaque.
+   ============================================================ */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  line-height: 1;
+}
+
+.section-label::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  background: var(--brand);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.section-label--muted {
+  color: var(--text-muted);
+}
+.section-label--muted::before {
+  background: var(--border-strong);
+}
+
+/* ============================================================
+   FONT-MONO OVERRIDE — força JetBrains Mono em todas as classes
+   Tailwind `font-mono` (e equivalentes). O Tailwind usa ui-monospace
+   por padrão; queremos JetBrains Mono para dados numéricos consistentes.
+   ============================================================ */
+.font-mono,
+.font-mono * {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
