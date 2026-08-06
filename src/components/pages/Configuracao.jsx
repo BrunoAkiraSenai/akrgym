@@ -217,7 +217,7 @@ export default function Configuracao({ abaInicial }) {
       <div className="card-premium p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Palette size={16} className="text-emerald-400" />
-          <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Aparência</span>
+          <span className="section-label">Aparência</span>
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {THEMES.map((t) => (
@@ -254,7 +254,7 @@ export default function Configuracao({ abaInicial }) {
         ) : (
           <>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Divisões de Treino</span>
+              <span className="section-label">Divisões de Treino</span>
               <button onClick={() => setShowNewRoutine(true)}
                 className="flex items-center gap-1 bg-emerald-500/10 text-emerald-400 font-semibold px-3 py-2 rounded-xl text-xs transition-all active:scale-90 border border-emerald-500/20">
                 <Plus size={14} /> Nova
@@ -303,13 +303,13 @@ export default function Configuracao({ abaInicial }) {
                           </div>
                           <div className="grid grid-cols-2 gap-1.5">
                             <div>
-                              <label className="text-[8px] text-neutral-600 uppercase tracking-wider block mb-0.5">Base Top (kg)</label>
+                              <label className="text-[10px] text-neutral-400 uppercase tracking-wider block mb-0.5 font-semibold">Base Top (kg)</label>
                               <input type="number" value={ex.base_top}
                                 onChange={e => updateExercise(key, idx, 'base_top', Number(e.target.value))}
                                 className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/30 [appearance:textfield]" />
                             </div>
                             <div>
-                              <label className="text-[8px] text-neutral-600 uppercase tracking-wider block mb-0.5">Meta Reps</label>
+                              <label className="text-[10px] text-neutral-400 uppercase tracking-wider block mb-0.5 font-semibold">Meta Reps</label>
                               <input type="text" value={ex.meta_reps}
                                 onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)}
                                 className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500/30" />
@@ -337,19 +337,20 @@ export default function Configuracao({ abaInicial }) {
         <div className="flex flex-col gap-3">
           
           <div className="card-premium p-4 space-y-2">
-            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Metas Diárias</span>
-            <div className="grid grid-cols-4 gap-1.5">
+            <span className="section-label">Metas Diárias</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {[
-                { key: 'kcal', label: 'Kcal', val: config.metas?.kcal ?? 1970 },
-                { key: 'proteinas', label: 'P (g)', val: config.metas?.proteinas ?? 165 },
-                { key: 'carboidratos', label: 'C (g)', val: config.metas?.carboidratos ?? 226 },
-                { key: 'gorduras', label: 'G (g)', val: config.metas?.gorduras ?? 43 },
+                { key: 'kcal',         label: 'Calorias (kcal)', val: config.metas?.kcal ?? 1970 },
+                { key: 'proteinas',    label: 'Proteína (g)',    val: config.metas?.proteinas ?? 165 },
+                { key: 'carboidratos', label: 'Carboidrato (g)', val: config.metas?.carboidratos ?? 226 },
+                { key: 'gorduras',     label: 'Gordura (g)',     val: config.metas?.gorduras ?? 43 },
               ].map(c => (
                 <div key={c.key}>
-                  <label className="text-[8px] text-neutral-600 block mb-0.5">{c.label}</label>
-                  <input type="number" value={c.val}
+                  <label className="text-[10px] text-neutral-400 uppercase tracking-wider block mb-1 font-semibold">{c.label}</label>
+                  <input type="text" inputMode="numeric" value={c.val}
                     onChange={e => updateMeta(c.key, e.target.value)}
-                    className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
+                    aria-label={`Meta de ${c.label}`}
+                    className="w-full bg-neutral-800 text-white text-base text-center p-2.5 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield] num" />
                 </div>
               ))}
             </div>
@@ -377,7 +378,7 @@ export default function Configuracao({ abaInicial }) {
           </div>
 
           <div className="card-premium p-4 space-y-2">
-            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Refeições</span>
+            <span className="section-label">Refeições</span>
             {(config.refeicoes || []).length === 0 && (
               <div className="bg-black/30 rounded-xl p-3 text-center border border-white/5">
                 <p className="text-neutral-500 text-xs">Nenhuma refeição configurada.</p>
@@ -409,18 +410,19 @@ export default function Configuracao({ abaInicial }) {
                     {aiLoadingIdx === i ? <Loader size={13} className="animate-spin" /> : <Sparkles size={13} />}
                   </button>
                 </div>
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {[
-                    { key: 'kcal', label: 'Kcal', val: ref.kcal },
-                    { key: 'proteinas', label: 'P', val: ref.proteinas },
-                    { key: 'carboidratos', label: 'C', val: ref.carboidratos },
-                    { key: 'gorduras', label: 'G', val: ref.gorduras },
+                    { key: 'kcal',         label: 'Calorias (kcal)' },
+                    { key: 'proteinas',    label: 'Proteína (g)' },
+                    { key: 'carboidratos', label: 'Carboidrato (g)' },
+                    { key: 'gorduras',     label: 'Gordura (g)' },
                   ].map(c => (
                     <div key={c.key}>
-                      <label className="text-[8px] text-neutral-600 block mb-0.5">{c.label}</label>
-                      <input type="number" value={c.val}
+                      <label className="text-[10px] text-neutral-400 uppercase tracking-wider block mb-1 font-semibold">{c.label}</label>
+                      <input type="text" inputMode="decimal" value={ref[c.key] ?? ''}
                         onChange={e => updateRefeicao(i, c.key, e.target.value)}
-                        className="w-full bg-neutral-800 text-white text-xs text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield]" />
+                        aria-label={`${c.label} da refeição`}
+                        className="w-full bg-neutral-800 text-white text-sm text-center p-2 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/30 [appearance:textfield] num" />
                     </div>
                   ))}
                 </div>
