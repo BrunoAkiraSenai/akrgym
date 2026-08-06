@@ -1,5 +1,19 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
+/**
+ * calcularMacrosIA — análise de macros via Gemini.
+ *
+ * IMPORTANTE (decisão de produto): a chave da API é injetada em build via
+ * `VITE_GEMINI_API_KEY` e fica visível no bundle JS do navegador. Isso é
+ * intencional: o tier gratuito do Gemini não permite expor cobrança caso
+ * a chave vaze, e a conta é pessoal (1 usuário).
+ *
+ * Se um dia migrar para Cloud Function, basta trocar esta implementação
+ * por `fetch(...)` e remover `@google/generative-ai` das dependências.
+ * A Cloud Function `analisarRefeicao` em `functions/index.js` está pronta
+ * para ser ativada nesse caso.
+ */
+
 const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, _erro: null }
 
 export async function calcularMacrosIA(textoAlimentos) {

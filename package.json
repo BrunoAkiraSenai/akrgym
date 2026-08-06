@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:rules": "node --test tests/firestore.rules.spec.js",
     "deploy": "npm run build && GOOGLE_APPLICATION_CREDENTIALS=/home/akira/akrgym/keys/akrgym-service-account.json firebase deploy --only hosting --project akrgym"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@tailwindcss/vite": "^4.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

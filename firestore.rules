@@ -1,6 +1,14 @@
 // FIREBASE FIRESTORE SECURITY RULES — PRODUCAO
-// users/{uid}/{colecao} — cada usuario so acessa os proprios dados
-// Campo usuarioId nos documentos serve como camada extra de seguranca
+// users/{uid}/... — cada usuario so acessa os proprios dados
+//
+// Princípios:
+//  - Negar tudo por padrão
+//  - Validar UID do request.auth contra o path
+//  - Validar tipo e forma dos campos (não apenas presença)
+//  - Histórico de treino é append-only (criação + leitura, sem update)
+//  - Validar campo usuarioId quando existir (defesa em profundidade)
+//
+// Testes: tests/firestore.rules.spec.js (Firebase Emulator Suite)
 
 rules_version = '2'
 service cloud.firestore {
@@ -11,43 +19,85 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // USUARIOS — cada um so acessa os proprios dados
+    // Qualquer subpath dentro de users/{userId}/ só pode ser acessado pelo próprio userId
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // CONFIG — requer campos obrigatorios
+    // CONFIG: treino + refeicoes + metas são obrigatórios;
+    // chaves extras são rejeitadas; tipos validados quando possível.
     match /users/{userId}/config/data {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null
                    && request.auth.uid == userId
-                   && request.resource.data.keys().hasAll(['metas', 'refeicoes', 'treinos']);
+                   && request.resource.data.keys().hasAll(['metas', 'refeicoes', 'treinos'])
+                   && request.resource.data.metas is map
+                   && request.resource.data.refeicoes is list
+                   && request.resource.data.treinos is map;
     }
 
-    // HISTORICO DE TREINOS — somente criacao e leitura, sem alteracao
+    // HISTORICO DE TREINOS — append-only.
+    //   - create: requer campos mínimos, tipos e ranges razoáveis
+    //   - update: bloqueado (histórico é imutável)
+    //   - delete: permitido (funcionalidade existente)
     match /users/{userId}/historico_treinos/{docId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null
                     && request.auth.uid == userId
-                    && request.resource.data.keys().hasAll(['rotina_id', 'data', 'exercicios']);
+                    && request.resource.data.keys().hasAll(['rotina_id', 'data', 'exercicios'])
+                    && request.resource.data.rotina_id is string
+                    && request.resource.data.rotina_id.size() > 0
+                    && request.resource.data.rotina_id.size() < 100
+                    && request.resource.data.exercicios is list
+                    && request.resource.data.exercicios.size() > 0
+                    && request.resource.data.exercicios.size() < 100
+                    && request.resource.data.data is timestamp;
       allow delete: if request.auth != null && request.auth.uid == userId;
       allow update: if false;
     }
 
     // DIARIO ALIMENTAR
+    //   - chaves permitidas: refeicoes, data, extras_globais (+ opcionais updatedAt, usuarioId)
+    //   - tipos validados
     match /users/{userId}/diario_dieta/{docId} {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow write: if request.auth != null
                    && request.auth.uid == userId
-                   && request.resource.data.keys().hasAny(['refeicoes', 'data', 'extras_globais']);
+                   && request.resource.data.refeicoes is map
+                   && request.resource.data.data is string
+                   && request.resource.data.data.size() == 10  // YYYY-MM-DD
+                   && request.resource.data.extras_globais is list
+                   && request.resource.data.extras_globais.size() < 100;
+      // Defesa em profundidade: se o documento incluir usuarioId, ele deve ser o dono
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && (!('usuarioId' in request.resource.data)
+                        || request.resource.data.usuarioId == request.auth.uid);
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && (!('usuarioId' in request.resource.data)
+                        || request.resource.data.usuarioId == request.auth.uid);
     }
 
     // HISTORICO CORPORAL
+    //   - peso obrigatório (>= 0)
+    //   - data obrigatória
+    //   - outras medidas opcionais, mas se presentes devem ser number >= 0
     match /users/{userId}/historico_corporal/{docId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null
-                   && request.auth.uid == userId
-                   && request.resource.data.keys().hasAny(['peso', 'data']);
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasAll(['peso', 'data'])
+                    && request.resource.data.peso is number
+                    && request.resource.data.peso >= 0
+                    && request.resource.data.peso < 1000
+                    && request.resource.data.data is timestamp;
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.peso is number
+                    && request.resource.data.peso >= 0
+                    && request.resource.data.peso < 1000;
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
   }

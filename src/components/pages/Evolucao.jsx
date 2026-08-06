@@ -432,7 +432,7 @@ export default function Evolucao() {
 
               {selecionado && dadosTreino.length >= 2 && (
                 <div className="card-premium p-4">
-                  <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Últimos registros</span>
+                  <span className="section-label">Últimos registros</span>
                   <div className="space-y-1 mt-2">
                     {[...dadosTreino].reverse().slice(0, limiteRegistros).map((d, i) => (
                       <div key={i} className="flex items-center justify-between text-sm py-1">
@@ -462,7 +462,7 @@ export default function Evolucao() {
         <>
             <div className="card-premium p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="section-label flex items-center gap-1.5">
                 <Activity size={12} className="text-cyan-400" /> {editandoId ? 'Editar Medida' : 'Novo Registro'}
               </span>
               {editandoId && (
@@ -510,7 +510,7 @@ export default function Evolucao() {
 
           {medidas.length > 0 && ultimaMedida && (
             <div className="card-premium p-4">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-3">
+              <span className="section-label flex items-center gap-1.5 mb-3">
                 <Weight size={12} className="text-cyan-400" /> Último Registro
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -543,7 +543,7 @@ export default function Evolucao() {
 
           {primeiraMedida && ultimaMedida && (
             <div className="card-premium p-4">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-3">
+              <span className="section-label flex items-center gap-1.5 mb-3">
                 <BarChart3 size={12} className="text-cyan-400" /> Comparação
               </span>
               <div className="grid grid-cols-3 gap-2">
@@ -566,7 +566,7 @@ export default function Evolucao() {
 
           {medidas.length >= 2 && (
             <div className="card-premium p-4">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+              <span className="section-label flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Evolução Gráfica
               </span>
               <div className="relative mb-2">
@@ -638,7 +638,7 @@ export default function Evolucao() {
 
           {medidasFiltradas.length >= 2 && (
             <div className="card-premium p-4">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+              <span className="section-label flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Tendência de Peso
               </span>
               <div className="flex justify-center">
@@ -653,7 +653,7 @@ export default function Evolucao() {
 
           {medidas.length >= 1 && (
             <div className="card-premium p-4">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+              <span className="section-label flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Histórico
               </span>
               {/* Tabela em telas maiores */}

@@ -20,7 +20,7 @@ try {
     localCache: persistentLocalCache({ cacheSizeBytes: 104857600 }),
   })
 } catch (e) {
-  console.warn('Cache persistente não disponível, usando fallback:', e.message)
+  if (import.meta.env.DEV) console.warn('Cache persistente não disponível, usando fallback:', e.message)
   db = getFirestore(app)
 }
 

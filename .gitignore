@@ -1,13 +1,50 @@
-node_modules
-dist
-.firebase
+# === Dependências ===
+node_modules/
+
+# === Build ===
+dist/
+*.tsbuildinfo
+.vite/
+
+# === Cache e ambiente local ===
+.firebase/
+.firebase-debug.log
+firestore-debug.log
+ui-debug.log
 *.log
+
+# === Sistema operacional ===
 .DS_Store
+Thumbs.db
+
+# === Mobile (Capacitor) ===
 ios/
-.env\n.env.local
+android/
 
-# Environment
+# === Variáveis de ambiente (NUNCA commitar) ===
 .env
+.env.*
+!.env.example
 
-# Firebase service account
-serviceAccountKey.json
+# === Service accounts e credenciais GCP/Firebase ===
+*-service-account.json
+service-account*.json
+gcp-credentials.json
+firebase-credentials.json
+gha-creds-*.json
+
+# === Diretório de chaves (deve estar FORA do repo, mas garante) ===
+keys/
+
+# === Arquivos temporários / editores ===
+*.swp
+*.swo
+.DS_Store
+*~
+.vscode/
+.idea/
+*.iml
+
+# === Documentação local (sensível) ===
+SECRETS.md
+NOTES_PRIVATE.md

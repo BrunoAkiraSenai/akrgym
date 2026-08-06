@@ -273,7 +273,7 @@ export default function Dieta({ onIrParaConfig }) {
     setEditandoExtraIdx(null)
   }
 
-  const cancelarExtra = () => {
+  const limparExtras = () => {
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
     setEditandoExtraIdx(null)
   }
@@ -294,7 +294,7 @@ export default function Dieta({ onIrParaConfig }) {
   const removerExtraGlobal = (idx) => {
     const n = { ...hoje, extras_globais: (hoje.extras_globais || []).filter((_, i) => i !== idx) }
     salvarHoje(dataAtiva, n)
-    if (editandoExtraIdx === idx) cancelarExtra()
+    if (editandoExtraIdx === idx) limparExtras()
   }
 
   // IA Gemini via SDK direto (Cloud Function requer plano Blaze)
@@ -454,7 +454,7 @@ export default function Dieta({ onIrParaConfig }) {
               </div>
             )}
             <div className="card-premium p-4 space-y-3">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Progresso Hoje</span>
+              <span className="section-label">Progresso Hoje</span>
               {[
                 { key: 'kcal',         label: 'Calorias',     meta: userMetas.kcal,         u: 'kcal' },
                 { key: 'proteinas',    label: 'Proteínas',    meta: userMetas.proteinas,    u: 'g' },
@@ -605,13 +605,22 @@ export default function Dieta({ onIrParaConfig }) {
                 </div>
               </div>
               <div className="flex gap-2">
-                {editandoExtraIdx !== null && (
-                  <button onClick={cancelarExtra}
-                    className="btn-secondary flex-1 py-3 text-xs">Cancelar</button>
+                {(editandoExtraIdx !== null || extraGlobal.nome || extraGlobal.kcal || extraGlobal.proteinas || extraGlobal.carboidratos || extraGlobal.gorduras) && (
+                  <button
+                    type="button"
+                    onClick={limparExtras}
+                    aria-label="Limpar campos do alimento extra"
+                    className="btn-secondary flex-1 py-3 text-xs"
+                  >
+                    {editandoExtraIdx !== null ? 'Cancelar' : 'Limpar'}
+                  </button>
                 )}
-                <button onClick={adicionarExtraGlobal}
+                <button
+                  type="button"
+                  onClick={adicionarExtraGlobal}
                   disabled={!extraGlobal.nome.trim()}
-                  className="flex-1 btn-primary w-full py-3 flex items-center justify-center gap-1">
+                  className="flex-1 btn-primary w-full py-3 flex items-center justify-center gap-1"
+                >
                   <Plus size={14} /> {editandoExtraIdx !== null ? 'Atualizar' : 'Adicionar'}
                 </button>
               </div>
@@ -661,7 +670,7 @@ export default function Dieta({ onIrParaConfig }) {
             </div>
 
             <div className="card-premium p-4">
-              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">Total do Dia</span>
+              <span className="section-label">Total do Dia</span>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
                 {[
                   { label: 'Calorias', v: Math.round(totais.kcal), m: userMetas.kcal, u: 'kcal' },

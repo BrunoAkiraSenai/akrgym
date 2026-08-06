@@ -12,7 +12,12 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(erro, info) {
-    console.warn('ErrorBoundary capturou:', erro, info)
+    // Em dev: log completo. Em prod: log mínimo (sem stack/info) para não vazar paths internos.
+    if (import.meta.env.DEV) {
+      console.warn('ErrorBoundary capturou:', erro, info)
+    } else {
+      console.warn('ErrorBoundary capturou:', erro?.message || 'erro')
+    }
   }
 
   render() {

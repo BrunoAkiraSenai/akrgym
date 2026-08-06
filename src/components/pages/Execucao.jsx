@@ -290,7 +290,7 @@ export default function Execucao({ onFinish, activeTab }) {
               )}
 
               <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
-                <div className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1.5">Protocolo</div>
+                <div className="section-label mb-1.5">Protocolo</div>
 
                 {ex.tem_aquecimento && (
                   <div className="flex items-center justify-between text-[12px]">

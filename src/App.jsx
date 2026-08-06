@@ -56,7 +56,9 @@ export default function App() {
 
       if (u) {
         try { await ensureUserConfig(u.uid) }
-        catch (e) { console.warn('ensureUserConfig falhou:', e) }
+        catch (e) {
+          if (import.meta.env.DEV) console.warn('ensureUserConfig falhou:', e?.message)
+        }
         setUser(u)
         setLoading(false)
         setInitializing(false)
@@ -69,7 +71,7 @@ export default function App() {
             setUser(anon.user)
           }
         } catch (err) {
-          console.warn('Login anônimo não disponível:', err.code)
+          if (import.meta.env.DEV) console.warn('Login anônimo não disponível:', err.code)
         }
         if (!cancelado) {
           setLoading(false)
