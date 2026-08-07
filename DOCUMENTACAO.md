@@ -1254,26 +1254,27 @@ Sitemap: https://akrgym.web.app/sitemap.xml
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://akrgym.web.app/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <lastmod>2026-08-07</lastmod>
   </url>
 </urlset>
 ```
 
 ### Verificação Google Search Console
 
-`/home/akira/akrgym/googlea578e0f3b4ce87e0.html` — arquivo de verificação do domínio. Necessário para confirmar o site no GSC.
+O Search Console é verificado pela meta `google-site-verification` no `index.html`. O sitemap deve ser enviado no Search Console como `sitemap.xml` depois de confirmar a propriedade `https://akrgym.web.app/`.
 
 ### Meta tags (`index.html`)
 
 - `<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />` — mobile-first, suporta zoom, safe-area.
 - `<meta name="theme-color" content="#06080f" />` — cor da barra do navegador no Android.
-- `<meta name="build-version" content="3.2" />` (duplicado no HTML).
+- `<meta name="description" ... />`, `<meta name="robots" content="index, follow" />` e `<link rel="canonical" ... />` — descoberta e URL principal.
+- JSON-LD com `WebSite` e `SoftwareApplication` — classificação do aplicativo para mecanismos de busca.
+- `<meta name="build-version" content="3.2" />`.
 - `<meta name="google-site-verification" content="0MxCLkjvr7j4yC0BgJI575Hxwa786fC1wDGYcCfw5fc" />` — token do Search Console.
 - `<link rel="manifest" href="/manifest.webmanifest" />`.
 - `<link rel="preconnect" href="https://fonts.googleapis.com" />` + `preconnect` para `fonts.gstatic.com` — acelera carregamento de fontes.
-- `<link href="...Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />`.
-- `<link href="...Syne:wght@600;700;800&display=swap" rel="stylesheet" />`.
+- `<link href="...Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />`.
+- `<link href="...Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />`.
 
 ---
 
@@ -1785,9 +1786,11 @@ Chaves usadas:
 ### SEO
 
 - ✅ `robots.txt` e `sitemap.xml`.
-- ✅ Google Search Console verificado.
+- ✅ Sitemap servido com `200 OK`, `Content-Type: application/xml` e URL absoluta canônica.
+- ✅ Google Search Console verificado por meta tag.
+- ✅ `title`, `description`, `robots`, canonical, `hreflang` e conteúdo inicial rastreável.
+- ✅ JSON-LD `WebSite` + `SoftwareApplication`.
 - ⚠️ Sem Open Graph / Twitter Cards (recomendação para compartilhamento).
-- ⚠️ Sem structured data (Schema.org) para rich snippets.
 
 ---
 
