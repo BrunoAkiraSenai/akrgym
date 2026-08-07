@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { collection, getDocs, query, orderBy, limit, startAfter, addDoc, deleteDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
@@ -6,8 +6,9 @@ import { useUser } from '../../context/UserContext'
 import { useThemeColor } from '../../utils/themes'
 import TrendChart from '../../components/TrendChart'
 import {
-  Dumbbell, BarChart3, AlertTriangle, Trophy, Target, Flame,
+  Dumbbell, BarChart3, Trophy, Target, Flame,
   Activity, Save, ChevronDown, ChevronUp, Minus, Weight, Trash, Pencil, X,
+  Search, Clock3, TrendingUp, Gauge, CalendarDays, Check, RefreshCw,
 } from 'lucide-react'
 
 function dataLocalStr(data) {
@@ -38,6 +39,40 @@ function parseMetaTeto(meta) {
   return parts.length === 2 ? Math.max(...parts) : parts[0]
 }
 
+function normalizarTexto(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function epley1RM(carga, reps) {
+  return Math.round((Number(carga) || 0) * (1 + Math.min(Number(reps) || 0, 12) / 30))
+}
+
+function volumePorTreino(treino) {
+  return (treino.exercicios || []).reduce(
+    (total, ex) => total + ((Number(ex.carga_top) || 0) * (Number(ex.reps_top) || 0)),
+    0,
+  )
+}
+
+function diasDesde(data, agora = new Date()) {
+  if (!data) return null
+  const inicio = new Date(data)
+  inicio.setHours(0, 0, 0, 0)
+  const hoje = new Date(agora)
+  hoje.setHours(0, 0, 0, 0)
+  return Math.max(0, Math.floor((hoje - inicio) / 86400000))
+}
+
+function formatarVolume(valor) {
+  if (valor >= 1000000) return `${(valor / 1000000).toFixed(1).replace('.', ',')} mi`
+  if (valor >= 1000) return `${(valor / 1000).toFixed(1).replace('.', ',')} mil`
+  return valor.toLocaleString('pt-BR')
+}
+
 const CAMPOS_MEDIDA = [
   { key: 'peso', label: 'Peso', unidade: 'kg', lowerBetter: false },
   { key: 'cintura', label: 'Cintura', unidade: 'cm', lowerBetter: true },
@@ -49,12 +84,18 @@ const CAMPOS_MEDIDA = [
 
 export default function Evolucao() {
   const user = useUser()
+  const uid = user?.uid
   const [aba, setAba] = useState('treino')
 
   const [todosTreinos, setTodosTreinos] = useState([])
   const [exercicios, setExercicios] = useState([])
   const [selecionado, setSelecionado] = useState('')
   const [rotinaFiltro, setRotinaFiltro] = useState('todas')
+  const [buscaExercicio, setBuscaExercicio] = useState('')
+  const [menuExercicioAberto, setMenuExercicioAberto] = useState(false)
+  const [graficoMetrica, setGraficoMetrica] = useState('carga')
+  const [janelaGrafico, setJanelaGrafico] = useState('todos')
+  const [janelaDashboard, setJanelaDashboard] = useState(28)
   const [tooltip, setTooltip] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
@@ -71,24 +112,43 @@ export default function Evolucao() {
   const [lastCorporalDoc, setLastCorporalDoc] = useState(null)
   const [carregandoMaisTreinos, setCarregandoMaisTreinos] = useState(false)
   const [carregandoMaisCorporais, setCarregandoMaisCorporais] = useState(false)
+  const exercicioBuscaRef = useRef(null)
+  const pageRef = useRef(null)
+  const [agora] = useState(() => new Date())
   const brandColor = useThemeColor('--brand')
   const accentColor = useThemeColor('--accent')
   const [containerWidth, setContainerWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 375)
 
-  // Atualiza largura do container no resize/rotação
+  // Mede o conteúdo real da página. Usar window.innerWidth aqui fazia o SVG
+  // ignorar o max-width do Layout e estourar o card em telas grandes.
   useEffect(() => {
-    const r = () => setContainerWidth(window.innerWidth)
-    window.addEventListener('resize', r)
-    const t = setTimeout(r, 200)
-    return () => { window.removeEventListener('resize', r); clearTimeout(t) }
+    const elemento = pageRef.current
+    if (!elemento) return undefined
+    const medir = () => setContainerWidth(Math.max(280, Math.floor(elemento.getBoundingClientRect().width)))
+    medir()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', medir)
+      return () => window.removeEventListener('resize', medir)
+    }
+    const observer = new ResizeObserver(medir)
+    observer.observe(elemento)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const fecharMenu = (event) => {
+      if (!exercicioBuscaRef.current?.contains(event.target)) setMenuExercicioAberto(false)
+    }
+    document.addEventListener('pointerdown', fecharMenu)
+    return () => document.removeEventListener('pointerdown', fecharMenu)
   }, [])
 
   const carregarTreinos = useCallback(async () => {
     setLoading(true); setErro(null)
     try {
-      if (!db) { setErro('Firestore não inicializado.'); setLoading(false); return }
+      if (!db || !uid) { setErro('Sessão do usuário ainda não está pronta.'); setLoading(false); return }
       const q = query(
-        collection(db, 'users', user.uid, 'historico_treinos'),
+        collection(db, 'users', uid, 'historico_treinos'),
         orderBy('data', 'desc'),
         limit(20)
       )
@@ -104,12 +164,13 @@ export default function Evolucao() {
       setExercicios([...nomes].sort())
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
-  }, [])
+  }, [uid])
 
   const carregarMedidas = useCallback(async () => {
     try {
+      if (!uid) return
       const q = query(
-        collection(db, 'users', user.uid, 'historico_corporal'),
+        collection(db, 'users', uid, 'historico_corporal'),
         orderBy('data', 'desc'),
         limit(20)
       )
@@ -121,7 +182,7 @@ export default function Evolucao() {
       setMedidas(docs)
       setLastCorporalDoc(snap.docs[snap.docs.length - 1] || null)
     } catch (err) { setErro(`Erro ao carregar medidas: ${err.message}`) }
-  }, [])
+  }, [uid])
 
   const carregarMaisTreinos = async () => {
     if (!lastTreinoDoc) return
@@ -168,6 +229,8 @@ export default function Evolucao() {
     setCarregandoMaisCorporais(false)
   }
 
+  // O carregamento sincroniza o estado local com o Firestore ao montar a tela.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregarTreinos() }, [carregarTreinos])
 
   function validarMedida(valor, min, max, nome) {
@@ -230,7 +293,13 @@ export default function Evolucao() {
 
   const rotinasDisponiveis = [...new Set(todosTreinos.map(t => t.rotina_id).filter(Boolean))]
 
-  const dadosTreino = (() => {
+  const exerciciosFiltrados = useMemo(() => {
+    const termo = normalizarTexto(buscaExercicio)
+    if (!termo) return exercicios.slice(0, 8)
+    return exercicios.filter(nome => normalizarTexto(nome).includes(termo)).slice(0, 12)
+  }, [buscaExercicio, exercicios])
+
+  const dadosTreino = useMemo(() => {
     if (!selecionado) return []
     return todosTreinos
       .filter(t => rotinaFiltro === 'todas' || t.rotina_id === rotinaFiltro)
@@ -238,10 +307,20 @@ export default function Evolucao() {
       .map(t => {
         const ex = t.exercicios.find(e => e.nome === selecionado)
         if (!ex || ex.carga_top == null) return null
-        return { data: t.data, carga: ex.carga_top, reps: ex.reps_top }
+        return {
+          data: t.data,
+          carga: Number(ex.carga_top) || 0,
+          reps: Number(ex.reps_top) || 0,
+          estimado: epley1RM(ex.carga_top, ex.reps_top),
+        }
       })
       .filter(Boolean)
-  })()
+  }, [todosTreinos, rotinaFiltro, selecionado])
+
+  const dadosTreinoVisiveis = useMemo(() => {
+    if (janelaGrafico === 'todos') return dadosTreino
+    return dadosTreino.slice(-Number(janelaGrafico))
+  }, [dadosTreino, janelaGrafico])
 
   const ultimoTreino = dadosTreino.length > 0 ? dadosTreino[dadosTreino.length - 1] : null
   const recorde = dadosTreino.length > 0 ? Math.max(...dadosTreino.map(d => d.carga)) : null
@@ -249,27 +328,148 @@ export default function Evolucao() {
   const tetoMeta = parseMetaTeto(metaReps)
   const atingiuMeta = ultimoTreino && tetoMeta !== Infinity ? ultimoTreino.reps >= tetoMeta : false
 
+  const stats = useMemo(() => {
+    const treinos = todosTreinos
+    const limite = new Date(agora)
+    limite.setDate(limite.getDate() - janelaDashboard)
+    limite.setHours(0, 0, 0, 0)
+    const limiteAnterior = new Date(limite)
+    limiteAnterior.setDate(limiteAnterior.getDate() - janelaDashboard)
+
+    const treinosTotal = treinos.length
+    const volumeTotal = treinos.reduce((acc, t) => acc + volumePorTreino(t), 0)
+    const treinosPeriodo = treinos.filter(t => t.data >= limite)
+    const treinosPeriodoAnterior = treinos.filter(t => t.data >= limiteAnterior && t.data < limite)
+    const volumePeriodo = treinosPeriodo.reduce((acc, t) => acc + volumePorTreino(t), 0)
+    const volumePeriodoAnterior = treinosPeriodoAnterior.reduce((acc, t) => acc + volumePorTreino(t), 0)
+
+    const inicioSemana = new Date(agora)
+    inicioSemana.setHours(0, 0, 0, 0)
+    inicioSemana.setDate(agora.getDate() - agora.getDay() + (agora.getDay() === 0 ? -6 : 1)) // segunda
+    const inicioSemanaAnterior = new Date(inicioSemana)
+    inicioSemanaAnterior.setDate(inicioSemanaAnterior.getDate() - 7)
+
+    const treinosSemana = treinos.filter(t => t.data >= inicioSemana).length
+    const treinosSemanaAnterior = treinos.filter(t => t.data >= inicioSemanaAnterior && t.data < inicioSemana).length
+    const volumeSemana = treinos.filter(t => t.data >= inicioSemana).reduce((acc, t) => acc + volumePorTreino(t), 0)
+    const volumeSemanaAnterior = treinos.filter(t => t.data >= inicioSemanaAnterior && t.data < inicioSemana).reduce((acc, t) => acc + volumePorTreino(t), 0)
+
+    // Sequência atual (dias consecutivos com treino)
+    const diasComTreino = new Set()
+    treinos.forEach(t => {
+      const d = new Date(t.data); d.setHours(0, 0, 0, 0); diasComTreino.add(d.getTime())
+    })
+    let sequenciaAtual = 0
+    let cursor = new Date(agora); cursor.setHours(0, 0, 0, 0)
+    while (diasComTreino.has(cursor.getTime())) {
+      sequenciaAtual++
+      cursor.setDate(cursor.getDate() - 1)
+    }
+
+    // Melhor 1RM estimado entre todos os exercícios
+    let melhor1RM = null
+    treinos.forEach(t => {
+      (t.exercicios || []).forEach(ex => {
+        if (ex.carga_top && ex.reps_top) {
+          const um = epley1RM(ex.carga_top, ex.reps_top)
+          if (!melhor1RM || um > melhor1RM.um) {
+            melhor1RM = { nome: ex.nome, carga: ex.carga_top, reps: ex.reps_top, um }
+          }
+        }
+      })
+    })
+
+    const exerciciosAtivos = new Set()
+    treinosPeriodo.forEach(t => (t.exercicios || []).forEach(ex => ex.nome && exerciciosAtivos.add(ex.nome)))
+    const ultimo = treinos[treinos.length - 1]
+    const diasSemTreino = ultimo ? diasDesde(ultimo.data, agora) : null
+    const progressoPeriodo = volumePeriodoAnterior > 0
+      ? Math.round(((volumePeriodo - volumePeriodoAnterior) / volumePeriodoAnterior) * 100)
+      : null
+    const ritmo = treinosPeriodo.length ? (treinosPeriodo.length / Math.max(janelaDashboard / 7, 1)).toFixed(1) : '0,0'
+
+    return {
+      treinosTotal, volumeTotal, volumeSemana, volumeSemanaAnterior,
+      treinosSemana, treinosSemanaAnterior, sequenciaAtual, melhor1RM,
+      treinosPeriodo: treinosPeriodo.length, volumePeriodo, volumePeriodoAnterior,
+      progressoPeriodo, exerciciosAtivos: exerciciosAtivos.size, diasSemTreino, ritmo,
+    }
+  }, [agora, todosTreinos, janelaDashboard])
+
+  // Top PRs (top 5 por carga máxima) por exercício
+  const topPRs = useMemo(() => {
+    const prMap = new Map() // nome → { carga, reps, data }
+    todosTreinos.forEach(t => {
+      (t.exercicios || []).forEach(ex => {
+        if (!ex.carga_top) return
+        const atual = prMap.get(ex.nome)
+        if (!atual || ex.carga_top > atual.carga) {
+          prMap.set(ex.nome, { carga: ex.carga_top, reps: ex.reps_top, data: t.data })
+        }
+      })
+    })
+    return [...prMap.entries()]
+      .map(([nome, v]) => ({ nome, ...v, um: epley1RM(v.carga, v.reps) }))
+      .sort((a, b) => b.carga - a.carga)
+      .slice(0, 5)
+  }, [todosTreinos])
+
+
+  const recomendacao = useMemo(() => {
+    if (!stats.treinosTotal) return {
+      titulo: 'Seu próximo passo começa aqui',
+      texto: 'Registre seu primeiro treino para transformar esforço em dados úteis.',
+      tom: 'brand',
+    }
+    if (stats.diasSemTreino > 7) return {
+      titulo: `Você está há ${stats.diasSemTreino} dias sem treinar`,
+      texto: 'Uma sessão curta já recoloca sua sequência em movimento.',
+      tom: 'warning',
+    }
+    if (selecionado && atingiuMeta) return {
+      titulo: 'Meta de repetições alcançada',
+      texto: `Suba a carga de ${selecionado} na próxima sessão e mantenha a técnica.`,
+      tom: 'success',
+    }
+    if (stats.progressoPeriodo != null && stats.progressoPeriodo < -10) return {
+      titulo: 'Seu volume caiu nesta janela',
+      texto: 'Compare a rotina e reduza a distância entre as sessões desta semana.',
+      tom: 'warning',
+    }
+    return {
+      titulo: 'Ritmo consistente',
+      texto: `Você está fazendo ${stats.ritmo} sessões por semana. Continue registrando cada top set.`,
+      tom: 'success',
+    }
+  }, [atingiuMeta, selecionado, stats])
+
   const chartDims = (() => {
-    if (dadosTreino.length < 2) return null
+    if (dadosTreinoVisiveis.length < 2) return null
     const w = Math.max(containerWidth - 32, 280)
     const plotW = w - PAD.left - PAD.right
     const plotH = H - PAD.top - PAD.bottom
-    const maxCarga = Math.max(...dadosTreino.map(d => d.carga))
-    const ceiling = Math.ceil(maxCarga / 5) * 5 || 5
+    const valores = dadosTreinoVisiveis.map(d => graficoMetrica === 'carga' ? d.carga : d.estimado)
+    const maxValor = Math.max(...valores)
+    const minValor = Math.min(...valores)
+    const margem = Math.max((maxValor - minValor) * 0.15, maxValor * 0.05, 2)
+    const floor = Math.max(0, Math.floor((minValor - margem) / 5) * 5)
+    const ceiling = Math.ceil((maxValor + margem) / 5) * 5 || 5
+    const amplitude = Math.max(ceiling - floor, 1)
 
-    const points = dadosTreino.map((d, i) => ({
+    const points = dadosTreinoVisiveis.map((d, i) => ({
       ...d,
-      x: PAD.left + (i / (dadosTreino.length - 1)) * plotW,
-      y: PAD.top + plotH - (d.carga / ceiling) * plotH,
+      valor: graficoMetrica === 'carga' ? d.carga : d.estimado,
+      x: PAD.left + (i / (dadosTreinoVisiveis.length - 1)) * plotW,
+      y: PAD.top + plotH - ((graficoMetrica === 'carga' ? d.carga : d.estimado) - floor) / amplitude * plotH,
     }))
 
-    const step = Math.max(1, Math.round(ceiling / 4))
+    const step = Math.max(1, Math.round(amplitude / 4))
     const yTicks = []
-    for (let v = 0; v <= ceiling; v += step) {
-      yTicks.push({ value: v, y: PAD.top + plotH - (v / ceiling) * plotH })
+    for (let v = floor; v <= ceiling; v += step) {
+      yTicks.push({ value: v, y: PAD.top + plotH - ((v - floor) / amplitude) * plotH })
     }
 
-    return { w, points, yTicks }
+    return { w, points, yTicks, floor, ceiling }
   })()
 
   const ultimaMedida = medidas[0]
@@ -290,7 +490,7 @@ export default function Evolucao() {
   }
 
   return (
-    <div className="flex flex-col gap-3 pt-2 pb-4">
+    <div ref={pageRef} className="flex flex-col gap-3 pt-2 pb-4">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-xl font-bold tracking-tight text-white">Evolução</h1>
         <BarChart3 size={18} className="text-cyan-400" />
@@ -303,7 +503,7 @@ export default function Evolucao() {
             aba === 'treino' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'
           }`}
         >
-          Gráficos de Treino
+          Dashboard & Gráficos
         </button>
         <button
           onClick={() => { setAba('corporal'); if (medidas.length === 0) carregarMedidas() }}
@@ -319,27 +519,131 @@ export default function Evolucao() {
 
       {aba === 'treino' ? (
         <>
+          {/* === DASHBOARD DE TREINO === */}
+          <div className="space-y-3">
+            <div className="card-premium p-4 overflow-hidden">
+              <div className="relative z-[1] flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="section-label">Leitura do treino</span>
+                  <h2 className="mt-3 text-lg font-bold text-white leading-tight">{recomendacao.titulo}</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-400 max-w-[34rem]">{recomendacao.texto}</p>
+                </div>
+                <div className={`shrink-0 rounded-2xl p-2.5 ${recomendacao.tom === 'warning' ? 'bg-amber-400/10 text-amber-300' : recomendacao.tom === 'success' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-[var(--brand)]/15 text-[var(--brand-bright)]'}`}>
+                  {recomendacao.tom === 'warning' ? <Clock3 size={18} /> : recomendacao.tom === 'success' ? <TrendingUp size={18} /> : <Gauge size={18} />}
+                </div>
+              </div>
+              <div className="relative z-[1] mt-4 flex flex-wrap items-center gap-2 text-[10px] text-neutral-500">
+                <span className="inline-flex items-center gap-1.5"><CalendarDays size={12} /> Janela: {janelaDashboard} dias</span>
+                <span className="h-3 w-px bg-white/10" />
+                <span>{stats.treinosPeriodo} sessões analisadas</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="section-label">Resumo de performance</span>
+              <div className="flex rounded-xl border border-white/10 bg-black/20 p-0.5" role="group" aria-label="Período do dashboard">
+                {[{ value: 28, label: '4 sem' }, { value: 56, label: '8 sem' }, { value: 84, label: '12 sem' }].map(opcao => (
+                  <button key={opcao.value} type="button" onClick={() => setJanelaDashboard(opcao.value)}
+                    className={`rounded-lg px-2 py-1 text-[10px] font-semibold transition ${janelaDashboard === opcao.value ? 'bg-[var(--brand)]/20 text-[var(--brand-bright)]' : 'text-neutral-500 hover:text-white'}`}>
+                    {opcao.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { icon: Activity, label: 'Sessões', value: stats.treinosPeriodo, detail: `${stats.ritmo}/semana`, color: 'text-[var(--brand-bright)]' },
+                { icon: BarChart3, label: 'Volume', value: formatarVolume(stats.volumePeriodo), detail: 'kg × reps', color: 'text-[var(--accent-bright)]' },
+                { icon: Dumbbell, label: 'Exercícios', value: stats.exerciciosAtivos, detail: 'com histórico', color: 'text-[var(--highlight)]' },
+                { icon: Flame, label: 'Sequência', value: stats.sequenciaAtual, detail: stats.sequenciaAtual === 1 ? 'dia ativo' : 'dias ativos', color: 'text-amber-300' },
+              ].map(item => {
+                const Icon = item.icon
+                return (
+                  <div key={item.label} className="card-premium p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase tracking-[0.12em] text-neutral-500">{item.label}</span>
+                      <Icon size={14} className={item.color} aria-hidden="true" />
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-1.5">
+                      <span className="text-2xl font-bold tracking-tight text-white num">{item.value}</span>
+                    </div>
+                    <p className="mt-1 truncate text-[10px] text-neutral-500">{item.detail}</p>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="card-premium p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <span className="section-label">Recordes recentes</span>
+                  <p className="mt-1 text-[10px] text-neutral-500">Maior carga registrada por exercício</p>
+                </div>
+                {stats.melhor1RM && <span className="text-right text-[10px] text-neutral-500">Melhor 1RM<br /><strong className="text-sm text-white num">{stats.melhor1RM.um} kg</strong></span>}
+              </div>
+              {topPRs.length > 0 ? (
+                <div className="mt-3 grid gap-1.5">
+                  {topPRs.map((pr, i) => (
+                    <button key={pr.nome} type="button" onClick={() => { setSelecionado(pr.nome); setBuscaExercicio(pr.nome); setTooltip(null) }}
+                      className="flex w-full items-center justify-between gap-2 rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-left transition hover:border-[var(--brand)]/30 hover:bg-[var(--brand)]/10 active:scale-[0.99]">
+                      <span className="flex min-w-0 items-center gap-2"><span className="w-4 shrink-0 font-mono text-[10px] text-neutral-600">{i + 1}</span><span className="truncate text-xs text-neutral-200">{pr.nome}</span></span>
+                      <span className="shrink-0 text-right"><strong className="text-xs text-white num">{pr.carga} kg</strong><span className="ml-1.5 text-[10px] text-neutral-500 num">×{pr.reps}</span></span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-xl border border-dashed border-white/10 p-3 text-center text-xs text-neutral-500">Seus recordes aparecerão depois do primeiro treino.</p>
+              )}
+            </div>
+          </div>
+
           {loading ? (
             <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
           ) : !exercicios.length ? (
             <p className="text-neutral-600 text-center py-8 text-sm">Nenhum treino registrado ainda.</p>
           ) : (
             <>
-              <div className="relative">
-                <select value={selecionado} onChange={e => { setSelecionado(e.target.value); setTooltip(null) }}
-                  className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white p-4 rounded-2xl text-sm appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all">
-                  <option value="">Selecionar exercício</option>
-                  {exercicios.map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-neutral-500">
-                  <Dumbbell size={16} />
+              <div ref={exercicioBuscaRef} className="relative z-20">
+                <label htmlFor="buscar-exercicio" className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-500">Exercício</label>
+                <div className={`flex items-center gap-2 rounded-2xl border bg-neutral-900/70 px-3 transition ${menuExercicioAberto ? 'border-[var(--brand)]/60 shadow-[0_0_0_3px_rgba(var(--brand-rgb),0.12)]' : 'border-white/10'}`}>
+                  <Search size={16} className="shrink-0 text-neutral-500" aria-hidden="true" />
+                  <input
+                    id="buscar-exercicio"
+                    type="search"
+                    value={buscaExercicio}
+                    onChange={event => { setBuscaExercicio(event.target.value); setMenuExercicioAberto(true) }}
+                    onFocus={() => setMenuExercicioAberto(true)}
+                    onKeyDown={event => {
+                      if (event.key === 'Escape') setMenuExercicioAberto(false)
+                      if (event.key === 'Enter' && exerciciosFiltrados[0]) {
+                        setSelecionado(exerciciosFiltrados[0]); setBuscaExercicio(exerciciosFiltrados[0]); setMenuExercicioAberto(false); setTooltip(null)
+                      }
+                    }}
+                    placeholder="Buscar exercício..."
+                    autoComplete="off"
+                    className="min-w-0 flex-1 border-0 bg-transparent px-0 py-3 text-sm text-white outline-none placeholder:text-neutral-600 focus:border-0 focus:shadow-none"
+                  />
+                  {selecionado && <button type="button" aria-label="Limpar exercício" onClick={() => { setSelecionado(''); setBuscaExercicio(''); setTooltip(null) }} className="rounded-full p-1 text-neutral-500 hover:bg-white/10 hover:text-white"><X size={14} /></button>}
                 </div>
+                {menuExercicioAberto && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+0.45rem)] max-h-64 overflow-y-auto rounded-2xl border border-white/10 bg-[#110e19] p-1.5 shadow-2xl shadow-black/50" role="listbox" aria-label="Exercícios encontrados">
+                    {exerciciosFiltrados.length > 0 ? exerciciosFiltrados.map(nome => (
+                      <button key={nome} type="button" role="option" aria-selected={selecionado === nome}
+                        onClick={() => { setSelecionado(nome); setBuscaExercicio(nome); setMenuExercicioAberto(false); setTooltip(null) }}
+                        className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition ${selecionado === nome ? 'bg-[var(--brand)]/20 text-white' : 'text-neutral-300 hover:bg-white/8 hover:text-white'}`}>
+                        <span className="truncate">{nome}</span>
+                        {selecionado === nome && <Check size={14} className="shrink-0 text-[var(--brand-bright)]" />}
+                      </button>
+                    )) : <p className="px-3 py-4 text-center text-xs text-neutral-500">Nenhum exercício encontrado.</p>}
+                  </div>
+                )}
               </div>
 
               {rotinasDisponiveis.length > 1 && (
                 <div className="relative">
                   <select value={rotinaFiltro} onChange={e => { setRotinaFiltro(e.target.value); setTooltip(null) }}
-                    className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white p-3 rounded-2xl text-sm appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all">
+                    className="w-full color-scheme-dark bg-neutral-900/70 backdrop-blur-md border border-white/10 text-white p-3 rounded-2xl text-sm appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all">
                     <option value="todas">Todas as rotinas</option>
                     {rotinasDisponiveis.map(id => <option key={id} value={id}>{nomeRotina(id)}</option>)}
                   </select>
@@ -391,8 +695,41 @@ export default function Evolucao() {
               )}
 
               {selecionado && dadosTreino.length >= 2 && chartDims && (
-                <div className="relative card-premium p-2">
-                  <svg viewBox={`0 0 ${chartDims.w} ${H}`} className="w-full h-auto" style={{ touchAction: 'manipulation' }}>
+                <div className="relative card-premium p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3 px-1">
+                    <div>
+                      <span className="section-label">Progressão</span>
+                      <p className="mt-1 text-[10px] text-neutral-500">{dadosTreinoVisiveis.length} registros · {graficoMetrica === 'carga' ? 'carga da top set' : '1RM estimado'}</p>
+                    </div>
+                    {(() => {
+                      if (dadosTreino.length < 2) return null
+                      const primeiro = dadosTreino[0].carga
+                      const ultimo = dadosTreino[dadosTreino.length - 1].carga
+                      const diff = ultimo - primeiro
+                      const pct = primeiro > 0 ? ((diff / primeiro) * 100).toFixed(1) : 0
+                      if (diff > 0) return <span className="text-[10px] font-mono text-emerald-400 num">+{diff}kg (+{pct}%) ↑</span>
+                      if (diff < 0) return <span className="text-[10px] font-mono text-red-400 num">{diff}kg ({pct}%) ↓</span>
+                      return <span className="text-[10px] font-mono text-neutral-500 num">estável =</span>
+                    })()}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex rounded-xl border border-white/10 bg-black/20 p-0.5" role="group" aria-label="Métrica do gráfico">
+                      {[{ value: 'carga', label: 'Carga' }, { value: 'estimado', label: '1RM estimado' }].map(opcao => (
+                        <button key={opcao.value} type="button" onClick={() => { setGraficoMetrica(opcao.value); setTooltip(null) }}
+                          className={`rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition ${graficoMetrica === opcao.value ? 'bg-[var(--brand)]/20 text-[var(--brand-bright)]' : 'text-neutral-500 hover:text-white'}`}>
+                          {opcao.label}
+                        </button>
+                      ))}
+                    </div>
+                    <select value={janelaGrafico} onChange={event => { setJanelaGrafico(event.target.value); setTooltip(null) }}
+                      className="color-scheme-dark rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-[10px] text-neutral-300 outline-none focus:border-[var(--brand)]/50">
+                      <option value="todos">Todos os registros</option>
+                      <option value="6">Últimos 6</option>
+                      <option value="12">Últimos 12</option>
+                    </select>
+                  </div>
+                  <div className="relative">
+                  <svg viewBox={`0 0 ${chartDims.w} ${H}`} className="mt-3 h-auto w-full" role="img" aria-label={`Gráfico de evolução de ${selecionado}`} style={{ touchAction: 'manipulation' }}>
                     <defs>
                       <filter id="line-glow">
                         <feGaussianBlur stdDeviation="3" result="blur" />
@@ -410,23 +747,49 @@ export default function Evolucao() {
                         {p.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                       </text>
                     ))}
-                    <polyline fill="none" stroke={brandColor} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
+                    <polyline fill="none" stroke={graficoMetrica === 'carga' ? brandColor : accentColor} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"
                       filter="url(#line-glow)" points={chartDims.points.map(p => `${p.x},${p.y}`).join(' ')} />
+                    {/* Hit areas maiores (invisíveis) para toque fácil em mobile */}
                     {chartDims.points.map((p, i) => (
-                      <circle key={i} cx={p.x} cy={p.y} r="5" fill="#07050c" stroke={brandColor} strokeWidth="2.5"
-                        className="cursor-pointer transition-all" style={{ filter: `drop-shadow(0 0 4px ${brandColor}66)` }}
-                        onClick={() => setTooltip(tooltip === i ? null : i)} />
+                      <rect key={`hit-${i}`} x={p.x - 18} y={0} width={36} height={H} fill="transparent"
+                        onClick={() => setTooltip(tooltip === i ? null : i)}
+                        className="cursor-pointer" />
+                    ))}
+                    {chartDims.points.map((p, i) => (
+                      <circle key={i} cx={p.x} cy={p.y} r={tooltip === i ? 7 : 5} fill="#07050c" stroke={graficoMetrica === 'carga' ? brandColor : accentColor}
+                        strokeWidth="2.5" className="cursor-pointer transition-all"
+                        style={{ filter: `drop-shadow(0 0 4px ${brandColor}66)`, transition: 'r 150ms ease-out' }} />
                     ))}
                   </svg>
-                  {tooltip !== null && chartDims.points[tooltip] && (
-                    <div className="absolute bg-neutral-800 text-white text-xs px-3 py-1.5 rounded-xl shadow-lg z-10 border border-white/10 backdrop-blur-md"
-                      style={{ left: Math.min(chartDims.points[tooltip].x - 35, chartDims.w - 85), top: Math.max(chartDims.points[tooltip].y - 40, 4) }}>
-                      <p className="font-bold text-emerald-400">{chartDims.points[tooltip].carga} kg</p>
-                      <p className="text-neutral-400 text-[10px]">
-                        {chartDims.points[tooltip].data.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                      </p>
-                    </div>
-                  )}
+                  </div>
+                  {tooltip !== null && chartDims.points[tooltip] && (() => {
+                    const p = chartDims.points[tooltip]
+                    const prev = tooltip > 0 ? chartDims.points[tooltip - 1] : null
+                    const diffCarga = prev ? p.carga - prev.carga : 0
+                    return (
+                      <div className="absolute z-10 pointer-events-none"
+                        style={{ left: Math.min(Math.max(p.x - 50, 4), chartDims.w - 110), top: Math.max(p.y - 60, 4) }}>
+                        <div className="bg-neutral-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl border border-white/15 px-3 py-2 min-w-[100px]">
+                          <p className="text-[10px] text-neutral-500 uppercase tracking-wider leading-none">{p.data.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}</p>
+                          <div className="flex items-baseline gap-1 mt-0.5">
+                            <span className="text-lg font-bold text-white num">{p.valor}</span>
+                            <span className="text-[10px] text-neutral-500">kg</span>
+                            <span className="text-base text-neutral-400 mx-0.5">×</span>
+                            <span className="text-base font-semibold text-white num">{p.reps}</span>
+                            <span className="text-[10px] text-neutral-500">reps</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 mt-1 text-[10px]">
+                            <span className="text-neutral-500 num">Top set: {p.carga} kg × {p.reps}</span>
+                            {prev && (
+                              <span className={`font-mono num ${diffCarga > 0 ? 'text-emerald-400' : diffCarga < 0 ? 'text-red-400' : 'text-neutral-500'}`}>
+                                {diffCarga > 0 ? '+' : ''}{diffCarga}kg
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -434,12 +797,25 @@ export default function Evolucao() {
                 <div className="card-premium p-4">
                   <span className="section-label">Últimos registros</span>
                   <div className="space-y-1 mt-2">
-                    {[...dadosTreino].reverse().slice(0, limiteRegistros).map((d, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm py-1">
-                        <span className="text-neutral-500 font-mono text-xs">{d.data.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
-                        <span className="text-white font-semibold text-sm">{d.carga} kg</span>
-                      </div>
-                    ))}
+                    {[...dadosTreino].reverse().slice(0, limiteRegistros).map((d, i) => {
+                      const idxReal = dadosTreino.length - 1 - i
+                      const prev = idxReal > 0 ? dadosTreino[idxReal - 1] : null
+                      const diff = prev ? d.carga - prev.carga : 0
+                      return (
+                        <div key={i} className="flex items-center justify-between text-sm py-1.5 px-1">
+                          <span className="text-neutral-500 font-mono text-xs">{d.data.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-white font-semibold num">{d.carga}<span className="text-[10px] text-neutral-500 ml-0.5">kg</span></span>
+                            <span className="text-[10px] text-neutral-500 num">×{d.reps}</span>
+                            {prev && diff !== 0 && (
+                              <span className={`text-[10px] font-mono num ${diff > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {diff > 0 ? '+' : ''}{diff}kg
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                   {dadosTreino.length > limiteRegistros && (
                     <button onClick={() => setLimiteRegistros(p => p + 5)}
@@ -449,7 +825,8 @@ export default function Evolucao() {
                   )}
                   {lastTreinoDoc && (
                     <button onClick={carregarMaisTreinos} disabled={carregandoMaisTreinos}
-                      className="btn-secondary w-full py-2 text-xs mt-1">
+                      className="btn-secondary flex w-full items-center justify-center gap-2 py-2 text-xs mt-1">
+                      <RefreshCw size={13} className={carregandoMaisTreinos ? 'animate-spin' : ''} />
                       {carregandoMaisTreinos ? 'Carregando...' : 'Carregar mais treinos'}
                     </button>
                   )}
@@ -604,7 +981,6 @@ export default function Evolucao() {
                   yTicks.push({ valor: v, y: gPad.top + plotH - ((v - floor) / amplitude) * plotH })
                 }
 
-                const campo = CAMPOS_MEDIDA.find(c => c.key === medidaGrafico)
                 return (
                   <svg viewBox={`0 0 ${gW} ${gH}`} className="w-full h-auto" style={{ touchAction: 'manipulation' }}>
                     <defs>

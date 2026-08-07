@@ -425,6 +425,20 @@ input, textarea, select {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Selects nativos: dropdown aberto herda cores do SO/navegador (fundo branco).
+   color-scheme: dark força o navegador a usar tema escuro para o popup,
+   tornando o dropdown consistente com o resto do app. */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background: #110e19;
+  color: #f5f3fa;
+}
+
+.color-scheme-dark { color-scheme: dark; }
+
 input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: rgba(var(--brand-rgb), 0.6);
