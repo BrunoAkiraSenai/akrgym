@@ -6,8 +6,8 @@ import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import ConfirmModal from '../ConfirmModal'
 import {
-  Play, CheckCircle, Loader, ChevronLeft, AlertTriangle, X,
-  Flame, Thermometer, Zap, RefreshCw, Info,
+  Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
+  Flame, Info, RefreshCw, Search, Zap,
 } from 'lucide-react'
 
 export default function Execucao({ onFinish, activeTab }) {
@@ -47,6 +47,7 @@ export default function Execucao({ onFinish, activeTab }) {
   }, [user.uid])
 
   // Carrega treinos na montagem
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregarTreinos() }, [carregarTreinos])
 
   // Recarrega sempre que a aba Treinar for reativada (ex: depois de criar treino em Config)
@@ -61,6 +62,7 @@ export default function Execucao({ onFinish, activeTab }) {
     carregarTreinos()
   }, [activeTab, carregarTreinos])
 
+  // Restaura um rascunho persistido ao entrar na sessão.
   useEffect(() => {
     if (!treinosState) return
     try {
@@ -72,12 +74,15 @@ export default function Execucao({ onFinish, activeTab }) {
         localStorage.removeItem(STORAGE_KEY)
         return
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRotinaKey(draft.rotinaKey)
       setTopSetData(draft.topSetData)
       setStep('active')
       setRecuperado(true)
-    } catch {}
-  }, [treinosState])
+    } catch {
+      // Rascunhos inválidos não interrompem a sessão atual.
+    }
+  }, [treinosState, STORAGE_KEY])
 
   const keys = treinosState ? Object.keys(treinosState) : []
 
@@ -88,7 +93,7 @@ export default function Execucao({ onFinish, activeTab }) {
       }
     }, 500)
     return () => clearTimeout(timer)
-  }, [rotinaKey, topSetData, step])
+  }, [rotinaKey, topSetData, step, STORAGE_KEY])
 
   const iniciarTreino = useCallback(async (key) => {
     if (loadingHistorico) return
@@ -175,29 +180,32 @@ export default function Execucao({ onFinish, activeTab }) {
 
   if (step === 'select') {
     return (
-      <div className="flex flex-col gap-3 pt-2 pb-4">
-        <h1 className="text-xl font-bold tracking-tight text-white mb-1">Qual treino de hoje?</h1>
+      <div className="treino-select flex flex-col gap-3 pt-2 pb-4">
+        <header className="treino-page-header">
+          <div><p className="home-kicker">Sessão de hoje</p><h1 className="text-2xl font-bold tracking-tight text-white">Qual treino você vai fazer?</h1><p>Escolha uma divisão para começar a registrar.</p></div>
+          <div className="treino-header-mark" aria-hidden="true"><Play size={18} fill="currentColor" /></div>
+        </header>
         {erro && (
-          <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
+          <div className="exec-feedback exec-feedback-error" role="alert">{erro}</div>
         )}
         {keys.length === 0 ? (
-          <div className="card-premium p-6 text-center">
-            <p className="text-neutral-500 text-sm">Nenhum treino configurado.</p>
-            <p className="text-neutral-600 text-xs mt-1">Vá em Configurações para criar seus treinos.</p>
+          <div className="treino-empty card-premium">
+            <p>Nenhum treino configurado.</p>
+            <span>Vá em Configurações para criar suas divisões.</span>
           </div>
         ) : keys.map(key => {
           const r = treinosState[key]
           return (
             <button
               key={key}
+              type="button"
               onClick={() => iniciarTreino(key)}
-              className="w-full flex items-center justify-between card-premium p-5 transition-all active:scale-[0.97] hover:border-white/10 text-left"
+              disabled={loadingHistorico}
+              className="treino-routine-card card-premium"
             >
-              <div>
-                <span className="text-white font-semibold text-base tracking-tight">{r?.nome || key}</span>
-                <span className="text-neutral-500 text-sm block">{r?.exercicios?.length || 0} exercícios</span>
-              </div>
-              <Play size={22} className="text-emerald-400 shrink-0 drop-shadow-[0_0_6px_rgba(244,114,182,0.3)]" />
+              <span className="treino-routine-index">{String(keys.indexOf(key) + 1).padStart(2, '0')}</span>
+              <span className="treino-routine-copy"><strong>{r?.nome || key}</strong><small>{r?.exercicios?.length || 0} {(r?.exercicios?.length || 0) === 1 ? 'exercício' : 'exercícios'}</small></span>
+              <span className="treino-routine-action">Começar <ChevronRight size={17} /></span>
             </button>
           )
         })}
@@ -208,40 +216,41 @@ export default function Execucao({ onFinish, activeTab }) {
   const rotina = treinosState?.[rotinaKey]
 
   return (
-    <div className="flex flex-col gap-3 pt-1 pb-4 treino-container">
-      <div className="flex items-center gap-2 mb-1">
-        <button onClick={() => { setStep('select'); setRotinaKey(null); setErro(null); setRecuperado(false); setSucesso(null) }}
-          className="text-neutral-500 hover:text-white p-1 transition-all active:scale-90">
+    <div className="treino-container flex flex-col gap-3 pt-1 pb-4">
+      <div className="treino-active-header">
+        <button type="button" onClick={() => { setStep('select'); setRotinaKey(null); setErro(null); setRecuperado(false); setSucesso(null) }}
+          className="treino-back-button" aria-label="Voltar para escolher o treino">
           <ChevronLeft size={22} />
         </button>
-        <h1 className="text-lg font-bold tracking-tight text-white">{rotina?.nome}</h1>
+        <div className="min-w-0"><p className="home-kicker">Treino em andamento</p><h1 className="truncate text-xl font-bold tracking-tight text-white">{rotina?.nome}</h1></div>
+        <span className="treino-progress-badge">{topSetData.filter(ex => Number(ex.carga) > 0 && Number(ex.reps) > 0).length}/{topSetData.length}</span>
       </div>
 
       {recuperado && (
-        <div className="flex items-center justify-between bg-cyan-500/10 backdrop-blur-md border border-cyan-500/20 rounded-2xl px-4 py-3">
-          <span className="text-cyan-400 text-xs font-medium">⚡ Rascunho de treino recuperado!</span>
-          <button onClick={() => {
+        <div className="exec-feedback exec-feedback-info">
+          <span><CheckCircle size={14} /> Rascunho recuperado</span>
+          <button type="button" onClick={() => {
             localStorage.removeItem(STORAGE_KEY)
             setRecuperado(false)
             setStep('select')
             setRotinaKey(null)
             setTopSetData([])
             setErro(null); setSucesso(null)
-          }} className="btn-secondary text-[11px] px-3 py-1.5">Descartar</button>
+          }} className="exec-discard-button">Descartar</button>
         </div>
       )}
 
       {erro && (
-        <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs flex items-start gap-2">
+        <div className="exec-feedback exec-feedback-error" role="alert">
           <span className="flex-1">{erro}</span>
-          <button onClick={() => setErro(null)} className="text-red-400 hover:text-red-300 shrink-0 transition-all active:scale-90">
+          <button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso" className="exec-close-button">
             <X size={14} />
           </button>
         </div>
       )}
 
       {sucesso && (
-        <div className="bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 rounded-2xl p-3 text-emerald-400 text-xs flex items-center gap-2">
+        <div className="exec-feedback exec-feedback-success">
           <CheckCircle size={14} /> {sucesso}
         </div>
       )}
@@ -251,15 +260,16 @@ export default function Execucao({ onFinish, activeTab }) {
       ) : topSetData.length === 0 ? (
         <p className="text-neutral-600 text-center py-4 text-sm">Nenhum exercício.</p>
       ) : (() => {
-        const exercicios = topSetData.filter(ex => !filtroBusca || ex.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
+        const exercicios = topSetData.map((ex, originalIndex) => ({ ex, originalIndex })).filter(({ ex }) => !filtroBusca || ex.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
         const busca = (
-        <div className="relative">
-          <input type="text" placeholder="Buscar exercício..." value={filtroBusca}
+        <div className="exec-search">
+          <Search size={15} aria-hidden="true" />
+          <input type="search" aria-label="Buscar exercício" placeholder="Buscar exercício" value={filtroBusca}
             onChange={e => setFiltroBusca(e.target.value)}
-            className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-emerald-500/30 pl-9" />
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            className="w-full" />
+          {filtroBusca && <button type="button" onClick={() => setFiltroBusca('')} aria-label="Limpar busca"><X size={14} /></button>}
         </div>)
-        const cards = exercicios.map((ex, exIdx) => {
+        const cards = exercicios.map(({ ex, originalIndex }) => {
           const isAgachamento = ex.IsAgachamento || ex.nome?.toLowerCase().includes('agachamento')
           const aqPeso = ex.tem_aquecimento && !isAgachamento ? Math.round(ex.ref * 0.6) : null
           const prepPeso = Math.round(ex.ref * 0.85)
@@ -269,7 +279,7 @@ export default function Execucao({ onFinish, activeTab }) {
             : null
 
           return (
-            <div key={ex.nome} className="card-premium p-4 space-y-3 transition-all">
+            <div key={`${originalIndex}-${ex.nome}`} className="exec-exercise-card card-premium">
               <div className="flex items-center justify-between">
                 <h2 className="text-white font-semibold text-sm tracking-tight">{ex.nome}</h2>
                 <span className="text-neutral-500 text-[11px] font-mono">meta {ex.meta_reps}</span>
@@ -318,18 +328,22 @@ export default function Execucao({ onFinish, activeTab }) {
                     <span className="text-neutral-500 text-[11px] font-mono">superar {ex.ref}kg</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <input
+                    <label className="exec-field">
+                      <span>Carga (kg)</span>
+                      <input
                       type="number" inputMode="numeric" placeholder="kg"
                       value={ex.carga}
-                      onChange={e => atualizar(exIdx, 'carga', e.target.value)}
-                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(244,114,182,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <input
+                      onChange={e => atualizar(originalIndex, 'carga', e.target.value)}
+                      />
+                    </label>
+                    <label className="exec-field">
+                      <span>Repetições</span>
+                      <input
                       type="number" inputMode="numeric" placeholder="reps"
                       value={ex.reps}
-                      onChange={e => atualizar(exIdx, 'reps', e.target.value)}
-                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-4 rounded-xl text-lg text-center font-bold outline-none focus:ring-2 focus:ring-emerald-500/50 focus:shadow-[0_0_15px_rgba(244,114,182,0.1)] transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                    />
+                      onChange={e => atualizar(originalIndex, 'reps', e.target.value)}
+                      />
+                    </label>
                   </div>
                 </div>
 
@@ -355,13 +369,17 @@ export default function Execucao({ onFinish, activeTab }) {
         )
       })()}
 
-      <button
-        onClick={finalizarTreino}
-        disabled={!podeFinalizar || saving}
-        className="btn-primary w-full text-lg py-5 flex items-center justify-center gap-2 mt-1">
-        {saving ? <><Loader size={20} className="animate-spin" /> Salvando...</>
-        : <><CheckCircle size={20} /> Finalizar Treino</>}
-      </button>
+      <div className="treino-footer">
+        <div className="treino-footer-status"><span>{topSetData.filter(ex => Number(ex.carga) > 0 && Number(ex.reps) > 0).length} de {topSetData.length} exercícios preenchidos</span><strong>{podeFinalizar ? 'Tudo pronto' : 'Preencha os dois campos de cada exercício'}</strong></div>
+        <button
+          type="button"
+          onClick={finalizarTreino}
+          disabled={!podeFinalizar || saving}
+          className="btn-primary w-full text-base py-4 flex items-center justify-center gap-2">
+          {saving ? <><Loader size={19} className="animate-spin" /> Salvando...</>
+          : <><CheckCircle size={19} /> Finalizar treino</>}
+        </button>
+      </div>
 
       <ConfirmModal
         isOpen={showConfirm}
