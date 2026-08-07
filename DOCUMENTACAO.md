@@ -425,7 +425,7 @@ Portal React, `fixed inset-0 z-50` com backdrop `bg-black/70 backdrop-blur-sm`. 
 ### Diretório pai `/home/akira/akrgym/`
 
 - `akrgym/` — projeto React.
-- `keys/akrgym-service-account.json` — **NÃO versionado** (chave do Firebase Admin). Apontado pela variável `GOOGLE_APPLICATION_CREDENTIALS` no script `deploy` do `package.json`.
+- `token/akrgym-service-account.json` — **NÃO versionado** (chave do Firebase Admin). Apontado pela variável `GOOGLE_APPLICATION_CREDENTIALS` no script `deploy` do `package.json`.
 - `googlea578e0f3b4ce87e0.html` — arquivo de verificação do Google Search Console.
 
 ---
@@ -462,9 +462,9 @@ npm run dev
 | `test` | `npm run test:unit` | Executa os testes unitários puros |
 | `test:unit` | `node --test tests/*.unit.spec.js` | Valida regras de cálculo e sanitização sem serviços externos |
 | `test:rules` | `firebase emulators:exec --only firestore ...` | Executa os testes das regras no emulador Firestore (Java 17+) |
-| `deploy` | `npm run build && GOOGLE_APPLICATION_CREDENTIALS=/home/akira/akrgym/keys/akrgym-service-account.json firebase deploy --only hosting --project akrgym` | Build + deploy apenas de hosting (sem functions) |
+| `deploy` | `npm run build && GOOGLE_APPLICATION_CREDENTIALS=token/akrgym-service-account.json firebase deploy --only hosting --project akrgym` | Build + deploy apenas de hosting (sem functions) |
 
-> ⚠️ O caminho de `GOOGLE_APPLICATION_CREDENTIALS` em `package.json` é **específico desta máquina**. Em outro ambiente, ajuste ou use `firebase login` + `firebase use akrgym` antes do deploy.
+> ⚠️ `token/akrgym-service-account.json` é local e ignorado pelo Git. Em outro ambiente, crie essa credencial localmente ou use `firebase login` + `firebase use akrgym` antes do deploy.
 
 ### ESLint
 
@@ -1345,7 +1345,7 @@ npm run deploy
 O script faz:
 
 1. `npm run build` — gera `dist/`.
-2. Configura `GOOGLE_APPLICATION_CREDENTIALS=/home/akira/akrgym/keys/akrgym-service-account.json`.
+2. Configura `GOOGLE_APPLICATION_CREDENTIALS=token/akrgym-service-account.json`.
 3. `firebase deploy --only hosting --project akrgym`.
 
 > ⚠️ O caminho da service account é específico desta máquina. Para deploy em CI/CD, gere a chave no CI, salve como secret e substitua o caminho.
