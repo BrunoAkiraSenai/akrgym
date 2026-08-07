@@ -4,8 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
-    <title>AkrGym</title>
-    <meta name="build-version" content="3.2" />
+    <title>AkrGym | Treino, dieta e evolução em um só lugar</title>
+    <meta name="description" content="AkrGym é o app fitness para registrar treinos, acompanhar cargas, organizar a dieta e visualizar sua evolução." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://akrgym.web.app/" />
+    <link rel="alternate" hreflang="pt-BR" href="https://akrgym.web.app/" />
     <meta name="build-version" content="3.2" />
     <meta name="google-site-verification" content="0MxCLkjvr7j4yC0BgJI575Hxwa786fC1wDGYcCfw5fc" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -21,9 +24,52 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://akrgym.web.app/#website",
+            "url": "https://akrgym.web.app/",
+            "name": "AkrGym",
+            "description": "Treinos, dieta e evolução em um só lugar.",
+            "inLanguage": "pt-BR"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://akrgym.web.app/#application",
+            "name": "AkrGym",
+            "url": "https://akrgym.web.app/",
+            "description": "Aplicativo fitness para registrar treinos, acompanhar cargas, organizar a dieta e visualizar a evolução.",
+            "applicationCategory": "HealthApplication",
+            "operatingSystem": "Web, Android, iOS",
+            "inLanguage": "pt-BR",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "BRL"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main aria-label="AkrGym">
+        <h1>AkrGym: treinos, dieta e evolução</h1>
+        <p>Registre seus treinos, acompanhe cargas e repetições, organize sua alimentação e entenda seu progresso.</p>
+        <ul>
+          <li>Registro de treinos com progressão de cargas e repetições.</li>
+          <li>Diário de dieta com calorias e macronutrientes.</li>
+          <li>Gráficos de evolução e medidas corporais.</li>
+        </ul>
+        <p>Abra o AkrGym para começar sua rotina fitness.</p>
+      </main>
+    </div>
+    <noscript>O AkrGym precisa de JavaScript ativado para registrar treinos e acompanhar sua evolução.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

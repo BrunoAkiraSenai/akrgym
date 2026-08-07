@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'robots.txt', 'apple-touch-icon.png'],
       manifest: {
-        name: 'AkrGym - Seu Treino e Dieta',
+        name: 'AkrGym | Treino, dieta e evolução',
         short_name: 'AkrGym',
-        description: 'Acompanhe treinos, dieta e evolução com IA',
+        description: 'Registre treinos, organize a dieta e acompanhe sua evolução.',
         theme_color: '#06080f',
         background_color: '#06080f',
         display: 'standalone',
