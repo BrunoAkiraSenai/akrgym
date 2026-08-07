@@ -3,6 +3,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithP
 import { auth, db, provider } from '../../firebase'
 import { writeBatch, collection, getDocs, getDoc, doc } from 'firebase/firestore'
 import { Apple, Loader } from 'lucide-react'
+import { METAS_DIARIAS } from '../../config/dieta'
 
 function traduzirErro(code) {
   const erros = {
@@ -30,7 +31,16 @@ async function migrateAnonymousData(anonymousUid, newUid) {
   }
   const configSnap = await getDoc(doc(db, 'users', anonymousUid, 'config', 'data'))
   if (configSnap.exists()) {
-    operations.push({ ref: doc(db, 'users', newUid, 'config', 'data'), data: configSnap.data() })
+    const config = configSnap.data()
+    operations.push({
+      ref: doc(db, 'users', newUid, 'config', 'data'),
+      data: {
+        ...config,
+        treinos: config.treinos || {},
+        refeicoes: Array.isArray(config.refeicoes) ? config.refeicoes : [],
+        metas: config.metas || METAS_DIARIAS,
+      },
+    })
   }
   const CHUNK = 400
   for (let i = 0; i < operations.length; i += CHUNK) {

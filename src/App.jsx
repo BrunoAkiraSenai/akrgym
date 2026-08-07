@@ -20,7 +20,18 @@ const USER_CONFIG = (uid) => doc(db, 'users', uid, 'config', 'data')
 
 async function ensureUserConfig(uid) {
   const snap = await getDoc(USER_CONFIG(uid))
-  if (snap.exists()) return
+  if (snap.exists()) {
+    const data = snap.data()
+    const normalizado = {
+      ...data,
+      treinos: data.treinos || {},
+      refeicoes: Array.isArray(data.refeicoes) ? data.refeicoes : [],
+      metas: data.metas || METAS_DIARIAS,
+    }
+    const precisaAtualizar = !data.treinos || !Array.isArray(data.refeicoes) || !data.metas
+    if (precisaAtualizar) await setDoc(USER_CONFIG(uid), normalizado)
+    return
+  }
   await setDoc(USER_CONFIG(uid), {
     onboardingConcluido: false,
     criadoEm: new Date().toISOString(),
