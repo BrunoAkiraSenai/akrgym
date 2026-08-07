@@ -490,14 +490,17 @@ export default function Evolucao() {
   }
 
   return (
-    <div ref={pageRef} className="flex flex-col gap-3 pt-2 pb-4">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-xl font-bold tracking-tight text-white">Evolução</h1>
-        <BarChart3 size={18} className="text-cyan-400" />
-      </div>
+    <div ref={pageRef} className="evolution-page flex flex-col gap-3 pt-2 pb-4">
+      <header className="evolution-header">
+        <div><p className="home-kicker">Dados que mostram seu trabalho</p><h1 className="text-2xl font-bold tracking-tight text-white">Sua evolução</h1><p>Entenda o que está avançando e onde ajustar a próxima sessão.</p></div>
+        <div className="evolution-header-mark" aria-hidden="true"><BarChart3 size={18} /></div>
+      </header>
 
-      <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-1 flex">
+      <div className="evolution-tabs" role="tablist" aria-label="Visões da evolução">
         <button
+          type="button"
+          role="tab"
+          aria-selected={aba === 'treino'}
           onClick={() => setAba('treino')}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
             aba === 'treino' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'
@@ -506,6 +509,9 @@ export default function Evolucao() {
           Dashboard & Gráficos
         </button>
         <button
+          type="button"
+          role="tab"
+          aria-selected={aba === 'corporal'}
           onClick={() => { setAba('corporal'); if (medidas.length === 0) carregarMedidas() }}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
             aba === 'corporal' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'
@@ -515,7 +521,7 @@ export default function Evolucao() {
         </button>
       </div>
 
-      {erro && <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
+      {erro && <div className="evolution-feedback" role="alert"><span>{erro}</span><button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso"><X size={14} /></button></div>}
 
       {aba === 'treino' ? (
         <>
@@ -738,12 +744,12 @@ export default function Evolucao() {
                     </defs>
                     {chartDims.yTicks.map(t => (
                       <g key={t.value}>
-                        <line x1={PAD.left} y1={t.y} x2={chartDims.w - PAD.right} y2={t.y} stroke="#1a1a1a" strokeWidth="1" />
-                        <text x={PAD.left - 8} y={t.y + 3} textAnchor="end" fill="#525252" fontSize="10" fontFamily="Inter, sans-serif">{t.value}</text>
+                        <line x1={PAD.left} y1={t.y} x2={chartDims.w - PAD.right} y2={t.y} stroke="var(--chart-grid)" strokeWidth="1" />
+                        <text x={PAD.left - 8} y={t.y + 3} textAnchor="end" fill="var(--chart-muted)" fontSize="10" fontFamily="Inter, sans-serif">{t.value}</text>
                       </g>
                     ))}
                     {chartDims.points.map((p, i) => (
-                      <text key={`l-${i}`} x={p.x} y={H - 8} textAnchor="middle" fill="#525252" fontSize="9" fontFamily="Inter, sans-serif">
+                      <text key={`l-${i}`} x={p.x} y={H - 8} textAnchor="middle" fill="var(--chart-muted)" fontSize="9" fontFamily="Inter, sans-serif">
                         {p.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                       </text>
                     ))}
@@ -756,7 +762,7 @@ export default function Evolucao() {
                         className="cursor-pointer" />
                     ))}
                     {chartDims.points.map((p, i) => (
-                      <circle key={i} cx={p.x} cy={p.y} r={tooltip === i ? 7 : 5} fill="#07050c" stroke={graficoMetrica === 'carga' ? brandColor : accentColor}
+                      <circle key={i} cx={p.x} cy={p.y} r={tooltip === i ? 7 : 5} fill="var(--chart-fill)" stroke={graficoMetrica === 'carga' ? brandColor : accentColor}
                         strokeWidth="2.5" className="cursor-pointer transition-all"
                         style={{ filter: `drop-shadow(0 0 4px ${brandColor}66)`, transition: 'r 150ms ease-out' }} />
                     ))}
@@ -818,13 +824,13 @@ export default function Evolucao() {
                     })}
                   </div>
                   {dadosTreino.length > limiteRegistros && (
-                    <button onClick={() => setLimiteRegistros(p => p + 5)}
+                    <button type="button" onClick={() => setLimiteRegistros(p => p + 5)}
                       className="btn-secondary w-full py-2 text-xs mt-2">
                       Carregar mais ({dadosTreino.length - limiteRegistros} restantes)
                     </button>
                   )}
                   {lastTreinoDoc && (
-                    <button onClick={carregarMaisTreinos} disabled={carregandoMaisTreinos}
+                    <button type="button" onClick={carregarMaisTreinos} disabled={carregandoMaisTreinos}
                       className="btn-secondary flex w-full items-center justify-center gap-2 py-2 text-xs mt-1">
                       <RefreshCw size={13} className={carregandoMaisTreinos ? 'animate-spin' : ''} />
                       {carregandoMaisTreinos ? 'Carregando...' : 'Carregar mais treinos'}
@@ -843,7 +849,7 @@ export default function Evolucao() {
                 <Activity size={12} className="text-cyan-400" /> {editandoId ? 'Editar Medida' : 'Novo Registro'}
               </span>
               {editandoId && (
-                <button onClick={cancelarEdicao}
+                <button type="button" onClick={cancelarEdicao}
                   className="text-neutral-500 hover:text-white flex items-center gap-1 text-xs transition-all active:scale-90">
                   <X size={14} /> Cancelar
                 </button>
@@ -865,8 +871,8 @@ export default function Evolucao() {
                 </div>
               ))}
             </div>
-            <button onClick={registrarMedida} disabled={savingMedida || CAMPOS_MEDIDA.some(c => novaMedida[c.key] === '')}
-              className="w-full flex items-center justify-center gap-2 btn-primary w-full py-3 flex items-center justify-center gap-2">
+            <button type="button" onClick={registrarMedida} disabled={savingMedida || CAMPOS_MEDIDA.some(c => novaMedida[c.key] === '')}
+              className="btn-primary w-full flex items-center justify-center gap-2 py-3">
               {savingMedida ? <><Save size={16} className="animate-spin" /> Salvando...</>
               : <><Save size={16} /> {editandoId ? 'Atualizar Medida' : 'Registrar Medidas'}</>}
             </button>
@@ -878,7 +884,7 @@ export default function Evolucao() {
               { key: 'mes', label: 'Mês' },
               { key: 'tudo', label: 'Tudo' },
             ].map(p => (
-              <button key={p.key} onClick={() => setFiltroPeriodo(p.key)}
+              <button type="button" key={p.key} onClick={() => setFiltroPeriodo(p.key)}
                 className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${filtroPeriodo === p.key ? 'tab-active bg-emerald-500/10' : 'text-neutral-500 hover:text-neutral-300'}`}>
                 {p.label}
               </button>
@@ -991,19 +997,19 @@ export default function Evolucao() {
                     </defs>
                     {yTicks.map(t => (
                       <g key={t.valor}>
-                        <line x1={gPad.left} y1={t.y} x2={gW - gPad.right} y2={t.y} stroke="#1a1a1a" strokeWidth="1" />
-                        <text x={gPad.left - 6} y={t.y + 3} textAnchor="end" fill="#525252" fontSize="9" fontFamily="Inter, sans-serif">{t.valor}</text>
+                        <line x1={gPad.left} y1={t.y} x2={gW - gPad.right} y2={t.y} stroke="var(--chart-grid)" strokeWidth="1" />
+                        <text x={gPad.left - 6} y={t.y + 3} textAnchor="end" fill="var(--chart-muted)" fontSize="9" fontFamily="Inter, sans-serif">{t.valor}</text>
                       </g>
                     ))}
                     {pontos.map((p, i) => (
-                      <text key={`xl-${i}`} x={p.x} y={gH - 6} textAnchor="middle" fill="#525252" fontSize="8" fontFamily="Inter, sans-serif">
+                      <text key={`xl-${i}`} x={p.x} y={gH - 6} textAnchor="middle" fill="var(--chart-muted)" fontSize="8" fontFamily="Inter, sans-serif">
                         {p.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                       </text>
                     ))}
                     <polyline fill="none" stroke={accentColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
                       filter="url(#m-glow)" points={pontos.map(p => `${p.x},${p.y}`).join(' ')} />
                     {pontos.map((p, i) => (
-                      <circle key={i} cx={p.x} cy={p.y} r="4" fill="#07050c" stroke={accentColor} strokeWidth="2"
+                      <circle key={i} cx={p.x} cy={p.y} r="4" fill="var(--chart-fill)" stroke={accentColor} strokeWidth="2"
                         style={{ filter: `drop-shadow(0 0 3px ${accentColor}66)` }} />
                     ))}
                   </svg>
@@ -1052,14 +1058,14 @@ export default function Evolucao() {
                           <td key={c.key} className="text-center text-white font-mono py-2 px-1">{m[c.key]}</td>
                         ))}
                         <td className="text-right py-2 pl-2 whitespace-nowrap">
-                          <button onClick={() => editarMedida(m)}
+                          <button type="button" onClick={() => editarMedida(m)} aria-label={`Editar medida de ${m.data.toLocaleDateString('pt-BR')}`}
                             className="text-amber-400/70 hover:text-amber-400 p-1.5 transition-all active:scale-90">
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => deletarMedida(
+                          <button type="button" onClick={() => deletarMedida(
                             m.id,
                             m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                          )} className="icon-hover text-red-400/70 p-1.5">
+                          )} aria-label={`Excluir medida de ${m.data.toLocaleDateString('pt-BR')}`} className="icon-hover text-red-400/70 p-1.5">
                             <Trash size={14} />
                           </button>
                         </td>
@@ -1077,14 +1083,14 @@ export default function Evolucao() {
                         {m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                       </span>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => editarMedida(m)}
+                        <button type="button" onClick={() => editarMedida(m)} aria-label={`Editar medida de ${m.data.toLocaleDateString('pt-BR')}`}
                           className="text-amber-400/70 hover:text-amber-400 p-1.5 transition-all active:scale-90">
                           <Pencil size={14} />
                         </button>
-                        <button onClick={() => deletarMedida(
+                        <button type="button" onClick={() => deletarMedida(
                           m.id,
                           m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                        )} className="icon-hover text-red-400/70 p-1.5">
+                        )} aria-label={`Excluir medida de ${m.data.toLocaleDateString('pt-BR')}`} className="icon-hover text-red-400/70 p-1.5">
                           <Trash size={14} />
                         </button>
                       </div>
@@ -1104,7 +1110,7 @@ export default function Evolucao() {
           )}
 
           {lastCorporalDoc && (
-            <button onClick={carregarMaisCorporais} disabled={carregandoMaisCorporais}
+            <button type="button" onClick={carregarMaisCorporais} disabled={carregandoMaisCorporais}
               className="btn-secondary w-full py-2 text-xs">
               {carregandoMaisCorporais ? 'Carregando...' : 'Carregar mais medidas'}
             </button>

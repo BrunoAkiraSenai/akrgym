@@ -1354,3 +1354,36 @@ img, svg, video, canvas { max-width: 100%; }
   .settings-ai-button { padding-inline: 0.55rem; }
   .settings-ai-button span { display: none; }
 }
+
+/* ============================================================
+   EVOLUÇÃO — leitura de progresso sem ruído
+   ============================================================ */
+.evolution-page { --chart-grid: rgba(255,255,255,0.08); --chart-muted: #626262; --chart-fill: var(--bg-deep); }
+.evolution-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.evolution-header h1 { margin: 0; }
+.evolution-header p:last-child { margin: 0.4rem 0 0; color: var(--text-secondary); font-size: 0.72rem; line-height: 1.45; }
+.evolution-header-mark { display: grid; width: 2.75rem; height: 2.75rem; flex-shrink: 0; place-items: center; border: 1px solid rgba(var(--brand-rgb),0.30); border-radius: 0.9rem; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.10); }
+.evolution-tabs { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.3rem; border: 1px solid var(--border-subtle); border-radius: 1rem; padding: 0.3rem; background: rgba(255,255,255,0.025); }
+.evolution-tabs button { min-height: 2.7rem; cursor: pointer; }
+.evolution-tabs button:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }
+.evolution-feedback { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; min-height: 2.75rem; border: 1px solid rgba(239,68,68,0.24); border-radius: 0.85rem; padding: 0.7rem 0.8rem; color: #f87171; background: rgba(239,68,68,0.08); font-size: 0.7rem; font-weight: 650; }
+.evolution-feedback span { min-width: 0; }
+.evolution-feedback button { display: grid; width: 2rem; height: 2rem; flex-shrink: 0; place-items: center; color: currentColor; cursor: pointer; }
+.evolution-feedback button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.evolution-page input[type="search"], .evolution-page input[type="number"], .evolution-page input[type="date"], .evolution-page select { min-height: 2.8rem; }
+.evolution-page input:focus-visible, .evolution-page select:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }
+.evolution-page .card-premium { overflow: hidden; }
+.evolution-page .card-premium svg { max-width: 100%; }
+.evolution-page .card-premium > .section-label { min-height: 0.85rem; }
+.evolution-page .card-premium button:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }
+.evolution-page table button { min-width: 2.4rem; min-height: 2.4rem; }
+
+[data-theme="lava"] .evolution-page { --chart-grid: rgba(106,61,43,0.14); --chart-muted: #8b7065; --chart-fill: #fffaf7; }
+[data-theme="lava"] .evolution-tabs { background: rgba(106,61,43,0.045); }
+
+@media (max-width: 420px) {
+  .evolution-header h1 { max-width: 15rem; }
+  .evolution-header p:last-child { max-width: 16rem; }
+  .evolution-page .grid.grid-cols-3 { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .evolution-page .grid.grid-cols-3 > :last-child { grid-column: 1 / -1; }
+}
