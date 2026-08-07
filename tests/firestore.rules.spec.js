@@ -86,6 +86,11 @@ describe('AkrGym Firestore Rules', () => {
         })
       )
     })
+
+    it('caminho de usuário não reconhecido é bloqueado', async () => {
+      const db = authedDb(ALICE)
+      await assertFails(db.doc(`users/${ALICE}/colecao_desconhecida/documento`).set({ valor: true }))
+    })
   })
 
   describe('config/data', () => {
