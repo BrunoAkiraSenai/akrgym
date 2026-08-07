@@ -48,3 +48,6 @@ keys/
 # === Documentação local (sensível) ===
 SECRETS.md
 NOTES_PRIVATE.md
+
+# === Credenciais locais do projeto (NUNCA commitar) ===
+token/
