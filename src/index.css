@@ -602,6 +602,18 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--brand); outline-
 
 .theme-swatch-dots { display: flex; gap: 4px; margin-bottom: 6px; }
 .theme-swatch-dot { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 6px currentColor; }
+.theme-swatch-preview {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  border-radius: 0.65rem;
+  overflow: hidden;
+}
+.theme-swatch-preview-dot { width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
+.theme-swatch-preview-line { width: 30px; height: 4px; border-radius: 999px; opacity: 0.8; }
 
 @layer base { html { font-family: var(--font-body); -webkit-tap-highlight-color: transparent; } }
 
@@ -891,3 +903,179 @@ img, svg, video, canvas { max-width: 100%; }
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* ============================================================
+   TEMA "LAVA" — variação clara
+   Mantém o laranja queimado e o vermelho como acentos, mas troca
+   a superfície inteira para porcelana clara com texto café escuro.
+   ============================================================ */
+[data-theme="lava"] {
+  --text: var(--text-primary);
+  --text-muted: var(--text-secondary);
+  --border-strong: rgba(106, 61, 43, 0.24);
+  color-scheme: light;
+}
+
+[data-theme="lava"] body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+}
+
+[data-theme="lava"] body::before {
+  background:
+    radial-gradient(ellipse 70% 50% at 10% 20%, rgba(var(--brand-rgb), 0.10) 0%, transparent 62%),
+    radial-gradient(ellipse 60% 45% at 90% 10%, rgba(var(--highlight-rgb), 0.10) 0%, transparent 58%),
+    radial-gradient(ellipse 65% 55% at 50% 100%, rgba(var(--accent-rgb), 0.06) 0%, transparent 62%);
+  animation-duration: 32s;
+}
+
+[data-theme="lava"] body::after {
+  background-image:
+    linear-gradient(rgba(106, 61, 43, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(106, 61, 43, 0.035) 1px, transparent 1px);
+  background-size: 76px 76px;
+  opacity: 0.65;
+}
+
+[data-theme="lava"] .card-premium,
+[data-theme="lava"] .glass-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 12px 30px rgba(83, 46, 30, 0.08), 0 1px 2px rgba(83, 46, 30, 0.06);
+}
+
+[data-theme="lava"] .card-premium::before,
+[data-theme="lava"] .glass-card::before {
+  opacity: 0.18;
+}
+
+[data-theme="lava"] .card-premium:hover,
+[data-theme="lava"] .glass-card:hover {
+  border-color: rgba(var(--brand-rgb), 0.35);
+  box-shadow: 0 16px 34px rgba(83, 46, 30, 0.12), 0 0 0 3px rgba(var(--brand-rgb), 0.06);
+}
+
+[data-theme="lava"] h1,
+[data-theme="lava"] h2,
+[data-theme="lava"] h3,
+[data-theme="lava"] h4,
+[data-theme="lava"] h5,
+[data-theme="lava"] h6,
+[data-theme="lava"] .heading-xl,
+[data-theme="lava"] .heading-lg,
+[data-theme="lava"] .heading-md {
+  background: none !important;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  color: var(--text-primary) !important;
+  text-shadow: none;
+}
+
+[data-theme="lava"] .btn-secondary {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(106, 61, 43, 0.16);
+  color: #694d41;
+  box-shadow: 0 2px 8px rgba(83, 46, 30, 0.05);
+}
+
+[data-theme="lava"] .btn-secondary:hover {
+  background: #ffffff;
+  border-color: rgba(var(--brand-rgb), 0.42);
+  color: #3d241b;
+  box-shadow: 0 8px 18px rgba(83, 46, 30, 0.10);
+}
+
+[data-theme="lava"] .btn-primary,
+[data-theme="lava"] .btn-premium {
+  color: #fffaf6;
+  box-shadow: 0 8px 18px rgba(126, 52, 25, 0.20);
+}
+
+[data-theme="lava"] input,
+[data-theme="lava"] textarea,
+[data-theme="lava"] select {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(106, 61, 43, 0.16);
+  color: var(--text-primary);
+  color-scheme: light;
+}
+
+[data-theme="lava"] input::placeholder,
+[data-theme="lava"] textarea::placeholder {
+  color: #a58b80;
+}
+
+[data-theme="lava"] select option {
+  background: #ffffff;
+  color: #2b1a15;
+}
+
+[data-theme="lava"] .aether-nav {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(106, 61, 43, 0.14);
+  box-shadow: 0 -8px 28px rgba(83, 46, 30, 0.10);
+}
+
+[data-theme="lava"] .aether-nav-indicator {
+  background: linear-gradient(135deg, rgba(var(--brand-rgb), 0.12), rgba(var(--highlight-rgb), 0.10));
+  border-color: rgba(var(--brand-rgb), 0.24);
+  box-shadow: 0 4px 12px rgba(var(--brand-rgb), 0.12);
+}
+
+[data-theme="lava"] .theme-swatch {
+  border-color: rgba(106, 61, 43, 0.13);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+[data-theme="lava"] .theme-swatch:hover {
+  border-color: rgba(var(--brand-rgb), 0.35);
+  background: #ffffff;
+}
+
+[data-theme="lava"] .section-label,
+[data-theme="lava"] .section-label--muted {
+  color: var(--text-primary) !important;
+}
+
+/* Ajusta as utilities mais usadas pelas páginas, que foram escritas
+   para o modo escuro original. */
+[data-theme="lava"] [class~="text-white"] { color: var(--text-primary) !important; }
+[data-theme="lava"] [class~="text-white/60"] { color: rgba(43, 26, 21, 0.64) !important; }
+[data-theme="lava"] [class~="text-white/50"] { color: rgba(43, 26, 21, 0.54) !important; }
+[data-theme="lava"] [class~="text-white/30"] { color: rgba(43, 26, 21, 0.38) !important; }
+[data-theme="lava"] [class~="text-neutral-200"] { color: #3d2921 !important; }
+[data-theme="lava"] [class~="text-neutral-300"] { color: #513a30 !important; }
+[data-theme="lava"] [class~="text-neutral-400"] { color: #6d5146 !important; }
+[data-theme="lava"] [class~="text-neutral-500"] { color: #806558 !important; }
+[data-theme="lava"] [class~="text-neutral-600"] { color: #967b6f !important; }
+[data-theme="lava"] [class~="text-neutral-700"] { color: #ad9489 !important; }
+[data-theme="lava"] [class~="text-emerald-400"] { color: #087f5b !important; }
+[data-theme="lava"] [class~="text-cyan-400"] { color: #087f91 !important; }
+[data-theme="lava"] [class~="text-red-400"] { color: #b42318 !important; }
+[data-theme="lava"] [class~="text-amber-400"],
+[data-theme="lava"] [class~="text-yellow-400"] { color: #9a5a00 !important; }
+
+[data-theme="lava"] [class~="bg-neutral-900"],
+[data-theme="lava"] [class~="bg-neutral-900/50"],
+[data-theme="lava"] [class~="bg-neutral-900/70"] { background-color: rgba(255, 255, 255, 0.68) !important; }
+[data-theme="lava"] [class~="bg-neutral-800"] { background-color: #eee8e4 !important; }
+[data-theme="lava"] [class~="bg-neutral-700"] { background-color: #e4d9d3 !important; }
+[data-theme="lava"] [class~="bg-[#07050c]"] { background-color: var(--bg-deep) !important; }
+[data-theme="lava"] [class~="bg-[#110e19]"] { background-color: #fffaf7 !important; }
+[data-theme="lava"] [class~="bg-black/20"],
+[data-theme="lava"] [class~="bg-black/30"] { background-color: rgba(106, 61, 43, 0.055) !important; }
+[data-theme="lava"] [class~="border-white/5"] { border-color: rgba(106, 61, 43, 0.10) !important; }
+[data-theme="lava"] [class~="border-white/10"],
+[data-theme="lava"] [class~="border-white/15"] { border-color: rgba(106, 61, 43, 0.16) !important; }
+[data-theme="lava"] [class~="bg-white/5"] { background-color: rgba(106, 61, 43, 0.04) !important; }
+[data-theme="lava"] [class~="bg-white/8"],
+[data-theme="lava"] [class~="bg-white/10"] { background-color: rgba(106, 61, 43, 0.07) !important; }
+[data-theme="lava"] [class~="bg-white/20"] { background-color: rgba(106, 61, 43, 0.12) !important; }
+[data-theme="lava"] [class~="hover:bg-white/8"]:hover { background-color: rgba(106, 61, 43, 0.07) !important; }
+
+[data-theme="lava"] .skeleton {
+  background: linear-gradient(90deg, rgba(106, 61, 43, 0.06) 25%, rgba(106, 61, 43, 0.12) 50%, rgba(106, 61, 43, 0.06) 75%);
+}
+
+[data-theme="lava"] ::-webkit-scrollbar-track { background: rgba(106, 61, 43, 0.06); }
+[data-theme="lava"] ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(var(--brand-rgb), 0.52), rgba(var(--accent-rgb), 0.42)); }

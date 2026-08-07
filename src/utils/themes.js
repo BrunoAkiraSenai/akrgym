@@ -104,6 +104,7 @@ export const THEMES = [
     highlightHex: desaturate('#d946ef'),
     bgDeep: '#07050c',
     bgCard: 'rgba(16, 12, 26, 0.55)',
+    previewBg: '#07050c',
     textSecondary: '#a89db5',
   },
   {
@@ -116,6 +117,7 @@ export const THEMES = [
     highlightHex: desaturate('#f0c75e'),
     bgDeep: '#050807',
     bgCard: 'rgba(10, 18, 14, 0.55)',
+    previewBg: '#050807',
     textSecondary: '#9ca3af',
   },
   {
@@ -128,23 +130,31 @@ export const THEMES = [
     highlightHex: desaturate('#2dd4bf'),
     bgDeep: '#050709',
     bgCard: 'rgba(10, 14, 20, 0.55)',
+    previewBg: '#050709',
     textSecondary: '#9ca3af',
   },
   {
     id: 'lava',
-    name: 'Lava',
+    name: 'Claro',
     emoji: '🟠',
+    mode: 'light',
     brand: M(orange),
     accent: M(red),
     accent2Hex: desaturate('#f59e0b'),
     highlightHex: desaturate('#fbbf24'),
-    bgDeep: '#0a0605',
-    bgCard: 'rgba(20, 12, 8, 0.55)',
-    textSecondary: '#9ca3af',
+    bgDeep: '#f4f5f3',
+    bgCard: 'rgba(255, 255, 255, 0.82)',
+    bgCardSolid: '#ffffff',
+    previewBg: '#f4f5f3',
+    borderSubtle: 'rgba(106, 61, 43, 0.14)',
+    textPrimary: '#2b1a15',
+    textSecondary: '#765c50',
+    textAccent: '#a94321',
+    textGold: '#9a5a00',
   },
   {
     id: 'original',
-    name: 'Original',
+    name: 'Escuro',
     emoji: '🎯',
     brand: emerald,
     accent: cyan,
@@ -152,6 +162,7 @@ export const THEMES = [
     highlightHex: '#f59e0b',
     bgDeep: '#050505',
     bgCard: 'rgba(23, 23, 23, 0.5)',
+    previewBg: '#050505',
     textSecondary: '#a3a3a3',
   },
 ]
@@ -176,9 +187,15 @@ function themeToVars(theme) {
   vars['--gold'] = theme.highlightHex
   vars['--text-accent'] = theme.brand[400]
   vars['--text-gold'] = theme.highlightHex
-  if (theme.bgDeep) vars['--bg-deep'] = theme.bgDeep
-  if (theme.bgCard) vars['--bg-card'] = theme.bgCard
-  if (theme.textSecondary) vars['--text-secondary'] = theme.textSecondary
+  vars['--bg-deep'] = theme.bgDeep || '#07050c'
+  vars['--bg-card'] = theme.bgCard || 'rgba(16, 12, 26, 0.55)'
+  vars['--bg-card-solid'] = theme.bgCardSolid || '#0c0a16'
+  vars['--border-subtle'] = theme.borderSubtle || 'rgba(255, 255, 255, 0.07)'
+  vars['--text-primary'] = theme.textPrimary || '#ffffff'
+  vars['--text-secondary'] = theme.textSecondary || '#a89db5'
+  vars['--text-accent'] = theme.textAccent || theme.brand[400]
+  vars['--text-gold'] = theme.textGold || theme.highlightHex
+  vars['--color-scheme'] = theme.mode === 'light' ? 'light' : 'dark'
   const shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
   shades.forEach((s) => {
     vars[`--color-emerald-${s}`] = theme.brand[s]
@@ -195,6 +212,7 @@ export function applyTheme(themeId) {
     root.style.setProperty(key, value)
   })
   root.setAttribute('data-theme', theme.id)
+  root.style.colorScheme = theme.mode === 'light' ? 'light' : 'dark'
   localStorage.setItem(STORAGE_KEY, themeId)
   window.dispatchEvent(new CustomEvent('themechange', { detail: themeId }))
 }

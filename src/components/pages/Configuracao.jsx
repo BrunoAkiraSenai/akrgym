@@ -227,6 +227,17 @@ export default function Configuracao({ abaInicial }) {
               className={`theme-swatch ${themeId === t.id ? 'active' : ''}`}
               title={t.name}
             >
+              <div
+                className="theme-swatch-preview"
+                style={{
+                  background: t.previewBg || t.bgDeep,
+                  color: t.mode === 'light' ? '#2b1a15' : '#ffffff',
+                  boxShadow: `inset 0 0 0 1px ${t.brand[500]}44`,
+                }}
+              >
+                <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
+                <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
+              </div>
               <div className="theme-swatch-dots justify-center">
                 <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
                 <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
