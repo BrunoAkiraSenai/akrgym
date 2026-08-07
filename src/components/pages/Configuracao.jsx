@@ -382,7 +382,7 @@ export default function Configuracao({ abaInicial }) {
         </section>
       )}
 
-      <div className="settings-footer"><button type="button" onClick={() => signOut(auth)} className="settings-logout"><LogOut size={15} /> Sair da conta</button><span>AkrGym v{import.meta.env.VITE_APP_VERSION || '3.1'} · {new Date().getFullYear()}</span></div>
+      <div className="settings-footer"><button type="button" onClick={() => signOut(auth)} className="settings-logout"><LogOut size={15} /> Sair da conta</button><span>AkrGym v{import.meta.env.VITE_APP_VERSION || '3.2'} · {new Date().getFullYear()}</span></div>
     </div>
   )
 }

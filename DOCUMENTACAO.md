@@ -232,7 +232,7 @@ AkrGym é um **aplicativo pessoal de academia e nutrição** focado em simplicid
   - Adicionar / excluir refeição.
   - Botão **Salvar Tudo**.
 - **Sair da conta** (`signOut(auth)`).
-- **Footer**: `AkrGym v3.1 · {ano}`.
+- **Footer**: `AkrGym v3.2 · {ano}`.
 
 ### 🔐 Login (`Login.jsx`)
 - 2 modos: `entrar` / `cadastrar`.
@@ -245,7 +245,7 @@ AkrGym é um **aplicativo pessoal de academia e nutrição** focado em simplicid
 ### 🪄 Onboarding Wizard (`OnboardingWizard.jsx`)
 - 3 opções iniciais:
   1. **Plano Recomendado** (Opção A): wizard 3 etapas — `experiencia` (iniciante/intermediário/avançado) → `objetivo` (perder peso/ganhar massa/manter saúde) → `revisao` com totais e confirmação.
-  2. **Começar do Zero** (Opção B): apenas marca `onboardingConcluido = true`.
+  2. **Começar do Zero** (Opção B): cria uma configuração vazia válida (`treinos`, `refeicoes` e `metas`) e marca `onboardingConcluido = true`.
   3. **Treino e Dieta do Akr** (Opção C): copia `PROTOCOLO_BASE` e `REFEICOES` do `config/`, sem dados pessoais.
 - Cada template (`iniciante` / `intermediario` / `avançado`) traz 3 divisões (Upper A, Lower, Upper B) com exercícios e metarreps pré-definidas.
 - Cada objetivo define metas calóricas e lista de refeições padrão.
@@ -459,6 +459,9 @@ npm run dev
 | `build` | `vite build` | Gera bundle de produção em `dist/` |
 | `preview` | `vite preview` | Serve `dist/` localmente para teste |
 | `lint` | `eslint .` | Roda ESLint no projeto todo |
+| `test` | `npm run test:unit` | Executa os testes unitários puros |
+| `test:unit` | `node --test tests/*.unit.spec.js` | Valida regras de cálculo e sanitização sem serviços externos |
+| `test:rules` | `firebase emulators:exec --only firestore ...` | Executa os testes das regras no emulador Firestore (Java 17+) |
 | `deploy` | `npm run build && GOOGLE_APPLICATION_CREDENTIALS=/home/akira/akrgym/keys/akrgym-service-account.json firebase deploy --only hosting --project akrgym` | Build + deploy apenas de hosting (sem functions) |
 
 > ⚠️ O caminho de `GOOGLE_APPLICATION_CREDENTIALS` em `package.json` é **específico desta máquina**. Em outro ambiente, ajuste ou use `firebase login` + `firebase use akrgym` antes do deploy.
@@ -972,10 +975,10 @@ Dessa forma, classes como `bg-emerald-500`, `text-cyan-400` e `border-emerald-50
 | `roxo-suave` | Roxo Suave | 🟣 | Roxo (desaturado) | Indigo (desaturado) | Rosa (desaturado) | `#07050c` |
 | `esmeralda` | Esmeralda | 🟢 | Emerald (desaturado) | Cyan (desaturado) | Dourado (desaturado) | `#050807` |
 | `oceano` | Oceano | 🔵 | Blue (desaturado) | Sky (desaturado) | Teal (desaturado) | `#050709` |
-| `lava` | Lava | 🟠 | Orange (desaturado) | Red (desaturado) | Âmbar (desaturado) | `#0a0605` |
-| `original` | Original | 🎯 | Emerald (vivo) | Cyan (vivo) | Laranja (vivo) | `#050505` |
+| `lava` | Claro | 🟠 | Orange (desaturado) | Red (desaturado) | Âmbar (desaturado) | `#f4f5f3` |
+| `original` | Escuro | 🎯 | Emerald (vivo) | Cyan (vivo) | Laranja (vivo) | `#050505` |
 
-Todos os temas "não-Original" passam por uma função `desaturate(hex, 0.45, 0.04)` que remove ~45 % da saturação e escurece levemente para o modo escuro ficar elegante.
+Os temas escuros passam por uma função `desaturate(hex, 0.45, 0.04)` que remove ~45 % da saturação e escurece levemente. O tema `lava` é a variação clara, com superfícies porcelana e texto café escuro.
 
 ### Função `themeToVars(theme)`
 
@@ -1798,8 +1801,8 @@ Chaves usadas:
 - **Sem CSP** (Content Security Policy) configurado no Hosting — recomendado adicionar.
 - **Sem rate limit server-side** nas chamadas Gemini além do cache e rate-limit client-side.
 - **Anônimo não consegue login Google em popup**: a migração pode ser imperfeita em alguns cenários.
-- **Sem testes automatizados** (Vitest/Playwright).
-- **Sem CI/CD** (deploy manual).
+- **Testes de interface ainda não cobrem todos os fluxos** (Playwright permanece recomendado).
+- **CI configurado** para lint, testes unitários, regras Firestore e build; o deploy continua manual por segurança.
 - **iOS Splash e ícones gerados por script custom** (sem `capacitor-assets` ou `@vite-pwa/assets-generator`).
 
 ### Roadmap sugerido
@@ -1807,14 +1810,14 @@ Chaves usadas:
 - [ ] Adicionar **CSP** no `firebase.json` headers.
 - [ ] Adicionar **Open Graph / Twitter Card** meta tags.
 - [ ] Migrar Gemini para **Cloud Function** (quando migrar para Blaze).
-- [ ] Adicionar **Vitest** para testes unitários de `calcularTotais`, `parseMetaTeto`, `tempoRelativo`.
+- [x] Adicionar testes unitários para `parseMetaTeto`, `epley1RM`, `volumePorTreino`, `diasDesde`, `formatarVolume` e validações.
 - [ ] Adicionar **Playwright** para testes e2e de login + treino + dieta.
-- [ ] Adicionar **GitHub Actions** para CI: lint + build + preview channel em PRs.
+- [x] Adicionar **GitHub Actions** para CI: lint + testes + regras Firestore + build.
 - [ ] Suporte a **foto de refeição** (via Capacitor Camera ou `<input type="file" capture>`).
 - [ ] **Notificações push** (Firebase Cloud Messaging) para lembretes de treino/refeição.
 - [ ] **Exportar dados** (JSON ou CSV) para backup local.
 - [ ] **Compartilhar treino** (gerar link público de uma sessão específica).
-- [ ] **Modo escuro/claro** (atualmente só dark).
+- [x] **Modo escuro/claro** (`Original` = Escuro, `Lava` = Claro).
 
 ---
 
@@ -1831,7 +1834,7 @@ Chaves usadas:
 
 1. Editar `src/config/dieta.js` ou `src/config/protocolo.js` (defaults).
 2. Adicionar input no `Configuracao.jsx`.
-3. Atualizar `firestore.rules` (a regra atual exige `metas`, `refeicoes`, `treinos` — qualquer outro campo pode ser adicionado livremente desde que esses 3 existam).
+  3. Atualizar `firestore.rules` (a regra exige `metas`, `refeicoes` e `treinos`; caminhos de coleções desconhecidas são bloqueados).
 4. Ler o campo em outras páginas via `getDoc(doc(db, 'users', uid, 'config', 'data'))`.
 
 ### Como mudar a chave Gemini sem deploy?
