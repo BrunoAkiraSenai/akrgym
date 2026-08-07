@@ -1802,7 +1802,7 @@ Chaves usadas:
 - **Sem rate limit server-side** nas chamadas Gemini além do cache e rate-limit client-side.
 - **Anônimo não consegue login Google em popup**: a migração pode ser imperfeita em alguns cenários.
 - **Testes de interface ainda não cobrem todos os fluxos** (Playwright permanece recomendado).
-- **CI configurado** para lint, testes unitários, regras Firestore e build; o deploy continua manual por segurança.
+- **CI/CD configurado**: validação em pull requests e deploy do Hosting na `main`; o secret `FIREBASE_SERVICE_ACCOUNT_AKRGYM` precisa existir no GitHub.
 - **iOS Splash e ícones gerados por script custom** (sem `capacitor-assets` ou `@vite-pwa/assets-generator`).
 
 ### Roadmap sugerido
@@ -1813,6 +1813,7 @@ Chaves usadas:
 - [x] Adicionar testes unitários para `parseMetaTeto`, `epley1RM`, `volumePorTreino`, `diasDesde`, `formatarVolume` e validações.
 - [ ] Adicionar **Playwright** para testes e2e de login + treino + dieta.
 - [x] Adicionar **GitHub Actions** para CI: lint + testes + regras Firestore + build.
+- [x] Configurar **deploy contínuo do Hosting** pela branch `main` usando secret do GitHub.
 - [ ] Suporte a **foto de refeição** (via Capacitor Camera ou `<input type="file" capture>`).
 - [ ] **Notificações push** (Firebase Cloud Messaging) para lembretes de treino/refeição.
 - [ ] **Exportar dados** (JSON ou CSV) para backup local.
