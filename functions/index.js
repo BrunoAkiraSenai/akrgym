@@ -63,6 +63,11 @@ const TEXT_MAX_CHARS = 500
 const TEXT_MIN_CHARS = 3
 const RATE_LIMIT_PER_MIN = 10
 const ACTIVE_REQUEST_TIMEOUT_MS = 15_000
+const NON_FOOD_TERMS = [
+  'cadeira', 'gamer', 'mesa', 'computador', 'notebook', 'celular', 'telefone',
+  'teclado', 'mouse', 'monitor', 'televisao', 'sofa', 'cama', 'carro', 'moto',
+  'academia', 'treino', 'exercicio',
+]
 
 // Rate limit em memória (por UID). Simples e suficiente para um app pessoal.
 // Em escala, migrar para Firestore com TTL ou Cloud Memorystore.
@@ -128,9 +133,11 @@ function getAllowedOrigin(req) {
 const PROMPT = `Você é um assistente de nutrição focado estritamente em alimentos do Brasil.
 Use como referência prioritária as tabelas TACO (Unicamp) e TBCA (USP).
 Estime porções típicas de restaurantes brasileiros quando relevante.
+Analise somente alimentos, bebidas ou ingredientes consumíveis. Objetos, móveis, eletrônicos, exercícios, serviços, pessoas e textos sem relação com alimentação devem ser rejeitados.
 Responda SOMENTE com um objeto JSON puro (sem markdown, sem texto extra), exatamente neste formato:
-{ "kcal": number, "p": number, "c": number, "g": number }
-Todos os valores devem ser inteiros.`
+Para entrada alimentar válida: { "valido": true, "kcal": number, "p": number, "c": number, "g": number }
+Para entrada inválida: { "valido": false, "kcal": 0, "p": 0, "c": 0, "g": 0 }
+Todos os valores devem ser inteiros. Nunca invente macros para entradas inválidas.`
 
 const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }
 const FALLBACK_ERR = { ...FALLBACK, _erro: 'Não foi possível analisar a refeição agora. Tente novamente em alguns minutos.' }
@@ -150,17 +157,23 @@ function validarPayload(body) {
   const trimmed = t.trim()
   if (trimmed.length < TEXT_MIN_CHARS) return `Descrição muito curta (mínimo ${TEXT_MIN_CHARS} caracteres).`
   if (trimmed.length > TEXT_MAX_CHARS) return `Descrição muito longa (máximo ${TEXT_MAX_CHARS} caracteres).`
+  const normalizado = trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  if (NON_FOOD_TERMS.some((termo) => new RegExp(`(^|[^a-z])${termo}(?=[^a-z]|$)`).test(normalizado))) {
+    return 'Digite alimentos ou bebidas para calcular os macros.'
+  }
   return null
 }
 
 function sanitize(parsed, originalText) {
-  // Aceita APENAS os 4 campos numéricos esperados. Tudo mais é descartado.
+  // Aceita apenas a classificação e os 4 campos numéricos esperados.
+  if (parsed?.valido !== true) return null
   const k = Number(parsed.kcal)
   const p = Number(parsed.p)
   const c = Number(parsed.c)
   const g = Number(parsed.g)
   if (![k, p, c, g].every(Number.isFinite)) return null
   if (k < 0 || p < 0 || c < 0 || g < 0) return null
+  if (k === 0 && p === 0 && c === 0 && g === 0) return null
   if (k > 9999 || p > 999 || c > 999 || g > 999) return null
   return {
     nome: originalText.trim(),

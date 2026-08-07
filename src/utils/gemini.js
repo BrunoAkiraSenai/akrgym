@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { NUTRITION_RESULT_ERROR, validarResultadoMacros, validarTextoAlimento } from './nutrition.js'
 
 /**
  * calcularMacrosIA — análise de macros via Gemini.
@@ -17,20 +18,26 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, _erro: null }
 
 export async function calcularMacrosIA(textoAlimentos) {
+  const texto = typeof textoAlimentos === 'string' ? textoAlimentos.trim() : ''
+  const erroDeEntrada = validarTextoAlimento(texto)
+  if (erroDeEntrada) return { ...FALLBACK, nome: texto, _erro: erroDeEntrada }
+
   const key = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY
-  if (!key) return { ...FALLBACK, nome: textoAlimentos.trim(), _erro: 'Chave da API Gemini não configurada. Adicione em Configurações.' }
+  if (!key) return { ...FALLBACK, nome: texto, _erro: 'Chave da API Gemini não configurada. Adicione em Configurações.' }
 
   try {
     const genAI = new GoogleGenerativeAI(key)
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
     const prompt = `Você é um assistente de nutrição especialista em tabelas brasileiras (TACO/TBCA).
-Calcule os macronutrientes TOTAIS da seguinte refeição completa: "${textoAlimentos}"
+Analise somente alimentos, bebidas ou ingredientes consumíveis. Objetos, móveis, eletrônicos, exercícios, serviços, pessoas e textos sem relação com alimentação devem ser rejeitados.
+Calcule os macronutrientes TOTAIS da seguinte refeição completa: "${texto}"
 Some os valores de todos os alimentos listados.
-Responda SOMENTE com um objeto JSON puro, sem markdown, sem texto adicional, começando com { e terminando com }:
-{ "kcal": número, "p": número, "c": número, "g": número }
+Responda SOMENTE com um objeto JSON puro, sem markdown, sem texto adicional, começando com { e terminando com }.
+Para uma entrada alimentar válida, use: { "valido": true, "kcal": número, "p": número, "c": número, "g": número }
+Para uma entrada que não seja alimento ou bebida, use: { "valido": false, "kcal": 0, "p": 0, "c": 0, "g": 0 }
 Onde: kcal = calorias totais, p = proteínas em gramas, c = carboidratos em gramas, g = gorduras em gramas.
-Arredonde para números inteiros.`
+Arredonde para números inteiros. Nunca invente macros para entradas inválidas.`
 
     const result = await model.generateContent(prompt)
 
@@ -43,12 +50,16 @@ Arredonde para números inteiros.`
     try { parsed = JSON.parse(cleaned) }
     catch { throw new Error('Resposta inválida (não JSON)') }
 
-    if (typeof parsed.kcal !== 'number' || typeof parsed.p !== 'number' || typeof parsed.c !== 'number' || typeof parsed.g !== 'number') {
+    if (typeof parsed.valido !== 'boolean' || typeof parsed.kcal !== 'number' || typeof parsed.p !== 'number' || typeof parsed.c !== 'number' || typeof parsed.g !== 'number') {
       throw new Error('Campos nutricionais ausentes no formato esperado')
     }
 
-    return { nome: textoAlimentos.trim(), kcal: Math.round(parsed.kcal), proteinas: Math.round(parsed.p), carboidratos: Math.round(parsed.c), gorduras: Math.round(parsed.g) }
+    const erroNutricional = validarResultadoMacros(parsed)
+    if (erroNutricional) return { ...FALLBACK, nome: texto, _erro: erroNutricional }
+
+    return { nome: texto, kcal: Math.round(parsed.kcal), proteinas: Math.round(parsed.p), carboidratos: Math.round(parsed.c), gorduras: Math.round(parsed.g) }
   } catch (err) {
-    return { ...FALLBACK, nome: textoAlimentos.trim(), _erro: `IA indisponível: ${err.message}. Use o formulário manual.` }
+    const mensagem = err.message === NUTRITION_RESULT_ERROR ? err.message : `IA indisponível: ${err.message}. Use o formulário manual.`
+    return { ...FALLBACK, nome: texto, _erro: mensagem }
   }
 }
