@@ -100,6 +100,7 @@ export default function Dieta({ onIrParaConfig }) {
   const [aiLoading, setAiLoading] = useState(false)
   const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
   const [toast, setToast] = useState(null)
+  const [erroIA, setErroIA] = useState(null)
   const [pularConfirmId, setPularConfirmId] = useState(null)
   const [analisando, setAnalisando] = useState(false)
   const [ultimaAnalise, setUltimaAnalise] = useState({})
@@ -318,14 +319,14 @@ export default function Dieta({ onIrParaConfig }) {
     }
     setAnalisando(true)
     ultimoRequisicaoTime.current = agora
-    setAiLoading(true); setErro(null)
+    setAiLoading(true); setErroIA(null)
     try {
       const parsed = await calcularMacrosIA(textoSanitizado)
       if (parsed._erro) {
         if (parsed._erro.includes('429') || parsed._erro.includes('Too Many Requests') || parsed._erro.includes('RESOURCE_EXHAUSTED')) {
-          setErro('Limite de análises excedido. Tente novamente em alguns minutos.')
+          setErroIA('Limite de análises excedido. Tente novamente em alguns minutos.')
         } else {
-          setErro(parsed._erro)
+          setErroIA(parsed._erro)
         }
       } else {
         setExtraGlobal({
@@ -349,9 +350,9 @@ export default function Dieta({ onIrParaConfig }) {
     } catch (err) {
       const msg = err.message || ''
       if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('RESOURCE_EXHAUSTED') || err.status === 429) {
-        setErro('Limite de análises excedido. Tente novamente em alguns minutos.')
+        setErroIA('Limite de análises excedido. Tente novamente em alguns minutos.')
       } else {
-        setErro('Erro ao analisar prato. Tente novamente.')
+        setErroIA('Erro ao analisar prato. Tente novamente.')
       }
       console.error('Erro Gemini:', err)
     }
@@ -661,6 +662,12 @@ export default function Dieta({ onIrParaConfig }) {
                 className="w-full flex items-center justify-center gap-2 bg-purple-500/10 text-purple-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30 border border-purple-500/20">
                 {aiLoading ? <><Loader size={14} className="animate-spin" /> Analisando...</> : <><Sparkles size={14} /> Analisar alimento</>}
               </button>
+              {erroIA && (
+                <div role="alert" className="flex items-start justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] text-red-300">
+                  <span>{erroIA}</span>
+                  <button type="button" onClick={() => setErroIA(null)} className="shrink-0 text-red-300/70 hover:text-red-200" aria-label="Fechar erro da análise de alimento">✕</button>
+                </div>
+              )}
             </div>
 
             <div className="card-premium p-4">
