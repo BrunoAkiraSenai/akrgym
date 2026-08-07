@@ -99,12 +99,25 @@ export default function Configuracao({ abaInicial }) {
   }
 
   const addRoutine = async () => {
-    if (!newKey.trim() || !newNome.trim()) return
-    const n = { ...config, treinos: { ...config.treinos, [newKey.trim()]: { nome: newNome.trim(), exercicios: [] } } }
+    const key = newKey.trim()
+    const nome = newNome.trim()
+    if (!key || !nome) return
+    if (config.treinos?.[key]) {
+      setErro(`Já existe uma divisão com o ID "${key}".`)
+      return
+    }
+    const n = { ...config, treinos: { ...config.treinos, [key]: { nome, exercicios: [] } } }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso(`Divisão "${newNome.trim()}" criada.`) } catch (err) { setErro('Erro ao salvar treino: ' + err.message) }
+    try {
+      await setDoc(CONFIG_REF(user.uid), n)
+      mostrarSucesso(`Divisão "${nome}" criada.`)
+    } catch (err) {
+      setConfig(config)
+      setErro('Erro ao salvar treino: ' + err.message)
+      return
+    }
     setNewKey(''); setNewNome(''); setShowNewRoutine(false)
-    setExpandedKey(newKey.trim())
+    setExpandedKey(key)
   }
 
   const deleteRoutine = async (key) => {
@@ -251,7 +264,7 @@ export default function Configuracao({ abaInicial }) {
         </div>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           {THEMES.map((t) => (
-            <button key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name}>
+            <button type="button" key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name} aria-pressed={themeId === t.id}>
               <div className="theme-swatch-preview" style={{ background: t.previewBg || t.bgDeep, color: t.mode === 'light' ? '#2b1a15' : '#ffffff', boxShadow: `inset 0 0 0 1px ${t.brand[500]}44` }}>
                 <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
                 <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
@@ -268,16 +281,16 @@ export default function Configuracao({ abaInicial }) {
       </div>
 
       <div className="settings-tabs" role="tablist" aria-label="Seções de configuração">
-        <button role="tab" aria-selected={aba === 'treinos'} onClick={() => setAba('treinos')} className={`settings-tab ${aba === 'treinos' ? 'settings-tab-active' : ''}`}>
+        <button type="button" role="tab" aria-selected={aba === 'treinos'} onClick={() => setAba('treinos')} className={`settings-tab ${aba === 'treinos' ? 'settings-tab-active' : ''}`}>
           <Dumbbell size={15} /> <span>Treinos</span><small>{totalTreinos}</small>
         </button>
-        <button role="tab" aria-selected={aba === 'dieta'} onClick={() => setAba('dieta')} className={`settings-tab ${aba === 'dieta' ? 'settings-tab-active' : ''}`}>
+        <button type="button" role="tab" aria-selected={aba === 'dieta'} onClick={() => setAba('dieta')} className={`settings-tab ${aba === 'dieta' ? 'settings-tab-active' : ''}`}>
           <Apple size={15} /> <span>Dieta</span><small>{totalRefeicoes}</small>
         </button>
       </div>
 
-      {erro && <div className="settings-feedback settings-feedback-error"><AlertTriangle size={16} /><span>{erro}</span><button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso"><X size={14} /></button></div>}
-      {sucesso && <div className="settings-feedback settings-feedback-success"><CheckCircle2 size={16} /><span>{sucesso}</span></div>}
+      {erro && <div className="settings-feedback settings-feedback-error" role="alert"><AlertTriangle size={16} /><span>{erro}</span><button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso"><X size={14} /></button></div>}
+      {sucesso && <div className="settings-feedback settings-feedback-success" role="status" aria-live="polite"><CheckCircle2 size={16} /><span>{sucesso}</span></div>}
 
       {aba === 'treinos' ? (
         loading ? (

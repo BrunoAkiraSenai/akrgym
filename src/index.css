@@ -1353,6 +1353,14 @@ img, svg, video, canvas { max-width: 100%; }
   .settings-routine-actions .settings-action { flex: 1; }
   .settings-ai-button { padding-inline: 0.55rem; }
   .settings-ai-button span { display: none; }
+  .settings-exercise-top,
+  .settings-meal-head,
+  .settings-food-row { flex-wrap: wrap; }
+  .settings-exercise-top .settings-field-grow,
+  .settings-meal-head .settings-field-grow { flex-basis: calc(100% - 2.3rem); }
+  .settings-meal-head .settings-time { margin-left: 2.2rem; }
+  .settings-food-row .settings-field-grow { flex-basis: 100%; }
+  .settings-food-row .settings-ai-button { flex: 1; }
 }
 
 /* ============================================================
