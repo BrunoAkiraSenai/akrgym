@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Home, Dumbbell, TrendingUp, Settings, Apple } from 'lucide-react'
 
 const tabs = [
@@ -17,6 +17,8 @@ function AetherParticles() {
   useEffect(() => {
     const colors = ['', 'gold', 'cyan', 'purple']
     const count = 26
+    // As partículas são geradas após a montagem para não introduzir aleatoriedade no render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setParticles(
       Array.from({ length: count }).map((_, i) => ({
         id: i,
@@ -60,7 +62,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false })
 
   // Move o indicador de luz horizontalmente até a aba ativa
-  const atualizarIndicador = () => {
+  const atualizarIndicador = useCallback(() => {
     const el = tabRefs.current[activeTab]
     const nav = navRef.current
     if (!el || !nav) return
@@ -69,11 +71,11 @@ export default function Layout({ activeTab, onTabChange, children }) {
       width: el.offsetWidth,
       ready: true,
     })
-  }
+  }, [activeTab])
 
   useEffect(() => {
     atualizarIndicador()
-  }, [activeTab])
+  }, [atualizarIndicador])
 
   // Recalcula no resize e após fonts/carregamento
   useEffect(() => {
@@ -86,7 +88,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
       clearTimeout(t1)
       clearTimeout(t2)
     }
-  }, [])
+  }, [atualizarIndicador])
 
   return (
     <div className="flex flex-col h-full max-w-full md:max-w-2xl lg:max-w-4xl mx-auto md:my-4 md:h-[calc(100vh-2rem)] relative">
@@ -114,6 +116,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
           return (
             <button
               key={key}
+              type="button"
               ref={(el) => { tabRefs.current[key] = el }}
               onClick={() => onTabChange(key)}
               className={`aether-tab flex flex-col items-center justify-center gap-1.5 h-full flex-1 rounded-2xl transition-all active:scale-90 relative z-10 ${

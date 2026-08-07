@@ -5,7 +5,12 @@ export default function PageTransition({ activeTab, children }) {
   const [classe, setClasse] = useState('fade-enter-active')
   const [direcao, setDirecao] = useState(1)
   const prevTab = useRef(activeTab)
+  const childrenRef = useRef(children)
   const ordemTabs = useRef(['home', 'dieta', 'treinar', 'evolucao', 'configurar'])
+
+  useEffect(() => {
+    childrenRef.current = children
+  }, [children])
 
   useEffect(() => {
     if (prevTab.current === activeTab) return
@@ -15,7 +20,7 @@ export default function PageTransition({ activeTab, children }) {
     prevTab.current = activeTab
     setClasse('fade-exit-active')
     const timer = setTimeout(() => {
-      setExibindo(children)
+      setExibindo(childrenRef.current)
       setClasse('fade-enter')
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {

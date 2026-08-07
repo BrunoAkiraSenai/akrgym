@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore'
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
+import { METAS_DIARIAS } from '../../config/dieta'
 import ConfirmModal from '../ConfirmModal'
 import {
   Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
@@ -37,7 +38,12 @@ export default function Execucao({ onFinish, activeTab }) {
           setTreinosState({})
         }
       } else {
-        await setDoc(doc(db, 'users', user.uid, 'config', 'data'), { treinos: {}, onboardingConcluido: true })
+        await setDoc(doc(db, 'users', user.uid, 'config', 'data'), {
+          treinos: {},
+          refeicoes: [],
+          metas: METAS_DIARIAS,
+          onboardingConcluido: true,
+        })
         setTreinosState({})
       }
     } catch (err) {

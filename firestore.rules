@@ -19,11 +19,6 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Qualquer subpath dentro de users/{userId}/ só pode ser acessado pelo próprio userId
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
     // CONFIG: treino + refeicoes + metas são obrigatórios;
     // chaves extras são rejeitadas; tipos validados quando possível.
     match /users/{userId}/config/data {

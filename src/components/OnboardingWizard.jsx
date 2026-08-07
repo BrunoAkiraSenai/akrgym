@@ -4,9 +4,7 @@ import { db } from '../firebase'
 import { useUser } from '../context/UserContext'
 import PROTOCOLO_BASE from '../config/protocolo'
 import { REFEICOES, METAS_DIARIAS } from '../config/dieta'
-import { Dumbbell, Sparkles, Zap, ChevronRight, Check, Loader, Apple } from 'lucide-react'
-
-const ETAPAS_OPCAO_A = ['experiencia', 'objetivo', 'revisao']
+import { Dumbbell, Sparkles, Zap, Check, Loader, Apple } from 'lucide-react'
 
 const TEMPLATES = {
   experiencia: {
@@ -141,6 +139,8 @@ export default function OnboardingWizard({ onComplete }) {
     setVerificando(false)
   }, [user.uid, onComplete])
 
+  // A verificação consulta o estado externo antes de liberar o fluxo de onboarding.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { verificarPrimeiroAcesso() }, [verificarPrimeiroAcesso])
 
   const salvarOpcaoC = async () => {
@@ -190,7 +190,7 @@ export default function OnboardingWizard({ onComplete }) {
         onboardingConcluido: true,
       })
       onComplete()
-    } catch (err) {
+    } catch {
       setErro('Erro ao salvar plano. Tente novamente.')
     }
     setSalvando(false)
@@ -203,9 +203,12 @@ export default function OnboardingWizard({ onComplete }) {
       // Limpa tudo — salva apenas a flag
       await setDoc(doc(db, 'users', user.uid, 'config', 'data'), {
         onboardingConcluido: true,
+        treinos: {},
+        refeicoes: [],
+        metas: METAS_DIARIAS,
       })
       onComplete()
-    } catch (err) {
+    } catch {
       setErro('Erro ao salvar. Tente novamente.')
     }
     setSalvando(false)
@@ -234,9 +237,9 @@ export default function OnboardingWizard({ onComplete }) {
           <p className="text-neutral-400 text-sm mt-1">Configure seu plano para começar</p>
         </div>
 
-        {erro && <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>}
+        {erro && <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs" role="alert">{erro}</div>}
 
-        <button onClick={() => setEtapa('experiencia')} disabled={salvando}
+        <button type="button" onClick={() => setEtapa('experiencia')} disabled={salvando}
           className="card-premium p-5 text-left hover:border-emerald-500/30 transition-all active:scale-[0.97] disabled:opacity-40">
           <div className="flex items-start gap-3">
             <Sparkles size={22} className="text-emerald-400 shrink-0 mt-0.5" />
@@ -247,7 +250,7 @@ export default function OnboardingWizard({ onComplete }) {
           </div>
         </button>
 
-        <button onClick={salvarOpcaoB} disabled={salvando}
+        <button type="button" onClick={salvarOpcaoB} disabled={salvando}
           className="card-premium p-5 text-left hover:border-emerald-500/30 transition-all active:scale-[0.97] disabled:opacity-40">
           <div className="flex items-start gap-3">
             <Zap size={22} className="text-neutral-400 shrink-0 mt-0.5" />
@@ -258,7 +261,7 @@ export default function OnboardingWizard({ onComplete }) {
           </div>
         </button>
 
-        <button onClick={salvarOpcaoC} disabled={salvando}
+        <button type="button" onClick={salvarOpcaoC} disabled={salvando}
           className="card-premium p-5 text-left hover:border-emerald-500/30 transition-all active:scale-[0.97] disabled:opacity-40">
           <div className="flex items-start gap-3">
             <Apple size={22} className="text-cyan-400 shrink-0 mt-0.5" />
@@ -275,11 +278,11 @@ export default function OnboardingWizard({ onComplete }) {
   if (etapa === 'experiencia') {
     return (
       <div className="flex flex-col gap-3 px-4 py-8 max-w-md mx-auto">
-        <button onClick={() => setEtapa('opcoes')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
+        <button type="button" onClick={() => setEtapa('opcoes')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
         <h2 className="text-white font-bold text-lg">Qual seu nível?</h2>
         <p className="text-neutral-400 text-xs mb-1">Isso define a quantidade e complexidade dos exercícios</p>
         {['iniciante', 'intermediario', 'avancado'].map(nivel => (
-          <button key={nivel} onClick={() => { setExperience(nivel); setEtapa('objetivo') }}
+          <button type="button" key={nivel} onClick={() => { setExperience(nivel); setEtapa('objetivo') }}
             className={`card-premium p-4 text-left transition-all active:scale-[0.97] ${experience === nivel ? 'border-emerald-500/40' : ''}`}>
             <span className="text-white font-semibold text-sm capitalize">{nivel}</span>
             <p className="text-neutral-500 text-xs mt-0.5">
@@ -294,7 +297,7 @@ export default function OnboardingWizard({ onComplete }) {
   if (etapa === 'objetivo') {
     return (
       <div className="flex flex-col gap-3 px-4 py-8 max-w-md mx-auto">
-        <button onClick={() => setEtapa('experiencia')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
+        <button type="button" onClick={() => setEtapa('experiencia')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
         <h2 className="text-white font-bold text-lg">Qual seu objetivo?</h2>
         <p className="text-neutral-400 text-xs mb-1">Isso define as metas calóricas e a dieta</p>
         {[
@@ -302,7 +305,7 @@ export default function OnboardingWizard({ onComplete }) {
           { key: 'ganhar_massa', label: 'Ganhar Massa Muscular', desc: 'Superávit calórico controlado' },
           { key: 'manter_saude', label: 'Manter Saúde', desc: 'Equilíbrio entre treino e alimentação' },
         ].map(obj => (
-          <button key={obj.key} onClick={() => { setObjetivo(obj.key); setEtapa('revisao') }}
+          <button type="button" key={obj.key} onClick={() => { setObjetivo(obj.key); setEtapa('revisao') }}
             className={`card-premium p-4 text-left transition-all active:scale-[0.97] ${objetivo === obj.key ? 'border-emerald-500/40' : ''}`}>
             <span className="text-white font-semibold text-sm">{obj.label}</span>
             <p className="text-neutral-500 text-xs mt-0.5">{obj.desc}</p>
@@ -320,7 +323,7 @@ export default function OnboardingWizard({ onComplete }) {
     const totalExercicios = Object.values(nivelNome.treinos).reduce((s, t) => s + (t.exercicios?.length || 0), 0)
     return (
       <div className="flex flex-col gap-3 px-4 py-8 max-w-md mx-auto">
-        <button onClick={() => setEtapa('objetivo')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
+        <button type="button" onClick={() => setEtapa('objetivo')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
         <h2 className="text-white font-bold text-lg">Revisão do Plano</h2>
         <div className="card-premium p-4 space-y-2">
           <div className="flex justify-between text-xs"><span className="text-neutral-400">Nível</span><span className="text-white font-medium">{nivelLabel[experience]}</span></div>
@@ -330,7 +333,7 @@ export default function OnboardingWizard({ onComplete }) {
           <div className="flex justify-between text-xs"><span className="text-neutral-400">Refeições</span><span className="text-white font-medium">{objData.refeicoes.length} por dia</span></div>
           <div className="flex justify-between text-xs"><span className="text-neutral-400">Meta calórica</span><span className="text-white font-medium">{objData.metas.kcal} kcal/dia</span></div>
         </div>
-        <button onClick={salvarOpcaoA} disabled={salvando}
+        <button type="button" onClick={salvarOpcaoA} disabled={salvando}
           className="btn-primary w-full py-4 flex items-center justify-center gap-2 mt-2">
           {salvando ? <><Loader size={18} className="animate-spin" /> Salvando...</> : <><Check size={18} /> Confirmar Plano</>}
         </button>

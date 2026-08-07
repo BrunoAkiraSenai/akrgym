@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { METAS_DIARIAS } from './config/dieta'
 import { UserContext } from './context/UserContext'
 import OnboardingWizard from './components/OnboardingWizard'
 import PageTransition from './components/PageTransition'
@@ -20,7 +21,13 @@ const USER_CONFIG = (uid) => doc(db, 'users', uid, 'config', 'data')
 async function ensureUserConfig(uid) {
   const snap = await getDoc(USER_CONFIG(uid))
   if (snap.exists()) return
-  await setDoc(USER_CONFIG(uid), { onboardingConcluido: false, criadoEm: new Date().toISOString() })
+  await setDoc(USER_CONFIG(uid), {
+    onboardingConcluido: false,
+    criadoEm: new Date().toISOString(),
+    treinos: {},
+    refeicoes: [],
+    metas: METAS_DIARIAS,
+  })
 }
 
 export default function App() {
