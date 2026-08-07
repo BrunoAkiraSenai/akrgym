@@ -5,19 +5,15 @@ import { REFEICOES as REF_BASE } from '../../config/dieta'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
-import { LIMITS, sanitizarTexto, truncar } from '../../utils/validation'
+import { LIMITS, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
-import { Apple, Plus, X, Check, Settings, Sparkles, Loader, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { Apple, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Loader, Pencil, Plus, Settings, SkipForward, Sparkles, X } from 'lucide-react'
 
 function hojeId() {
   const d = new Date()
   const offset = d.getTimezoneOffset()
   const local = new Date(d.getTime() - offset * 60000)
   return local.toISOString().split('T')[0]
-}
-
-function formatMesKey(ano, mes) {
-  return `${ano}-${String(mes).padStart(2, '0')}`
 }
 
 function inicioMes(ano, mes) {
@@ -131,7 +127,7 @@ export default function Dieta({ onIrParaConfig }) {
       } else setHoje(diaVazio(dataAtiva, refsRef.current))
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
-  }, [dataAtiva])
+  }, [dataAtiva, user.uid])
 
   const carregarBase = useCallback(async () => {
     try {
@@ -147,7 +143,7 @@ export default function Dieta({ onIrParaConfig }) {
     } catch {
       showToast('Erro ao carregar configuração. Usando valores padrão.', 'erro')
     }
-  }, [])
+  }, [user.uid])
 
   const carregarMes = useCallback(async (ano, mes) => {
     try {
@@ -156,15 +152,17 @@ export default function Dieta({ onIrParaConfig }) {
       const snap = await getDocs(query(collection(db, 'users', user.uid, 'diario_dieta'), where('data', '>=', ini), where('data', '<=', fim)))
       setMesDocs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     } catch (err) { setErro(`Erro: ${err.message}`) }
-  }, [])
+  }, [user.uid])
 
+  // Sincroniza dados externos ao entrar na tela.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregarBase() }, [carregarBase])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregarHoje() }, [carregarHoje])
 
   // Carrega dados do mês ativo no mount para o heatmap
-  useEffect(() => { carregarMes(mesAtual.ano, mesAtual.mes) }, [])
-
-  useEffect(() => { setLoading(true) }, [dataAtiva])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { carregarMes(mesAtual.ano, mesAtual.mes) }, [carregarMes, mesAtual.ano, mesAtual.mes])
 
   const recarregarMes = useCallback(() => {
     carregarMes(mesAtual.ano, mesAtual.mes)
@@ -176,11 +174,11 @@ export default function Dieta({ onIrParaConfig }) {
       setHoje(novo)
       showToast('✓ Salvo', 'sucesso')
       recarregarMes()
-    } catch (err) {
+    } catch {
       setErro(`Erro ao salvar. Verifique sua conexão.`)
       showToast('Erro ao salvar. Verifique sua conexão.', 'erro')
     }
-  }, [recarregarMes])
+  }, [recarregarMes, user.uid])
 
   const confirmar = (id) => {
     const card = document.getElementById(`refeicao-card-${id}`)
@@ -188,7 +186,6 @@ export default function Dieta({ onIrParaConfig }) {
       card.classList.add('card-complete-glow')
       setTimeout(() => card.classList.remove('card-complete-glow'), 500)
     }
-    const anterior = hoje?.refeicoes?.[id] || null
     let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
     if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
     const a = n.refeicoes[id]
@@ -388,9 +385,11 @@ export default function Dieta({ onIrParaConfig }) {
     carboidratos: carboidratosAnim,
     gorduras:     gordurasAnim,
   }
+  const refeicoesConcluidas = refs.filter(ref => ['limpo', 'customizado'].includes(hoje?.refeicoes?.[ref.id]?.status)).length
+  const refeicoesPuladas = refs.filter(ref => hoje?.refeicoes?.[ref.id]?.status === 'pulado').length
 
   return (
-    <div className="flex flex-col gap-3 pt-2 pb-4">
+    <div className="diet-page flex flex-col gap-3 pt-2 pb-4">
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-24 left-4 right-4 z-50 flex items-center justify-center pointer-events-none`}>
@@ -408,19 +407,15 @@ export default function Dieta({ onIrParaConfig }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-xl font-bold tracking-tight text-white">Dieta</h1>
-        <div className="flex items-center gap-1">
-          <button onClick={() => onIrParaConfig?.()}
-            className="text-neutral-500 hover:text-neutral-300 icon-hover p-2 rounded-xl"><Settings size={16} /></button>
-          <Apple size={18} className="text-cyan-400" />
-        </div>
-      </div>
+      <header className="diet-header">
+        <div><p className="home-kicker">Acompanhamento diário</p><h1 className="text-2xl font-bold tracking-tight text-white">Sua alimentação</h1><p>Registre o que aconteceu e mantenha o plano visível.</p></div>
+        <div className="diet-header-actions"><button type="button" onClick={() => onIrParaConfig?.()} aria-label="Abrir configurações da dieta" className="diet-icon-button"><Settings size={17} /></button><div className="diet-header-mark" aria-hidden="true"><Apple size={18} /></div></div>
+      </header>
 
-      <div className="bg-neutral-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-1 flex">
-        <button onClick={() => setAba('diario')}
+      <div className="diet-tabs" role="tablist" aria-label="Visões da dieta">
+        <button type="button" role="tab" aria-selected={aba === 'diario'} onClick={() => setAba('diario')}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'diario' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Diário</button>
-        <button onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes) }}
+        <button type="button" role="tab" aria-selected={aba === 'estatisticas'} onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes) }}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'estatisticas' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
       </div>
 
@@ -443,18 +438,17 @@ export default function Dieta({ onIrParaConfig }) {
         ) : (
           <>
             {dataAtiva !== hojeId() && (
-              <div className="flex items-center justify-between bg-cyan-500/10 backdrop-blur-md border border-cyan-500/20 rounded-2xl px-4 py-3">
-                <span className="text-cyan-400 text-xs font-medium">
-                  📅 Editando o histórico do dia {new Date(dataAtiva + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                </span>
-                <button onClick={() => setDataAtiva(hojeId())}
+              <div className="diet-history-banner">
+                <span><CalendarDays size={14} /> Editando o histórico de {new Date(dataAtiva + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                <button type="button" onClick={() => setDataAtiva(hojeId())}
                   className="text-cyan-400/70 hover:text-cyan-400 text-[11px] font-semibold bg-cyan-500/10 px-3 py-1.5 rounded-lg transition-all active:scale-90">
                   Voltar para Hoje
                 </button>
               </div>
             )}
-            <div className="card-premium p-4 space-y-3">
-              <span className="section-label">Progresso Hoje</span>
+            <div className="diet-progress card-premium p-4 space-y-3">
+              <div className="diet-progress-head"><div><p className="home-kicker">Hoje</p><h2>Progresso alimentar</h2></div><strong>{refeicoesConcluidas}/{refs.length}</strong></div>
+              <div className="diet-progress-summary"><span>{refeicoesConcluidas === 0 ? 'Nenhuma refeição concluída' : `${refeicoesConcluidas} ${refeicoesConcluidas === 1 ? 'refeição concluída' : 'refeições concluídas'}`}</span>{refeicoesPuladas > 0 && <span>{refeicoesPuladas} pulada{refeicoesPuladas === 1 ? '' : 's'}</span>}</div>
               {[
                 { key: 'kcal',         label: 'Calorias',     meta: userMetas.kcal,         u: 'kcal' },
                 { key: 'proteinas',    label: 'Proteínas',    meta: userMetas.proteinas,    u: 'g' },
@@ -493,7 +487,7 @@ export default function Dieta({ onIrParaConfig }) {
               const ePulado = r.status === 'pulado'
 
               return (
-                <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`card-premium p-4 space-y-2 transition-all ${
+                <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`diet-meal-card card-premium p-4 space-y-2 transition-all ${
                   eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'opacity-40' : ''
                 }`}>
                   <div className="flex items-center justify-between">
@@ -511,26 +505,26 @@ export default function Dieta({ onIrParaConfig }) {
                   <div className="text-[11px] text-neutral-500 font-mono">{ref.alimentos?.join(' · ') || ref.nome}</div>
 
                   <div className="flex items-center gap-2 pt-1">
-                    <button onClick={() => confirmar(ref.id)}
+                    <button type="button" onClick={() => confirmar(ref.id)}
                       aria-label={eLimpo ? 'Desfazer conclusão' : 'Confirmar refeição'}
                       className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                         eLimpo ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-emerald-500/30'
                       }`}>
-                      {eLimpo ? <><Check size={14} /> Concluído</> : '◯ Confirmar'}
+                      {eLimpo ? <><Check size={14} /> Concluído</> : <><CircleCheck size={14} /> Confirmar</>}
                     </button>
-                    <button onClick={() => eCustom ? setEditando(null) : abrirCustom(ref.id)}
+                    <button type="button" onClick={() => eCustom ? setEditando(null) : abrirCustom(ref.id)}
                       aria-label={eCustom ? 'Cancelar edição' : 'Modificar refeição'}
                       className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                         eCustom ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-yellow-500/30'
                       }`}>
-                      ✏️ {eCustom ? 'Editando' : 'Modificar'}
+                      <Pencil size={13} /> {eCustom ? 'Editando' : 'Modificar'}
                     </button>
-                    <button onClick={() => pular(ref.id)}
+                    <button type="button" onClick={() => pular(ref.id)}
                       aria-label={ePulado ? 'Desfazer pulo' : 'Pular refeição'}
                       className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
                         ePulado ? 'bg-red-500/20 text-red-400 border border-red-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-red-500/30'
                       }`}>
-                      ❌ {ePulado ? 'Pulado' : 'Pular'}
+                      {ePulado ? <><CircleX size={13} /> Pulado</> : <><SkipForward size={13} /> Pular</>}
                     </button>
                   </div>
 
@@ -566,8 +560,8 @@ export default function Dieta({ onIrParaConfig }) {
                   : 'bg-neutral-900/50 backdrop-blur-md border border-cyan-500/20',
               ].join(' ')}
             >
-              <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">
-                {editandoExtraIdx !== null ? '✏️ Editar Alimento' : '+ Alimento Extra / Fora da Dieta'}
+              <span className="diet-section-label">
+                {editandoExtraIdx !== null ? <><Pencil size={13} /> Editar alimento</> : <><Plus size={13} /> Alimento extra</>}
               </span>
               <div className="space-y-1.5">
                 <div>
@@ -656,8 +650,8 @@ export default function Dieta({ onIrParaConfig }) {
             </div>
 
             <div className="bg-neutral-900/50 backdrop-blur-md border border-purple-500/20 rounded-2xl p-4 space-y-2">
-              <span className="text-[10px] font-semibold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles size={13} /> Destrinchar Refeição com IA
+              <span className="diet-section-label diet-section-label-ai">
+                <Sparkles size={13} /> Analisar alimento com IA
               </span>
               <textarea rows={2} maxLength={LIMITS.textoIA}
                 placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
@@ -665,7 +659,7 @@ export default function Dieta({ onIrParaConfig }) {
                 className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-400/30 resize-none" />
               <button onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading}
                 className="w-full flex items-center justify-center gap-2 bg-purple-500/10 text-purple-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30 border border-purple-500/20">
-                {aiLoading ? <><Loader size={14} className="animate-spin" /> Analisando...</> : <><Sparkles size={14} /> Analisar Prato 🚀</>}
+                {aiLoading ? <><Loader size={14} className="animate-spin" /> Analisando...</> : <><Sparkles size={14} /> Analisar alimento</>}
               </button>
             </div>
 
@@ -692,7 +686,6 @@ export default function Dieta({ onIrParaConfig }) {
         <PainelEstatisticas
           mesDocs={mesDocs}
           carregarMes={carregarMes}
-          userMetas={userMetas}
           refs={refs}
           mesAtual={mesAtual}
           setMesAtual={setMesAtual}
@@ -721,10 +714,10 @@ export default function Dieta({ onIrParaConfig }) {
   )
 }
 
-function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
+function PainelEstatisticas({ mesDocs, carregarMes, refs, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
   useEffect(() => {
     carregarMes(mesAtual.ano, mesAtual.mes)
-  }, [mesAtual])
+  }, [carregarMes, mesAtual.ano, mesAtual.mes])
 
   const { ano, mes } = mesAtual
   const totalDias = diasNoMes(ano, mes)
@@ -790,7 +783,6 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, s
     diasArray.push({ dia: d, data: `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}` })
   }
 
-  const hoje = new Date()
   const voltarMes = () => {
     if (mes === 1) setMesAtual({ ano: ano - 1, mes: 12 })
     else setMesAtual({ ano, mes: mes - 1 })
@@ -817,9 +809,9 @@ function PainelEstatisticas({ mesDocs, carregarMes, userMetas, refs, mesAtual, s
 
       <div className="card-premium p-4 space-y-2">
         <div className="flex items-center justify-between text-xs">
-          <span className="text-emerald-400 font-medium">{greenDays} Dias 🟢</span>
-          <span className="text-yellow-400 font-medium">{yellowDays} Dias 🟡</span>
-          <span className="text-red-400 font-medium">{redDays} Dias 🔴</span>
+          <span className="text-emerald-400 font-medium"><span className="diet-legend-dot diet-legend-good" /> {greenDays} dias consistentes</span>
+          <span className="text-yellow-400 font-medium"><span className="diet-legend-dot diet-legend-warn" /> {yellowDays} dias ajustados</span>
+          <span className="text-red-400 font-medium"><span className="diet-legend-dot diet-legend-danger" /> {redDays} dias fora da meta</span>
         </div>
         <div className="h-2 bg-neutral-800 rounded-full overflow-hidden flex">
           <div className="h-full bg-emerald-500/60" style={{ width: `${totalDiasComDado > 0 ? (greenDays / totalDiasComDado) * 100 : 0}%` }} />
