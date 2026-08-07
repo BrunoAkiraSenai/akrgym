@@ -25,6 +25,7 @@ android/
 .env
 .env.*
 !.env.example
+token/
 
 # === Service accounts e credenciais GCP/Firebase ===
 *-service-account.json

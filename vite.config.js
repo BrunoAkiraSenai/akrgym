@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // Credenciais locais ficam separadas e nunca entram no repositório.
+  envDir: 'token',
   plugins: [
     react(),
     tailwindcss(),
