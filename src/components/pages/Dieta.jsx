@@ -284,7 +284,10 @@ export default function Dieta({ onIrParaConfig }) {
       pendingExtraFocusRef.current = n.extras_globais.length - 1
     }
     const salvo = await salvarHoje(dataAtiva, n)
-    if (!salvo && editandoExtraIdx === null) pendingExtraFocusRef.current = null
+    if (!salvo) {
+      if (editandoExtraIdx === null) pendingExtraFocusRef.current = null
+      return
+    }
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
     setEditandoExtraIdx(null)
   }
@@ -305,6 +308,7 @@ export default function Dieta({ onIrParaConfig }) {
       gorduras: String(e.gorduras || ''),
     })
     setEditandoExtraIdx(idx)
+    requestAnimationFrame(() => extraNomeRef.current?.focus({ preventScroll: true }))
   }
 
   const removerExtraGlobal = (idx) => {
@@ -324,6 +328,9 @@ export default function Dieta({ onIrParaConfig }) {
       showToast('Aguarde, já estou analisando...', 'sucesso')
       return
     }
+    // A análise é uma ação explícita do usuário; o horário serve apenas para
+    // limitar chamadas consecutivas e não participa da renderização.
+    // eslint-disable-next-line react-hooks/purity
     const agora = Date.now()
     const segundosDesdeUltima = (agora - ultimoRequisicaoTime.current) / 1000
     if (segundosDesdeUltima < 3) {
@@ -644,9 +651,9 @@ export default function Dieta({ onIrParaConfig }) {
                 <div key={i} ref={node => { if (node) extraItemRefs.current[i] = node; else delete extraItemRefs.current[i] }} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm text-cyan-300 font-medium">+ {e.nome || '(sem nome)'}</span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button type="button" onClick={() => editarExtra(i)} aria-label="Editar" className="icon-hover text-amber-400/70"><Pencil size={13} /></button>
-                      <button type="button" onClick={() => removerExtraGlobal(i)} aria-label="Remover" className="text-red-400/60 hover:text-red-400 transition-all active:scale-90"><X size={13} /></button>
+                    <div className="diet-extra-actions">
+                      <button type="button" onClick={() => editarExtra(i)} aria-label={`Editar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-edit"><Pencil size={13} /><span>Editar</span></button>
+                      <button type="button" onClick={() => removerExtraGlobal(i)} aria-label={`Apagar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-delete"><X size={13} /><span>Apagar</span></button>
                     </div>
                   </div>
                   <div className="grid grid-cols-4 gap-1.5 text-center font-mono num">
