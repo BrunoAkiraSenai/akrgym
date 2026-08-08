@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, KeyRound } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
@@ -29,6 +29,7 @@ export default function Configuracao({ abaInicial }) {
   const [newNome, setNewNome] = useState('')
   const [textoAlimentos, setTextoAlimentos] = useState({})
   const [aiLoadingIdx, setAiLoadingIdx] = useState(null)
+  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '')
   const sucessoTimerRef = useRef(null)
   const pendingFocusRef = useRef(null)
   const routineRefs = useRef({})
@@ -255,6 +256,14 @@ export default function Configuracao({ abaInicial }) {
     setAiLoadingIdx(null)
   }
 
+  const salvarChaveGemini = () => {
+    const chave = geminiApiKey.trim()
+    if (chave) localStorage.setItem('gemini_api_key', chave)
+    else localStorage.removeItem('gemini_api_key')
+    setGeminiApiKey(chave)
+    mostrarSucesso(chave ? 'Chave Gemini salva apenas neste dispositivo.' : 'Chave Gemini removida deste dispositivo.')
+  }
+
   const totalTreinos = Object.keys(config.treinos || {}).length
   const totalRefeicoes = (config.refeicoes || []).length
 
@@ -306,6 +315,32 @@ export default function Configuracao({ abaInicial }) {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="card-premium space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <KeyRound size={16} className="text-emerald-400" />
+          <span className="section-label">Integrações</span>
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-white">Chave da API Gemini</h2>
+          <p className="mt-1 text-[10px] leading-relaxed text-neutral-500">Usada apenas para calcular macros com IA. A chave digitada aqui fica somente neste dispositivo e não é salva no Firestore.</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            type="password"
+            value={geminiApiKey}
+            onChange={e => setGeminiApiKey(e.target.value)}
+            placeholder={import.meta.env.VITE_GEMINI_API_KEY ? 'Chave configurada no deploy' : 'Cole sua chave Gemini'}
+            autoComplete="off"
+            className="settings-field-input min-w-0 flex-1"
+            aria-label="Chave da API Gemini"
+          />
+          <button type="button" onClick={salvarChaveGemini} className="settings-action settings-action-primary shrink-0"><Save size={14} /> Salvar chave</button>
+        </div>
+        <p className="text-[10px] text-neutral-500" role="status">
+          {geminiApiKey ? 'Chave local configurada.' : import.meta.env.VITE_GEMINI_API_KEY ? 'Chave do ambiente configurada.' : 'Nenhuma chave configurada.'}
+        </p>
       </div>
 
       <div className="settings-tabs" role="tablist" aria-label="Seções de configuração">
