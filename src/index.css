@@ -1126,8 +1126,6 @@ img, svg, video, canvas { max-width: 100%; }
 .settings-field { display: flex; min-width: 0; flex-direction: column; gap: 0.35rem; }
 .settings-field > span, .settings-goal > span { color: var(--text-secondary); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .settings-field input { width: 100%; min-width: 0; border-radius: 0.7rem; padding: 0.62rem 0.7rem; font-size: 0.78rem !important; }
-.settings-field-input { width: 100%; min-width: 0; border: 1px solid var(--border-subtle); border-radius: 0.7rem; background: rgba(255,255,255,0.045); color: var(--text-primary); padding: 0.62rem 0.7rem; font-size: 0.78rem; outline: none; }
-.settings-field-input:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 15%, transparent); }
 .settings-field-grow { flex: 1; }
 .settings-routines, .settings-meal-list { display: flex; flex-direction: column; gap: 0.65rem; }
 .settings-routine { overflow: hidden; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
