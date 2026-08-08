@@ -38,34 +38,6 @@ function diaVazio(data, refs) {
   return { data: data || hojeId(), refeicoes: obj, extras_globais: [] }
 }
 
-function normalizarBusca(valor) {
-  return String(valor || '').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-}
-
-function inferirRefeicaoId(texto, refs) {
-  const busca = normalizarBusca(texto).replace(/[_-]/g, ' ')
-  const aliases = {
-    cafe: ['cafe', 'manha'],
-    almoco: ['almoco', 'meio dia'],
-    pre_treino: ['pre treino', 'antes do treino'],
-    jantar: ['jantar', 'noite'],
-    ceia: ['ceia'],
-  }
-  const candidatos = refs.map(ref => {
-    const nome = normalizarBusca(ref.nome).replace(/[_-]/g, ' ')
-    const termos = [ref.id, ...nome.split(/\s+/).filter(termo => termo.length > 3), ...(aliases[ref.id] || [])]
-      .map(termo => normalizarBusca(termo).replace(/[_-]/g, ' '))
-    const pontos = termos.reduce((total, termo) => total + (termo && busca.includes(termo) ? termo.length : 0), 0)
-    return { id: ref.id, pontos }
-  })
-  const melhor = candidatos.sort((a, b) => b.pontos - a.pontos)[0]
-  return melhor?.pontos ? melhor.id : ''
-}
-
-function primeiraRefeicaoPendente(refs, dia) {
-  return refs.find(ref => !['limpo', 'customizado', 'pulado'].includes(dia?.refeicoes?.[ref.id]?.status))?.id || ''
-}
-
 function calcularTotais(dia, refs) {
   const t = { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }
   if (!dia?.refeicoes) return t
@@ -124,8 +96,6 @@ export default function Dieta({ onIrParaConfig }) {
   useEffect(() => { refsRef.current = refs }, [refs])
   const [extraGlobal, setExtraGlobal] = useState({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
   const [editandoExtraIdx, setEditandoExtraIdx] = useState(null)
-  const [aiResultActive, setAiResultActive] = useState(false)
-  const [aiMealId, setAiMealId] = useState('')
   const [mesDocs, setMesDocs] = useState([])
   const [mesAtual, setMesAtual] = useState({ ano: new Date().getFullYear(), mes: new Date().getMonth() + 1 })
   const [aiInput, setAiInput] = useState('')
@@ -309,12 +279,6 @@ export default function Dieta({ onIrParaConfig }) {
     const item = { ...extraGlobal, kcal, proteinas: p, carboidratos: c, gorduras: g }
     if (editandoExtraIdx !== null) {
       n.extras_globais[editandoExtraIdx] = item
-    } else if (aiResultActive && aiMealId && n.refeicoes[aiMealId]) {
-      n.refeicoes[aiMealId] = {
-        ...n.refeicoes[aiMealId],
-        status: 'customizado',
-        substituto: { nome: item.nome, proteinas: p, carboidratos: c, gorduras: g },
-      }
     } else {
       n.extras_globais.push(item)
       pendingExtraFocusRef.current = n.extras_globais.length - 1
@@ -323,15 +287,11 @@ export default function Dieta({ onIrParaConfig }) {
     if (!salvo && editandoExtraIdx === null) pendingExtraFocusRef.current = null
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
     setEditandoExtraIdx(null)
-    setAiResultActive(false)
-    setAiMealId('')
   }
 
   const limparExtras = () => {
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
     setEditandoExtraIdx(null)
-    setAiResultActive(false)
-    setAiMealId('')
   }
 
   const editarExtra = (idx) => {
@@ -394,12 +354,6 @@ export default function Dieta({ onIrParaConfig }) {
           carboidratos: String(parsed.carboidratos || 0),
           gorduras: String(parsed.gorduras || 0),
         })
-        setAiResultActive(true)
-        // Quando o texto não menciona “almoço”, “jantar” etc., tratar o
-        // resultado como a próxima refeição pendente. O usuário ainda pode
-        // trocar para “Somente alimento extra” no seletor antes de adicionar.
-        const refeicaoInferida = inferirRefeicaoId(textoSanitizado, refs)
-        setAiMealId(refeicaoInferida || primeiraRefeicaoPendente(refs, hoje))
         setUltimaAnalise(prev => ({ ...prev, [cacheKey]: { timestamp: agora, resultado: parsed } }))
         setAiInput('')
         showToast('Valores preenchidos! Revise e adicione.', 'sucesso')
@@ -450,7 +404,10 @@ export default function Dieta({ onIrParaConfig }) {
     carboidratos: carboidratosAnim,
     gorduras:     gordurasAnim,
   }
-  const refeicoesConcluidas = refs.filter(ref => ['limpo', 'customizado'].includes(hoje?.refeicoes?.[ref.id]?.status)).length
+  const refeicoesPlanejadasConcluidas = refs.filter(ref => ['limpo', 'customizado'].includes(hoje?.refeicoes?.[ref.id]?.status)).length
+  // Um alimento extra também representa uma refeição realizada, mas continua
+  // separado do almoço/jantar planejado para preservar a organização do diário.
+  const refeicoesConcluidas = Math.min(refs.length, refeicoesPlanejadasConcluidas + (hoje?.extras_globais || []).length)
   const refeicoesPuladas = refs.filter(ref => hoje?.refeicoes?.[ref.id]?.status === 'pulado').length
 
   return (
@@ -663,21 +620,6 @@ export default function Dieta({ onIrParaConfig }) {
                   ))}
                 </div>
               </div>
-              {aiResultActive && (
-                <div className="space-y-1.5 rounded-xl border border-purple-500/20 bg-purple-500/5 p-2.5">
-                  <label htmlFor="ai-refeicao" className="text-[10px] uppercase tracking-wider text-purple-300/80 font-semibold">Contabilizar na refeição</label>
-                  <select
-                    id="ai-refeicao"
-                    value={aiMealId}
-                    onChange={e => setAiMealId(e.target.value)}
-                    className="w-full rounded-lg border border-purple-500/20 bg-neutral-800 px-2.5 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-purple-400/30"
-                  >
-                    <option value="">Somente alimento extra</option>
-                    {refs.map(ref => <option key={ref.id} value={ref.id}>{ref.nome}</option>)}
-                  </select>
-                  <p className="text-[10px] leading-relaxed text-neutral-500">Ao escolher uma refeição, o resultado da IA substitui os macros dela e entra no progresso.</p>
-                </div>
-              )}
               <div className="flex gap-2">
                 {(editandoExtraIdx !== null || extraGlobal.nome || extraGlobal.kcal || extraGlobal.proteinas || extraGlobal.carboidratos || extraGlobal.gorduras) && (
                   <button
