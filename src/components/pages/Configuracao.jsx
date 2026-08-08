@@ -30,6 +30,10 @@ export default function Configuracao({ abaInicial }) {
   const [textoAlimentos, setTextoAlimentos] = useState({})
   const [aiLoadingIdx, setAiLoadingIdx] = useState(null)
   const sucessoTimerRef = useRef(null)
+  const pendingFocusRef = useRef(null)
+  const routineRefs = useRef({})
+  const exerciseRefs = useRef({})
+  const mealRefs = useRef({})
 
   const mostrarSucesso = useCallback((mensagem) => {
     if (sucessoTimerRef.current) clearTimeout(sucessoTimerRef.current)
@@ -40,6 +44,23 @@ export default function Configuracao({ abaInicial }) {
   useEffect(() => () => {
     if (sucessoTimerRef.current) clearTimeout(sucessoTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    const pending = pendingFocusRef.current
+    if (!pending) return
+
+    const refs = pending.type === 'routine' ? routineRefs.current : pending.type === 'exercise' ? exerciseRefs.current : mealRefs.current
+    const node = refs[pending.key]
+    if (!node) return
+
+    pendingFocusRef.current = null
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const timer = setTimeout(() => {
+      const target = node.querySelector(pending.type === 'routine' ? 'button' : 'input')
+      target?.focus({ preventScroll: true })
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [config])
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro(null)
@@ -107,12 +128,14 @@ export default function Configuracao({ abaInicial }) {
       return
     }
     const n = { ...config, treinos: { ...config.treinos, [key]: { nome, exercicios: [] } } }
+    pendingFocusRef.current = { type: 'routine', key }
     setConfig(n)
     try {
       await setDoc(CONFIG_REF(user.uid), n)
       mostrarSucesso(`Divisão "${nome}" criada.`)
     } catch (err) {
       setConfig(config)
+      pendingFocusRef.current = null
       setErro('Erro ao salvar treino: ' + err.message)
       return
     }
@@ -130,9 +153,11 @@ export default function Configuracao({ abaInicial }) {
 
   const addExercise = async (key) => {
     const n = { ...config, treinos: { ...config.treinos } }
-    n.treinos[key] = { ...n.treinos[key], exercicios: [...(n.treinos[key].exercicios || []), { nome: 'Novo', base_top: 20, meta_reps: '8-10' }] }
+    const exercicios = [...(n.treinos[key].exercicios || []), { nome: 'Novo', base_top: 20, meta_reps: '8-10' }]
+    n.treinos[key] = { ...n.treinos[key], exercicios }
+    pendingFocusRef.current = { type: 'exercise', key: `${key}:${exercicios.length - 1}` }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso('Exercício adicionado.') } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso('Exercício adicionado.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
   }
 
   const updateExercise = async (key, idx, campo, valor) => {
@@ -178,9 +203,12 @@ export default function Configuracao({ abaInicial }) {
   }, [config.metas, config.refeicoes, user.uid])
 
   const addRefeicao = async () => {
-    const n = { ...config, refeicoes: [...(config.refeicoes || []), { id: gerarIdRefeicao(), nome: 'Nova Refeição', horario: '00:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }] }
+    const id = gerarIdRefeicao()
+    const refeicoes = [...(config.refeicoes || []), { id, nome: 'Nova Refeição', horario: '00:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }]
+    const n = { ...config, refeicoes }
+    pendingFocusRef.current = { type: 'meal', key: id }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso('Refeição adicionada.') } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso('Refeição adicionada.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
   }
 
   const deleteRefeicao = async (idx) => {
@@ -320,7 +348,7 @@ export default function Configuracao({ abaInicial }) {
                 const isOpen = expandedKey === key
                 const exerciseCount = (rotina.exercicios || []).length
                 return (
-                  <article key={key} className={`settings-routine card-premium ${isOpen ? 'settings-routine-open' : ''}`}>
+                  <article key={key} ref={node => { if (node) routineRefs.current[key] = node; else delete routineRefs.current[key] }} className={`settings-routine card-premium ${isOpen ? 'settings-routine-open' : ''}`}>
                     <button type="button" onClick={() => setExpandedKey(isOpen ? null : key)} className="settings-routine-trigger" aria-expanded={isOpen}>
                       <span className="settings-routine-index">{String(index + 1).padStart(2, '0')}</span>
                       <span className="min-w-0 flex-1 text-left"><strong className="block truncate text-sm text-white">{rotina.nome || key}</strong><small className="mt-0.5 block truncate font-mono text-[10px] text-neutral-500">{key}</small></span>
@@ -329,7 +357,7 @@ export default function Configuracao({ abaInicial }) {
                     </button>
                     {isOpen && <div className="settings-routine-body">
                       {(rotina.exercicios || []).map((ex, idx) => (
-                        <div key={idx} className="settings-exercise">
+                        <div key={idx} ref={node => { const refKey = `${key}:${idx}`; if (node) exerciseRefs.current[refKey] = node; else delete exerciseRefs.current[refKey] }} className="settings-exercise">
                           <div className="settings-exercise-top"><span className="settings-exercise-number">{idx + 1}</span><label className="settings-field settings-field-grow"><span>Exercício</span><input type="text" value={ex.nome} onChange={e => updateExercise(key, idx, 'nome', e.target.value)} /></label><button type="button" onClick={() => deleteExercise(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome}`}><Trash size={15} /></button></div>
                           <div className="mt-2 grid grid-cols-2 gap-2"><label className="settings-field"><span>Base Top (kg)</span><input type="number" value={ex.base_top} onChange={e => updateExercise(key, idx, 'base_top', Number(e.target.value))} inputMode="decimal" /></label><label className="settings-field"><span>Meta de reps</span><input type="text" value={ex.meta_reps} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label></div>
                         </div>
@@ -368,7 +396,7 @@ export default function Configuracao({ abaInicial }) {
             {(config.refeicoes || []).length === 0 && <div className="settings-empty settings-empty-small"><Apple size={21} /><p>Nenhuma refeição configurada.</p></div>}
             <div className="settings-meal-list">
               {(config.refeicoes || []).map((ref, i) => (
-                <article key={ref.id || i} className="settings-meal">
+                <article key={ref.id || i} ref={node => { const refKey = ref.id || String(i); if (node) mealRefs.current[refKey] = node; else delete mealRefs.current[refKey] }} className="settings-meal">
                   <div className="settings-meal-head"><span className="settings-meal-index">{String(i + 1).padStart(2, '0')}</span><label className="settings-field settings-field-grow"><span>Nome da refeição</span><input type="text" value={ref.nome || ''} onChange={e => updateRefeicao(i, 'nome', e.target.value)} /></label><label className="settings-field settings-time"><span>Horário</span><input type="text" value={ref.horario || ''} onChange={e => updateRefeicao(i, 'horario', e.target.value)} /></label><button type="button" onClick={() => deleteRefeicao(i)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ref.nome || 'refeição'}`}><Trash size={15} /></button></div>
                   <div className="settings-food-row"><label className="settings-field settings-field-grow"><span>Alimentos</span><input type="text" value={textoAlimentos[i] ?? (ref.alimentos || []).join(', ')} onChange={e => setTextoAlimentos(p => ({ ...p, [i]: e.target.value }))} onBlur={e => updateRefeicao(i, 'alimentos', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} placeholder="Ex: arroz, frango, salada" /></label><button type="button" onClick={() => calcularMacrosRefeicao(i)} disabled={!textoAlimentos[i]?.trim() || aiLoadingIdx === i} className="settings-ai-button" title="Calcular macros com IA"><Sparkles size={15} /> <span>{aiLoadingIdx === i ? 'Analisando' : 'Calcular IA'}</span></button></div>
                   <div className="settings-macro-grid">

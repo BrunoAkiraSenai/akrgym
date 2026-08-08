@@ -88,6 +88,8 @@ export default function Dieta({ onIrParaConfig }) {
   const [formCustom, setFormCustom] = useState({ proteinas: '', carboidratos: '', gorduras: '' })
   const extraCardRef = useRef(null)
   const extraNomeRef = useRef(null)
+  const extraItemRefs = useRef({})
+  const pendingExtraFocusRef = useRef(null)
   const [extraHighlighted, setExtraHighlighted] = useState(false)
   const [refs, setRefs] = useState([])
   const refsRef = useRef(refs)
@@ -112,6 +114,18 @@ export default function Dieta({ onIrParaConfig }) {
     const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
   }, [toast])
+
+  useEffect(() => {
+    const index = pendingExtraFocusRef.current
+    if (index === null || index === undefined) return
+    const node = extraItemRefs.current[index]
+    if (!node) return
+
+    pendingExtraFocusRef.current = null
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const timer = setTimeout(() => node.querySelector('button')?.focus({ preventScroll: true }), 350)
+    return () => clearTimeout(timer)
+  }, [hoje])
 
   const showToast = (msg, tipo) => setToast({ msg, tipo })
 
@@ -175,9 +189,11 @@ export default function Dieta({ onIrParaConfig }) {
       setHoje(novo)
       showToast('✓ Salvo', 'sucesso')
       recarregarMes()
+      return true
     } catch {
       setErro(`Erro ao salvar. Verifique sua conexão.`)
       showToast('Erro ao salvar. Verifique sua conexão.', 'erro')
+      return false
     }
   }, [recarregarMes, user.uid])
 
@@ -252,7 +268,7 @@ export default function Dieta({ onIrParaConfig }) {
   }
 
   // Extra global: adicionar ou editar
-  const adicionarExtraGlobal = () => {
+  const adicionarExtraGlobal = async () => {
     if (!extraGlobal.nome.trim()) return
     const kcal = validarNumero(extraGlobal.kcal, 0, 99999, 'Kcal')
     const p = validarNumero(extraGlobal.proteinas, 0, 9999, 'Proteínas')
@@ -265,8 +281,10 @@ export default function Dieta({ onIrParaConfig }) {
       n.extras_globais[editandoExtraIdx] = item
     } else {
       n.extras_globais.push(item)
+      pendingExtraFocusRef.current = n.extras_globais.length - 1
     }
-    salvarHoje(dataAtiva, n)
+    const salvo = await salvarHoje(dataAtiva, n)
+    if (!salvo && editandoExtraIdx === null) pendingExtraFocusRef.current = null
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
     setEditandoExtraIdx(null)
   }
@@ -620,7 +638,7 @@ export default function Dieta({ onIrParaConfig }) {
                 </button>
               </div>
               {(hoje?.extras_globais || []).map((e, i) => (
-                <div key={i} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 space-y-1.5">
+                <div key={i} ref={node => { if (node) extraItemRefs.current[i] = node; else delete extraItemRefs.current[i] }} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm text-cyan-300 font-medium">+ {e.nome || '(sem nome)'}</span>
                     <div className="flex items-center gap-1 shrink-0">
