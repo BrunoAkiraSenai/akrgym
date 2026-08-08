@@ -62,6 +62,10 @@ function inferirRefeicaoId(texto, refs) {
   return melhor?.pontos ? melhor.id : ''
 }
 
+function primeiraRefeicaoPendente(refs, dia) {
+  return refs.find(ref => !['limpo', 'customizado', 'pulado'].includes(dia?.refeicoes?.[ref.id]?.status))?.id || ''
+}
+
 function calcularTotais(dia, refs) {
   const t = { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }
   if (!dia?.refeicoes) return t
@@ -391,7 +395,11 @@ export default function Dieta({ onIrParaConfig }) {
           gorduras: String(parsed.gorduras || 0),
         })
         setAiResultActive(true)
-        setAiMealId(inferirRefeicaoId(textoSanitizado, refs))
+        // Quando o texto não menciona “almoço”, “jantar” etc., tratar o
+        // resultado como a próxima refeição pendente. O usuário ainda pode
+        // trocar para “Somente alimento extra” no seletor antes de adicionar.
+        const refeicaoInferida = inferirRefeicaoId(textoSanitizado, refs)
+        setAiMealId(refeicaoInferida || primeiraRefeicaoPendente(refs, hoje))
         setUltimaAnalise(prev => ({ ...prev, [cacheKey]: { timestamp: agora, resultado: parsed } }))
         setAiInput('')
         showToast('Valores preenchidos! Revise e adicione.', 'sucesso')
