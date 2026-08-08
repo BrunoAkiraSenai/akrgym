@@ -278,6 +278,19 @@ export default function Dieta({ onIrParaConfig }) {
     const n = { ...hoje, refeicoes: { ...(hoje.refeicoes || {}) }, extras_globais: [...(hoje.extras_globais || [])] }
     const item = { ...extraGlobal, kcal, proteinas: p, carboidratos: c, gorduras: g }
     if (editandoExtraIdx !== null) {
+      const anterior = n.extras_globais[editandoExtraIdx]
+      const semAlteracao = anterior
+        && anterior.nome === item.nome
+        && Number(anterior.kcal) === kcal
+        && Number(anterior.proteinas) === p
+        && Number(anterior.carboidratos) === c
+        && Number(anterior.gorduras) === g
+      if (semAlteracao) {
+        showToast('Nenhuma alteração feita.', 'sucesso')
+        setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
+        setEditandoExtraIdx(null)
+        return
+      }
       n.extras_globais[editandoExtraIdx] = item
     } else {
       n.extras_globais.push(item)
@@ -302,10 +315,10 @@ export default function Dieta({ onIrParaConfig }) {
     if (!e) return
     setExtraGlobal({
       nome: e.nome || '',
-      kcal: String(e.kcal || ''),
-      proteinas: String(e.proteinas || ''),
-      carboidratos: String(e.carboidratos || ''),
-      gorduras: String(e.gorduras || ''),
+      kcal: String(e.kcal ?? ''),
+      proteinas: String(e.proteinas ?? ''),
+      carboidratos: String(e.carboidratos ?? ''),
+      gorduras: String(e.gorduras ?? ''),
     })
     setEditandoExtraIdx(idx)
     requestAnimationFrame(() => extraNomeRef.current?.focus({ preventScroll: true }))
