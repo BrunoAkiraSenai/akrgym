@@ -62,6 +62,12 @@
       }
     ],
     "rewrites": [
+      { "source": "/treinos", "destination": "/treinos.html" },
+      { "source": "/treinos/", "destination": "/treinos.html" },
+      { "source": "/dieta", "destination": "/dieta.html" },
+      { "source": "/dieta/", "destination": "/dieta.html" },
+      { "source": "/progresso", "destination": "/progresso.html" },
+      { "source": "/progresso/", "destination": "/progresso.html" },
       { "source": "**", "destination": "/index.html" }
     ]
   }
