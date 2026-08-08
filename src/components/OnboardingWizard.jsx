@@ -4,6 +4,7 @@ import { db } from '../firebase'
 import { useUser } from '../context/UserContext'
 import PROTOCOLO_BASE from '../config/protocolo'
 import { REFEICOES, METAS_DIARIAS } from '../config/dieta'
+import { TREINOS_FEMININOS, DIETAS_FEMININAS } from '../config/perfilFeminino'
 import { Dumbbell, Sparkles, Zap, Check, Loader, Apple } from 'lucide-react'
 
 const TEMPLATES = {
@@ -106,6 +107,7 @@ const TEMPLATES = {
 export default function OnboardingWizard({ onComplete }) {
   const user = useUser()
   const [etapa, setEtapa] = useState('opcoes')
+  const [perfilGenero, setPerfilGenero] = useState(null)
   const [experience, setExperience] = useState(null)
   const [objetivo, setObjetivo] = useState(null)
   const [salvando, setSalvando] = useState(false)
@@ -181,12 +183,13 @@ export default function OnboardingWizard({ onComplete }) {
     setSalvando(true)
     setErro(null)
     try {
-      const nivel = TEMPLATES.experiencia[experience]
-      const obj = TEMPLATES.objetivo[objetivo]
+      const nivel = perfilGenero === 'mulher' ? TREINOS_FEMININOS[experience] : TEMPLATES.experiencia[experience]
+      const obj = perfilGenero === 'mulher' ? DIETAS_FEMININAS[objetivo] : TEMPLATES.objetivo[objetivo]
       await setDoc(doc(db, 'users', user.uid, 'config', 'data'), {
         treinos: nivel.treinos,
         refeicoes: obj.refeicoes,
         metas: obj.metas,
+        perfilGenero,
         onboardingConcluido: true,
       })
       onComplete()
@@ -239,7 +242,7 @@ export default function OnboardingWizard({ onComplete }) {
 
         {erro && <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs" role="alert">{erro}</div>}
 
-        <button type="button" onClick={() => setEtapa('experiencia')} disabled={salvando}
+        <button type="button" onClick={() => setEtapa('perfil')} disabled={salvando}
           className="card-premium p-5 text-left hover:border-emerald-500/30 transition-all active:scale-[0.97] disabled:opacity-40">
           <div className="flex items-start gap-3">
             <Sparkles size={22} className="text-emerald-400 shrink-0 mt-0.5" />
@@ -275,10 +278,34 @@ export default function OnboardingWizard({ onComplete }) {
     )
   }
 
-  if (etapa === 'experiencia') {
+  if (etapa === 'perfil') {
+    const perfis = [
+      { key: 'mulher', label: 'Mulher', desc: 'Sugestão inicial com mais ênfase em glúteos e membros inferiores.' },
+      { key: 'homem', label: 'Homem', desc: 'Sugestão inicial equilibrada para força e hipertrofia.' },
+      { key: 'nao_informar', label: 'Prefiro não informar', desc: 'Usar uma sugestão neutra e ajustar tudo depois.' },
+    ]
+
     return (
       <div className="flex flex-col gap-3 px-4 py-8 max-w-md mx-auto">
         <button type="button" onClick={() => setEtapa('opcoes')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
+        <h2 className="text-white font-bold text-lg">Como você se identifica?</h2>
+        <p className="text-neutral-400 text-xs mb-1">Usamos esta resposta apenas para escolher uma sugestão inicial de treino e dieta.</p>
+        {perfis.map(perfil => (
+          <button type="button" key={perfil.key} onClick={() => { setPerfilGenero(perfil.key); setEtapa('experiencia') }} aria-pressed={perfilGenero === perfil.key}
+            className={`card-premium p-4 text-left transition-all active:scale-[0.97] ${perfilGenero === perfil.key ? 'border-emerald-500/40' : ''}`}>
+            <span className="text-white font-semibold text-sm">{perfil.label}</span>
+            <p className="text-neutral-500 text-xs mt-0.5">{perfil.desc}</p>
+          </button>
+        ))}
+        <p className="text-neutral-600 text-[11px] leading-relaxed mt-1">As metas são um ponto de partida. Ajuste cargas, porções e restrições no app ou com um profissional.</p>
+      </div>
+    )
+  }
+
+  if (etapa === 'experiencia') {
+    return (
+      <div className="flex flex-col gap-3 px-4 py-8 max-w-md mx-auto">
+        <button type="button" onClick={() => setEtapa('perfil')} className="text-neutral-500 hover:text-white text-xs self-start mb-2">← Voltar</button>
         <h2 className="text-white font-bold text-lg">Qual seu nível?</h2>
         <p className="text-neutral-400 text-xs mb-1">Isso define a quantidade e complexidade dos exercícios</p>
         {['iniciante', 'intermediario', 'avancado'].map(nivel => (
@@ -318,8 +345,9 @@ export default function OnboardingWizard({ onComplete }) {
   if (etapa === 'revisao') {
     const nivelLabel = { iniciante: 'Iniciante', intermediario: 'Intermediário', avancado: 'Avançado' }
     const objLabel = { perder_peso: 'Perder Peso', ganhar_massa: 'Ganhar Massa', manter_saude: 'Manter Saúde' }
-    const objData = TEMPLATES.objetivo[objetivo]
-    const nivelNome = TEMPLATES.experiencia[experience]
+    const perfilLabel = { mulher: 'Mulher', homem: 'Homem', nao_informar: 'Prefiro não informar' }
+    const objData = perfilGenero === 'mulher' ? DIETAS_FEMININAS[objetivo] : TEMPLATES.objetivo[objetivo]
+    const nivelNome = perfilGenero === 'mulher' ? TREINOS_FEMININOS[experience] : TEMPLATES.experiencia[experience]
     const totalExercicios = Object.values(nivelNome.treinos).reduce((s, t) => s + (t.exercicios?.length || 0), 0)
     return (
       <div className="flex flex-col gap-3 px-4 py-8 max-w-md mx-auto">
@@ -327,6 +355,7 @@ export default function OnboardingWizard({ onComplete }) {
         <h2 className="text-white font-bold text-lg">Revisão do Plano</h2>
         <div className="card-premium p-4 space-y-2">
           <div className="flex justify-between text-xs"><span className="text-neutral-400">Nível</span><span className="text-white font-medium">{nivelLabel[experience]}</span></div>
+          <div className="flex justify-between text-xs"><span className="text-neutral-400">Perfil</span><span className="text-white font-medium">{perfilLabel[perfilGenero]}</span></div>
           <div className="flex justify-between text-xs"><span className="text-neutral-400">Objetivo</span><span className="text-white font-medium">{objLabel[objetivo]}</span></div>
           <div className="flex justify-between text-xs"><span className="text-neutral-400">Treinos</span><span className="text-white font-medium">{Object.keys(nivelNome.treinos).length} divisões</span></div>
           <div className="flex justify-between text-xs"><span className="text-neutral-400">Exercícios</span><span className="text-white font-medium">{totalExercicios} no total</span></div>

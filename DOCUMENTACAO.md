@@ -244,10 +244,11 @@ AkrGym é um **aplicativo pessoal de academia e nutrição** focado em simplicid
 
 ### 🪄 Onboarding Wizard (`OnboardingWizard.jsx`)
 - 3 opções iniciais:
-  1. **Plano Recomendado** (Opção A): wizard 3 etapas — `experiencia` (iniciante/intermediário/avançado) → `objetivo` (perder peso/ganhar massa/manter saúde) → `revisao` com totais e confirmação.
+  1. **Plano Recomendado** (Opção A): wizard 4 etapas — `perfil` (mulher/homem/prefiro não informar) → `experiencia` (iniciante/intermediário/avançado) → `objetivo` (perder peso/ganhar massa/manter saúde) → `revisao` com totais e confirmação.
   2. **Começar do Zero** (Opção B): cria uma configuração vazia válida (`treinos`, `refeicoes` e `metas`) e marca `onboardingConcluido = true`.
   3. **Treino e Dieta do Akr** (Opção C): copia `PROTOCOLO_BASE` e `REFEICOES` do `config/`, sem dados pessoais.
-- Cada template (`iniciante` / `intermediario` / `avançado`) traz 3 divisões (Upper A, Lower, Upper B) com exercícios e metarreps pré-definidas.
+- Cada template padrão (`iniciante` / `intermediario` / `avançado`) traz 3 divisões com exercícios e metarreps pré-definidas.
+- Para `perfil = mulher`, o onboarding usa uma sugestão inicial com mais ênfase em glúteos e membros inferiores, além de refeições e metas próprias. Os valores são pontos de partida e devem ser ajustados conforme a pessoa e, quando necessário, com orientação profissional.
 - Cada objetivo define metas calóricas e lista de refeições padrão.
 - **Verificação inicial** (10 s timeout) — se já houver `onboardingConcluido` ou treinos, pula direto.
 
