@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
+import { calcularRitmoTreino, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
 import { LIMITS, parseNumero, sanitizarTexto, truncar } from '../src/utils/validation.js'
 
 test('parseMetaTeto interpreta meta simples e intervalo', () => {
@@ -38,4 +38,21 @@ test('validação sanitiza e limita entradas', () => {
   assert.equal(sanitizarTexto('ok\u0000\u0007\ntexto'), 'ok\ntexto')
   assert.equal(truncar('abcdef', 3), 'abc')
   assert.equal(LIMITS.textoIA, 500)
+})
+
+test('calcularRitmoTreino reage à frequência recente e compara com a janela anterior', () => {
+  const agora = new Date('2026-08-08T12:00:00')
+  const lista = [0, -1, -2, -4, -18, -20].map(dias => ({ data: new Date(agora.getTime() + dias * 86400000) }))
+  const ritmo = calcularRitmoTreino(lista, agora)
+  assert.equal(ritmo.diasRecentes, 4)
+  assert.equal(ritmo.score, 100)
+  assert.equal(ritmo.variacao, 2)
+  assert.equal(ritmo.pontos.length, 7)
+  assert.ok(ritmo.pontos.at(-1) > ritmo.pontos[0])
+})
+
+test('classificarSessaoTreino prioriza o contexto explícito e reconhece exercícios', () => {
+  assert.equal(classificarSessaoTreino({ rotinaNome: 'Lower A', exercicios: ['Agachamento'] }), 'lower')
+  assert.equal(classificarSessaoTreino({ rotinaNome: 'Sessão', exercicios: ['Supino inclinado', 'Crucifixo'] }), 'chest')
+  assert.equal(classificarSessaoTreino({ rotinaNome: 'Treino', exercicios: ['Remada curvada', 'Puxada'] }), 'back')
 })
