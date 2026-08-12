@@ -56,22 +56,19 @@ service cloud.firestore {
     //   - tipos validados
     match /users/{userId}/diario_dieta/{docId} {
       allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null
-                   && request.auth.uid == userId
-                   && request.resource.data.refeicoes is map
-                   && request.resource.data.data is string
-                   && request.resource.data.data.size() == 10  // YYYY-MM-DD
-                   && request.resource.data.extras_globais is list
-                   && request.resource.data.extras_globais.size() < 100;
-      // Defesa em profundidade: se o documento incluir usuarioId, ele deve ser o dono
-      allow create: if request.auth != null
-                    && request.auth.uid == userId
-                    && (!('usuarioId' in request.resource.data)
-                        || request.resource.data.usuarioId == request.auth.uid);
-      allow update: if request.auth != null
-                    && request.auth.uid == userId
-                    && (!('usuarioId' in request.resource.data)
-                        || request.resource.data.usuarioId == request.auth.uid);
+      function isValidDietWrite() {
+        return request.auth != null
+               && request.auth.uid == userId
+               && request.resource.data.refeicoes is map
+               && request.resource.data.data is string
+               && request.resource.data.data.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+               && request.resource.data.extras_globais is list
+               && request.resource.data.extras_globais.size() < 100
+               // Defesa em profundidade: se o documento incluir usuarioId, ele deve ser o dono.
+               && (!('usuarioId' in request.resource.data)
+                   || request.resource.data.usuarioId == request.auth.uid);
+      }
+      allow create, update: if isValidDietWrite();
     }
 
     // HISTORICO CORPORAL
