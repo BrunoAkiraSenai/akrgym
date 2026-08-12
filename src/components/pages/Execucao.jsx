@@ -8,8 +8,14 @@ import { METAS_DIARIAS } from '../../config/dieta'
 import ConfirmModal from '../ConfirmModal'
 import {
   Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
-  Flame, Info, RefreshCw, Search, Zap,
+  Flame, Info, RefreshCw, Search, Zap, SkipForward,
 } from 'lucide-react'
+
+function exercicioPreenchido(ex) {
+  const carga = Number(ex?.carga)
+  const reps = Number(ex?.reps)
+  return Number.isFinite(carga) && carga > 0 && Number.isFinite(reps) && reps > 0
+}
 
 export default function Execucao({ onFinish, activeTab }) {
   const user = useUser()
@@ -131,6 +137,7 @@ export default function Execucao({ onFinish, activeTab }) {
             tem_aquecimento: ex.tem_aquecimento ?? false,
             IsAgachamento: ex.IsAgachamento ?? false,
             nota: ex.nota ?? null,
+            pulado: false,
           }
         })
       )
@@ -139,7 +146,11 @@ export default function Execucao({ onFinish, activeTab }) {
   }, [loadingHistorico, treinosState, user.uid])
 
   const atualizar = (exIdx, campo, valor) => {
-    setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, [campo]: valor } : { ...ex }))
+    setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, [campo]: valor, pulado: false } : { ...ex }))
+  }
+
+  const alternarPulo = (exIdx) => {
+    setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, pulado: !ex.pulado } : { ...ex }))
   }
 
   const finalizarTreino = async () => {
@@ -154,21 +165,25 @@ export default function Execucao({ onFinish, activeTab }) {
       setTimeout(() => container.classList.remove('card-complete-glow'), 400)
     }
     setSaving(true); setErro(null); setSucesso(null)
-    for (const ex of topSetData) {
-      const carga = Number(ex.carga)
-      const reps = Number(ex.reps)
-      if (isNaN(carga) || isNaN(reps) || carga <= 0 || reps <= 0) {
-        setErro('Preencha carga e repetições de todos os exercícios')
-        setSaving(false)
-        return
-      }
+    const exerciciosPendentes = topSetData.filter(ex => !ex.pulado && !exercicioPreenchido(ex))
+    const exerciciosConcluidos = topSetData.filter(ex => !ex.pulado && exercicioPreenchido(ex))
+    if (exerciciosConcluidos.length === 0) {
+      setErro('Registre pelo menos um exercício ou volte a fazer um exercício pulado.')
+      setSaving(false)
+      return
+    }
+    if (exerciciosPendentes.length > 0) {
+      setErro('Preencha carga e repetições dos exercícios que não foram pulados')
+      setSaving(false)
+      return
     }
     try {
       await addDoc(collection(db, 'users', user.uid, 'historico_treinos'), {
         rotina_id: rotinaKey,
         data: new Date(),
         createdAt: serverTimestamp(),
-        exercicios: topSetData.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
+        exercicios: exerciciosConcluidos.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
+        exercicios_pulados: topSetData.filter(ex => ex.pulado).map(ex => ex.nome),
       })
       localStorage.removeItem(STORAGE_KEY)
       setSucesso('Treino finalizado com sucesso!')
@@ -181,8 +196,6 @@ export default function Execucao({ onFinish, activeTab }) {
       setSaving(false)
     }
   }
-
-  const podeFinalizar = topSetData.length > 0 && topSetData.every(ex => Number(ex.carga) > 0 && Number(ex.reps) > 0)
 
   if (step === 'select') {
     return (
@@ -220,6 +233,10 @@ export default function Execucao({ onFinish, activeTab }) {
   }
 
   const rotina = treinosState?.[rotinaKey]
+  const exerciciosPreenchidos = topSetData.filter(ex => !ex.pulado && exercicioPreenchido(ex)).length
+  const exerciciosPulados = topSetData.filter(ex => ex.pulado).length
+  const exerciciosPendentes = topSetData.filter(ex => !ex.pulado && !exercicioPreenchido(ex)).length
+  const podeFinalizar = topSetData.length > 0 && exerciciosPreenchidos > 0 && exerciciosPendentes === 0
 
   return (
     <div className="treino-container flex flex-col gap-3 pt-1 pb-4">
@@ -229,7 +246,7 @@ export default function Execucao({ onFinish, activeTab }) {
           <ChevronLeft size={22} />
         </button>
         <div className="min-w-0"><p className="home-kicker">Treino em andamento</p><h1 className="truncate text-xl font-bold tracking-tight text-white">{rotina?.nome}</h1></div>
-        <span className="treino-progress-badge">{topSetData.filter(ex => Number(ex.carga) > 0 && Number(ex.reps) > 0).length}/{topSetData.length}</span>
+        <span className="treino-progress-badge">{exerciciosPreenchidos}/{topSetData.length}</span>
       </div>
 
       {recuperado && (
@@ -285,11 +302,24 @@ export default function Execucao({ onFinish, activeTab }) {
             : null
 
           return (
-            <div key={`${originalIndex}-${ex.nome}`} className="exec-exercise-card card-premium">
+            <div key={`${originalIndex}-${ex.nome}`} className={`exec-exercise-card card-premium${ex.pulado ? ' is-skipped' : ''}`}>
               <div className="flex items-center justify-between">
                 <h2 className="text-white font-semibold text-sm tracking-tight">{ex.nome}</h2>
                 <span className="text-neutral-500 text-[11px] font-mono">meta {ex.meta_reps}</span>
               </div>
+
+              <div className="exec-exercise-actions">
+                <button type="button" onClick={() => alternarPulo(originalIndex)} className={`exec-skip-button${ex.pulado ? ' is-skipped' : ''}`}>
+                  {ex.pulado ? <><RefreshCw size={14} /> Fazer exercício</> : <><SkipForward size={14} /> Pular exercício</>}
+                </button>
+              </div>
+
+              {ex.pulado ? (
+                <div className="exec-skipped-state">
+                  <SkipForward size={17} />
+                  <div><strong>Exercício pulado</strong><span>Ele não será registrado neste treino. Você pode desfazer acima.</span></div>
+                </div>
+              ) : <>
 
               <div className="flex items-center gap-2 text-emerald-400/80 text-[11px] font-mono bg-emerald-500/5 rounded-xl px-3 py-2 border border-emerald-500/10">
                 <Flame size={12} className="shrink-0" />
@@ -364,6 +394,7 @@ export default function Execucao({ onFinish, activeTab }) {
                   </div>
                 )}
               </div>
+              </>}
             </div>
           )
         })
@@ -376,7 +407,7 @@ export default function Execucao({ onFinish, activeTab }) {
       })()}
 
       <div className="treino-footer">
-        <div className="treino-footer-status"><span>{topSetData.filter(ex => Number(ex.carga) > 0 && Number(ex.reps) > 0).length} de {topSetData.length} exercícios preenchidos</span><strong>{podeFinalizar ? 'Tudo pronto' : 'Preencha os dois campos de cada exercício'}</strong></div>
+        <div className="treino-footer-status"><span>{exerciciosPreenchidos} de {topSetData.length} exercícios preenchidos{exerciciosPulados > 0 ? ` · ${exerciciosPulados} pulado${exerciciosPulados === 1 ? '' : 's'}` : ''}</span><strong>{podeFinalizar ? 'Tudo pronto' : exerciciosPulados > 0 ? 'Preencha os demais ou pule outros exercícios' : 'Preencha os dois campos de cada exercício'}</strong></div>
         <button
           type="button"
           onClick={finalizarTreino}
@@ -390,7 +421,7 @@ export default function Execucao({ onFinish, activeTab }) {
       <ConfirmModal
         isOpen={showConfirm}
         title="Finalizar treino?"
-        message="Os dados serão salvos no histórico. Deseja continuar?"
+        message="Os dados serão salvos no histórico. Exercícios pulados não serão registrados. Deseja continuar?"
         onConfirm={confirmarFinalizar}
         onCancel={() => setShowConfirm(false)}
       />

@@ -84,8 +84,6 @@ export default function Dieta({ onIrParaConfig }) {
   const [hoje, setHoje] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
-  const [editando, setEditando] = useState(null)
-  const [formCustom, setFormCustom] = useState({ proteinas: '', carboidratos: '', gorduras: '' })
   const extraCardRef = useRef(null)
   const extraNomeRef = useRef(null)
   const extraItemRefs = useRef({})
@@ -234,37 +232,10 @@ export default function Dieta({ onIrParaConfig }) {
     salvarHoje(dataAtiva, n)
   }
 
-  const abrirCustom = (id) => {
-    const ref = refs.find(r => r.id === id)
-    setEditando(id)
-    setFormCustom({ proteinas: String(ref.proteinas), carboidratos: String(ref.carboidratos), gorduras: String(ref.gorduras) })
-  }
-
   function validarNumero(valor, min, max, nome) {
     const v = parseFloat(String(valor || '').replace(',', '.'))
     if (isNaN(v) || v < min || v > max) { setErro(`${nome} inválido — deve ser entre ${min} e ${max}.`); return null }
     return v
-  }
-
-  const salvarCustom = (id) => {
-    const p = validarNumero(formCustom.proteinas, 0, 9999, 'Proteínas')
-    const c = validarNumero(formCustom.carboidratos, 0, 9999, 'Carboidratos')
-    const g = validarNumero(formCustom.gorduras, 0, 9999, 'Gorduras')
-    if (p === null || c === null || g === null) return
-    let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
-    if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
-    n.refeicoes[id] = {
-      ...n.refeicoes[id], status: 'customizado',
-      substituto: {
-        nome: refs.find(r => r.id === id)?.nome || '',
-        proteinas: p,
-        carboidratos: c,
-        gorduras: g,
-      },
-    }
-    salvarHoje(dataAtiva, n)
-    setEditando(null)
-    setFormCustom({ proteinas: '', carboidratos: '', gorduras: '' })
   }
 
   // Extra global: adicionar ou editar
@@ -554,13 +525,6 @@ export default function Dieta({ onIrParaConfig }) {
                       }`}>
                       {eLimpo ? <><Check size={14} /> Concluído</> : <><CircleCheck size={14} /> Confirmar</>}
                     </button>
-                    <button type="button" onClick={() => eCustom ? setEditando(null) : abrirCustom(ref.id)}
-                      aria-label={eCustom ? 'Cancelar edição' : 'Modificar refeição'}
-                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
-                        eCustom ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-yellow-500/30'
-                      }`}>
-                      <Pencil size={13} /> {eCustom ? 'Editando' : 'Modificar'}
-                    </button>
                     <button type="button" onClick={() => pular(ref.id)}
                       aria-label={ePulado ? 'Desfazer pulo' : 'Pular refeição'}
                       className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
@@ -570,24 +534,6 @@ export default function Dieta({ onIrParaConfig }) {
                     </button>
                   </div>
 
-                  {editando === ref.id && (
-                    <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-400">Customizar Macros</span>
-                        <button onClick={() => { setEditando(null); setFormCustom({ proteinas: '', carboidratos: '', gorduras: '' }) }} className="text-neutral-500 hover:text-white" aria-label="Fechar"><X size={14} /></button>
-                      </div>
-                      {['proteinas', 'carboidratos', 'gorduras'].map(c => (
-                        <div key={c}>
-                          <label className="text-[8px] text-neutral-600 uppercase block mb-0.5">{c === 'proteinas' ? 'Proteínas (g)' : c === 'carboidratos' ? 'Carboidratos (g)' : 'Gorduras (g)'}</label>
-                          <input type="number" inputMode="decimal" value={formCustom[c]}
-                            onChange={e => setFormCustom(p => ({ ...p, [c]: e.target.value }))}
-                            className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-xs text-center outline-none focus:ring-2 focus:ring-yellow-400/30 [appearance:textfield]" />
-                        </div>
-                      ))}
-                      <button onClick={() => salvarCustom(ref.id)}
-                        className="w-full bg-yellow-500/10 text-yellow-400 font-semibold py-2.5 rounded-xl text-xs transition-all active:scale-95 border border-yellow-500/20">Aplicar Macros</button>
-                    </div>
-                  )}
                 </div>
               )
             })}

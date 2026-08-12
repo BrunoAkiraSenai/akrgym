@@ -6,7 +6,7 @@ import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
 import { calcularRitmoTreino, classificarSessaoTreino, dataTreinoParaDate } from '../../utils/fitness'
-import { Activity, CalendarDays, Check, CheckCircle2, ChevronRight, Dumbbell, Flame, Play, Trophy } from 'lucide-react'
+import { Activity, ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Dumbbell, Flame, Minus, Play, Trophy } from 'lucide-react'
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -48,24 +48,80 @@ function LoadingValue() {
   return <span className="home-value-skeleton" aria-label="Carregando" />
 }
 
-function RhythmChart({ points, loading }) {
-  const valores = points?.length ? points : [0, 0, 0, 0, 0, 0, 0]
-  const coordenadas = valores.map((valor, indice) => {
-    const x = (indice / (valores.length - 1)) * 100
-    const y = 36 - (Math.max(0, Math.min(100, valor)) / 100) * 27
-    return `${x},${y}`
-  }).join(' ')
+function criarCaminhoSuave(coordenadas) {
+  if (!coordenadas.length) return ''
+  let caminho = `M ${coordenadas[0].x} ${coordenadas[0].y}`
+  coordenadas.slice(1).forEach((ponto, indice) => {
+    const anterior = coordenadas[indice]
+    const antesDoAnterior = coordenadas[indice - 1] || anterior
+    const depoisDoPonto = coordenadas[indice + 2] || ponto
+    const controle1 = {
+      x: anterior.x + (ponto.x - antesDoAnterior.x) / 6,
+      y: anterior.y + (ponto.y - antesDoAnterior.y) / 6,
+    }
+    const controle2 = {
+      x: ponto.x - (depoisDoPonto.x - anterior.x) / 6,
+      y: ponto.y - (depoisDoPonto.y - anterior.y) / 6,
+    }
+    caminho += ` C ${controle1.x} ${controle1.y}, ${controle2.x} ${controle2.y}, ${ponto.x} ${ponto.y}`
+  })
+  return caminho
+}
+
+function RhythmChart({ points, loading, score = 0, variacao = 0 }) {
+  const valores = points?.length > 1 ? points : [0, 0, 0, 0, 0, 0, 0]
+  const largura = 260
+  const altura = 94
+  const margem = 8
+  const coordenadas = valores.map((valor, indice) => ({
+    x: margem + (indice / (valores.length - 1)) * (largura - margem * 2),
+    y: margem + (1 - Math.max(0, Math.min(100, valor)) / 100) * (altura - margem * 2),
+    valor,
+  }))
+  const caminho = criarCaminhoSuave(coordenadas)
+  const ultimoPonto = coordenadas[coordenadas.length - 1]
+  const area = `${caminho} L ${ultimoPonto.x} ${altura - margem} L ${coordenadas[0].x} ${altura - margem} Z`
+  const delta = Number(variacao) || 0
+  const tendencia = delta > 0 ? 'Subindo' : delta < 0 ? 'Caindo' : 'Estável'
+  const TendenciaIcon = delta > 0 ? ArrowUpRight : delta < 0 ? ArrowDownRight : Minus
+  const tendenciaClasse = delta > 0 ? 'home-rhythm-viz-trend-up' : delta < 0 ? 'home-rhythm-viz-trend-down' : 'home-rhythm-viz-trend-steady'
 
   return (
-    <svg
-      className={`home-rhythm-chart ${loading ? 'home-rhythm-chart-loading' : ''}`}
-      viewBox="0 0 100 44"
-      preserveAspectRatio="none"
-      role="img"
-      aria-label={loading ? 'Carregando ritmo de treino' : 'Gráfico do ritmo de treino nos últimos 14 dias'}
-    >
-      <polyline points={coordenadas} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div className={`home-rhythm-viz ${loading ? 'home-rhythm-chart-loading' : ''}`}>
+      <div className="home-rhythm-viz-head">
+        <span>14 dias</span>
+        <span className={`home-rhythm-viz-trend ${tendenciaClasse}`}>
+          <TendenciaIcon size={11} strokeWidth={2.4} aria-hidden="true" /> {tendencia}
+        </span>
+      </div>
+      <svg
+        className="home-rhythm-chart"
+        viewBox={`0 0 ${largura} ${altura}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={loading ? 'Carregando ritmo de treino' : `Ritmo dos últimos 14 dias: ${score} por cento, tendência ${tendencia.toLocaleLowerCase('pt-BR')}`}
+      >
+        <defs>
+          <linearGradient id="home-rhythm-area" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--brand-bright)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--brand-bright)" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="home-rhythm-line" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="var(--brand)" />
+            <stop offset="100%" stopColor="var(--brand-bright)" />
+          </linearGradient>
+        </defs>
+        {[25, 50, 75].map(nivel => (
+          <line key={nivel} className="home-rhythm-gridline" x1={margem} x2={largura - margem} y1={margem + (nivel / 100) * (altura - margem * 2)} y2={margem + (nivel / 100) * (altura - margem * 2)} />
+        ))}
+        <path className="home-rhythm-area" d={area} />
+        <path className="home-rhythm-line" d={caminho} />
+        {coordenadas.map((ponto, indice) => (
+          <circle key={`${ponto.x}-${ponto.y}`} className={`home-rhythm-point ${indice === coordenadas.length - 1 ? 'home-rhythm-point-current' : ''}`} cx={ponto.x} cy={ponto.y} r={indice === coordenadas.length - 1 ? 4 : 2.4} />
+        ))}
+      </svg>
+      <div className="home-rhythm-viz-scale"><span>14d</span><span>Hoje</span></div>
+    </div>
   )
 }
 
