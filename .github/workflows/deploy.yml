@@ -3,7 +3,8 @@ name: AkrGym Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # PRD é a única branch que publica automaticamente no site.
+    branches: [PRD]
 
 permissions:
   contents: read
