@@ -24,7 +24,7 @@
  *   firebase deploy --only functions
  *
  * Pré-requisitos manuais (uma vez, no Console do Firebase):
- *  1. Plano Blaze ativado (pay-as-you-go — uso pessoal é ~$0)
+ *  1. Plano Blaze ativado (Cloud Functions exige uma conta de faturamento)
  *  2. App Check ativado com provedor reCAPTCHA Enterprise
  *  3. Domínio akrgym.web.app registrado no reCAPTCHA
  *  4. functions:secrets:set GEMINI_API_KEY="..."
@@ -62,7 +62,7 @@ const MODEL_NAME = 'gemini-2.5-flash'
 const TEXT_MAX_CHARS = 500
 const TEXT_MIN_CHARS = 3
 const RATE_LIMIT_PER_MIN = 10
-const ACTIVE_REQUEST_TIMEOUT_MS = 15_000
+const ACTIVE_REQUEST_TIMEOUT_MS = 25_000
 const NON_FOOD_TERMS = [
   'cadeira', 'gamer', 'mesa', 'computador', 'notebook', 'celular', 'telefone',
   'teclado', 'mouse', 'monitor', 'televisao', 'sofa', 'cama', 'carro', 'moto',
@@ -101,7 +101,7 @@ function corsHeaders(origin) {
   const headers = {
     'Vary': 'Origin',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Firebase-AppCheck',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Firebase-AppCheck',
     'Access-Control-Max-Age': '3600',
   }
   if (origin) {
@@ -135,11 +135,11 @@ Use como referência prioritária as tabelas TACO (Unicamp) e TBCA (USP).
 Estime porções típicas de restaurantes brasileiros quando relevante.
 Analise somente alimentos, bebidas ou ingredientes consumíveis. Objetos, móveis, eletrônicos, exercícios, serviços, pessoas e textos sem relação com alimentação devem ser rejeitados.
 Responda SOMENTE com um objeto JSON puro (sem markdown, sem texto extra), exatamente neste formato:
-Para entrada alimentar válida: { "valido": true, "kcal": number, "p": number, "c": number, "g": number }
-Para entrada inválida: { "valido": false, "kcal": 0, "p": 0, "c": 0, "g": 0 }
-Todos os valores devem ser inteiros. Nunca invente macros para entradas inválidas.`
+Para entrada alimentar válida: { "valido": true, "kcal": number, "p": number, "c": number, "g": number, "fibras": number }
+Para entrada inválida: { "valido": false, "kcal": 0, "p": 0, "c": 0, "g": 0, "fibras": 0 }
+Todos os valores devem ser inteiros. "fibras" representa gramas de fibra alimentar estimadas. Nunca invente macros para entradas inválidas.`
 
-const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }
+const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 }
 const FALLBACK_ERR = { ...FALLBACK, _erro: 'Não foi possível analisar a refeição agora. Tente novamente em alguns minutos.' }
 
 function clientError(res, status, msg, origin) {
@@ -165,22 +165,24 @@ function validarPayload(body) {
 }
 
 function sanitize(parsed, originalText) {
-  // Aceita apenas a classificação e os 4 campos numéricos esperados.
+  // Aceita apenas a classificação e os 5 campos numéricos esperados.
   if (parsed?.valido !== true) return null
   const k = Number(parsed.kcal)
   const p = Number(parsed.p)
   const c = Number(parsed.c)
   const g = Number(parsed.g)
-  if (![k, p, c, g].every(Number.isFinite)) return null
-  if (k < 0 || p < 0 || c < 0 || g < 0) return null
-  if (k === 0 && p === 0 && c === 0 && g === 0) return null
-  if (k > 9999 || p > 999 || c > 999 || g > 999) return null
+  const f = Number(parsed.fibras ?? 0)
+  if (![k, p, c, g, f].every(Number.isFinite)) return null
+  if (k < 0 || p < 0 || c < 0 || g < 0 || f < 0) return null
+  if (k === 0 && p === 0 && c === 0 && g === 0 && f === 0) return null
+  if (k > 9999 || p > 999 || c > 999 || g > 999 || f > 999) return null
   return {
     nome: originalText.trim(),
     kcal: Math.round(k),
     proteinas: Math.round(p),
     carboidratos: Math.round(c),
     gorduras: Math.round(g),
+    fibras: Math.round(f),
   }
 }
 
@@ -284,6 +286,7 @@ exports.analisarRefeicao = onRequest(
           responseMimeType: 'application/json',
           temperature: 0.2,
           maxOutputTokens: 200,
+          thinkingConfig: { thinkingBudget: 0 },
         },
       })
 

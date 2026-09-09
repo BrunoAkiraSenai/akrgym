@@ -46,9 +46,22 @@ test('calcularRitmoTreino reage à frequência recente e compara com a janela an
   const ritmo = calcularRitmoTreino(lista, agora)
   assert.equal(ritmo.diasRecentes, 4)
   assert.equal(ritmo.score, 100)
-  assert.equal(ritmo.variacao, 2)
-  assert.equal(ritmo.pontos.length, 7)
+  assert.equal(ritmo.variacao, 100)
+  assert.equal(ritmo.pontos.length, 14)
+  assert.equal(ritmo.score, ritmo.pontos.at(-1))
   assert.ok(ritmo.pontos.at(-1) > ritmo.pontos[0])
+})
+
+test('ritmo cai sem sessões, ignora duplicatas e datas futuras, e se recupera', () => {
+  const now = new Date('2026-09-09T12:00:00')
+  const session = day => ({ data: new Date(2026, 8, day, 12) })
+  const past = [-1, 0, 1, 2, 3, 4].map(session)
+  const down = calcularRitmoTreino(past, now)
+  assert.equal(down.score, 50)
+  assert.ok(down.variacao < 0)
+  assert.deepEqual(calcularRitmoTreino([...past, session(4), session(10), { data: 'invalid' }], now), down)
+  assert.equal(calcularRitmoTreino([...past, session(8), session(9)], now).score, 100)
+  assert.equal(calcularRitmoTreino([], now).score, 0)
 })
 
 test('classificarSessaoTreino prioriza o contexto explícito e reconhece exercícios', () => {

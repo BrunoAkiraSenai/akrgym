@@ -1162,7 +1162,7 @@ img, svg, video, canvas { max-width: 100%; }
 .settings-ai-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; min-height: 2.45rem; padding: 0.55rem 0.7rem; border: 1px solid rgba(var(--accent-rgb),0.3); border-radius: 0.7rem; color: var(--accent-bright); background: rgba(var(--accent-rgb),0.09); font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all var(--transition-fast); }
 .settings-ai-button:hover { background: rgba(var(--accent-rgb),0.16); transform: translateY(-1px); }
 .settings-ai-button:disabled { cursor: wait; opacity: 0.45; }
-.settings-macro-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; }
+.settings-macro-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; }
 .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; margin-top: 0.3rem; color: var(--text-secondary); font-size: 0.62rem; font-family: var(--font-mono); }
 .settings-logout { display: inline-flex; align-items: center; gap: 0.4rem; color: #f87171; font-size: 0.68rem; font-weight: 700; cursor: pointer; }
 .settings-logout:hover { color: #fca5a5; }
@@ -1305,7 +1305,9 @@ img, svg, video, canvas { max-width: 100%; }
 @keyframes home-skeleton { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
 @media (max-width: 420px) {
-  .home-rhythm-chart { width: 7rem; }
+  .home-rhythm-chart { width: 100%; }
+  .home-rhythm-content { flex-wrap: wrap; }
+  .home-rhythm-content > .home-rhythm-viz { min-width: 0; flex-basis: 100%; max-width: none; }
   .home-session-art { width: 6.5rem; min-width: 6.5rem; }
   .home-session-copy .home-stat-session { max-width: 11rem; }
 }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { doc, getDoc, setDoc, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, runTransaction, onSnapshot, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { REFEICOES as REF_BASE } from '../../config/dieta'
+import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, diaryProgress } from '../../utils/dietDiary'
+import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
@@ -27,52 +28,6 @@ function fimMes(ano, mes) {
 
 function diasNoMes(ano, mes) { return new Date(ano, mes, 0).getDate() }
 
-function refeicaoVazia() {
-  return { status: 'pendente', substituto: null, extra: [] }
-}
-
-function diaVazio(data, refs) {
-  const obj = {}
-  const base = refs?.length > 0 ? refs : REF_BASE
-  base.forEach(r => { obj[r.id] = refeicaoVazia() })
-  return { data: data || hojeId(), refeicoes: obj, extras_globais: [] }
-}
-
-function calcularTotais(dia, refs) {
-  const t = { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }
-  if (!dia?.refeicoes) return t
-  refs.forEach(ref => {
-    const r = dia.refeicoes[ref.id]
-    if (!r || r.status === 'pendente') return
-    if (r.status === 'customizado' && r.substituto) {
-      t.kcal += (Number(r.substituto.proteinas) || 0) * 4
-        + (Number(r.substituto.carboidratos) || 0) * 4
-        + (Number(r.substituto.gorduras) || 0) * 9
-      t.proteinas += Number(r.substituto.proteinas) || 0
-      t.carboidratos += Number(r.substituto.carboidratos) || 0
-      t.gorduras += Number(r.substituto.gorduras) || 0
-    } else if (r.status === 'limpo' || r.status === 'livre') {
-      t.kcal += ref.kcal
-      t.proteinas += ref.proteinas
-      t.carboidratos += ref.carboidratos
-      t.gorduras += ref.gorduras
-    }
-    ;(r.extra || []).forEach(e => {
-      t.kcal += (Number(e.proteinas) * 4 + Number(e.carboidratos) * 4 + Number(e.gorduras) * 9)
-      t.proteinas += Number(e.proteinas) || 0
-      t.carboidratos += Number(e.carboidratos) || 0
-      t.gorduras += Number(e.gorduras) || 0
-    })
-  })
-  ;(dia.extras_globais || []).forEach(e => {
-    t.kcal += Number(e.kcal) || 0
-    t.proteinas += Number(e.proteinas) || 0
-    t.carboidratos += Number(e.carboidratos) || 0
-    t.gorduras += Number(e.gorduras) || 0
-  })
-  return t
-}
-
 function clonarRefs(refs) {
   return refs.map(r => ({ ...r }))
 }
@@ -92,13 +47,21 @@ export default function Dieta({ onIrParaConfig }) {
   const [refs, setRefs] = useState([])
   const refsRef = useRef(refs)
   useEffect(() => { refsRef.current = refs }, [refs])
-  const [extraGlobal, setExtraGlobal] = useState({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
+  const [extraGlobal, setExtraGlobal] = useState({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '', fibras: '' })
   const [editandoExtraIdx, setEditandoExtraIdx] = useState(null)
+  const editingOriginal = useRef(null)
+  const savingExtra = useRef(false)
+  const [extraSaving, setExtraSaving] = useState(false)
+  const context = useRef(0)
+  const formVersion = useRef(0)
+  const aiRequest = useRef(0)
+  const monthRequest = useRef(0)
+  const [baseReady, setBaseReady] = useState(false)
   const [mesDocs, setMesDocs] = useState([])
   const [mesAtual, setMesAtual] = useState({ ano: new Date().getFullYear(), mes: new Date().getMonth() + 1 })
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
-  const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
+  const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 30 })
   const [toast, setToast] = useState(null)
   const [erroIA, setErroIA] = useState(null)
   const [pularConfirmId, setPularConfirmId] = useState(null)
@@ -127,42 +90,68 @@ export default function Dieta({ onIrParaConfig }) {
 
   const showToast = (msg, tipo) => setToast({ msg, tipo })
 
-  const carregarHoje = useCallback(async () => {
-    setLoading(true); setErro(null)
-    try {
-      const snap = await getDoc(doc(db, 'users', user.uid, 'diario_dieta', dataAtiva))
-      if (snap.exists()) {
-        const data = snap.data()
-        if (!data.refeicoes) data.refeicoes = {}
-        // Sincroniza refeições que o usuário criou depois deste dia
-        refsRef.current.forEach(r => { if (!data.refeicoes[r.id]) data.refeicoes[r.id] = refeicaoVazia() })
-        setHoje(data)
-      } else setHoje(diaVazio(dataAtiva, refsRef.current))
-    } catch (err) { setErro(`Erro: ${err.message}`) }
-    setLoading(false)
+  useEffect(() => {
+    const generation = ++context.current
+    ++aiRequest.current
+    ++formVersion.current
+    // Reset the form when subscribing to a different external diary document.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHoje(null); setLoading(true); setErro(null)
+    setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '', fibras: '' })
+    setEditandoExtraIdx(null); editingOriginal.current = null
+    setPularConfirmId(null); setToast(null); setErroIA(null); setAiInput('')
+    setAiLoading(false); setAnalisando(false)
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid, 'diario_dieta', dataAtiva), snap => {
+      if (context.current !== generation) return
+      setHoje(normalizeDay(snap.exists() ? snap.data() : null, dataAtiva))
+      setLoading(false)
+    }, () => {
+      if (context.current !== generation) return
+      setErro('Não foi possível carregar este dia. Verifique a conexão e selecione o dia novamente.')
+      setLoading(false)
+    })
+    // These refs are request counters, not DOM refs; cleanup invalidates pending work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { ++context.current; ++aiRequest.current; unsubscribe() }
   }, [dataAtiva, user.uid])
 
+  useEffect(() => {
+    let previousToday = hojeId()
+    const timer = setInterval(() => {
+      const nextToday = hojeId()
+      if (nextToday !== previousToday) {
+        setDataAtiva(current => current === previousToday ? nextToday : current)
+        previousToday = nextToday
+      }
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [])
+
   const carregarBase = useCallback(async () => {
+    setBaseReady(false)
     try {
       const snap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
       if (snap.exists()) {
         const data = snap.data()
-        setRefs(clonarRefs(data.refeicoes || []))
-        setUserMetas(data.metas || { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
+        setRefs(clonarRefs((data.refeicoes || []).map(ref => ({ ...ref, fibras: Number(ref.fibras) || 0 }))))
+        setUserMetas({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, ...(data.metas || {}), fibras: Number(data.metas?.fibras ?? 30) || 0 })
       } else {
         setRefs([])
-        setUserMetas({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
+        setUserMetas({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 30 })
       }
+      setBaseReady(true)
     } catch {
-      showToast('Erro ao carregar configuração. Usando valores padrão.', 'erro')
+      setErro('Não foi possível carregar o plano. Reabra a aba antes de registrar refeições.')
     }
   }, [user.uid])
 
   const carregarMes = useCallback(async (ano, mes) => {
+    const request = ++monthRequest.current
     try {
       const ini = inicioMes(ano, mes)
       const fim = fimMes(ano, mes)
       const snap = await getDocs(query(collection(db, 'users', user.uid, 'diario_dieta'), where('data', '>=', ini), where('data', '<=', fim)))
+      if (request !== monthRequest.current) return
       setMesDocs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     } catch (err) { setErro(`Erro: ${err.message}`) }
   }, [user.uid])
@@ -170,8 +159,7 @@ export default function Dieta({ onIrParaConfig }) {
   // Sincroniza dados externos ao entrar na tela.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregarBase() }, [carregarBase])
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { carregarHoje() }, [carregarHoje])
+
 
   // Carrega dados do mês ativo no mount para o heatmap
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -181,108 +169,92 @@ export default function Dieta({ onIrParaConfig }) {
     carregarMes(mesAtual.ano, mesAtual.mes)
   }, [mesAtual, carregarMes])
 
-  const salvarHoje = useCallback(async (data, novo) => {
+  const salvarHoje = useCallback(async (date, action, success) => {
+    const generation = context.current
     try {
-      await setDoc(doc(db, 'users', user.uid, 'diario_dieta', data), { ...novo, data, updatedAt: serverTimestamp() })
-      setHoje(novo)
-      showToast('✓ Salvo', 'sucesso')
+      const target = doc(db, 'users', user.uid, 'diario_dieta', date)
+      await runTransaction(db, async transaction => {
+        const snap = await transaction.get(target)
+        const next = applyDiaryAction(snap.exists() ? snap.data() : null, date, action, refsRef.current, userMetas)
+        transaction.set(target, { ...next, updatedAt: serverTimestamp() })
+      })
+      if (generation !== context.current) return false
+      if (success) setToast(success)
+      else showToast('✓ Salvo', 'sucesso')
       recarregarMes()
       return true
-    } catch {
-      setErro(`Erro ao salvar. Verifique sua conexão.`)
-      showToast('Erro ao salvar. Verifique sua conexão.', 'erro')
+    } catch (err) {
+      if (generation !== context.current) return false
+      const message = err.code ? 'Erro ao salvar. Verifique sua conexão.' : err.message
+      setErro(message); showToast(message, 'erro')
       return false
     }
-  }, [recarregarMes, user.uid])
+  }, [recarregarMes, user.uid, userMetas])
 
   const confirmar = (id) => {
-    const card = document.getElementById(`refeicao-card-${id}`)
-    if (card) {
-      card.classList.add('card-complete-glow')
-      setTimeout(() => card.classList.remove('card-complete-glow'), 500)
-    }
-    let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
-    if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
-    const a = n.refeicoes[id]
-    n.refeicoes[id] = a.status === 'limpo'
-      ? { status: 'pendente', substituto: null, extra: a.extra || [] }
-      : { ...a, status: 'limpo', substituto: null }
-    salvarHoje(dataAtiva, n)
-    if (a.status !== 'limpo') {
-      setToast({ msg: 'Refeição concluída!', tipo: 'sucesso', acao: () => {
-        const revertido = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
-        revertido.refeicoes[id] = a.status === 'limpo'
-          ? { status: 'pendente', substituto: null, extra: a.extra || [] }
-          : { ...a, status: a.status || 'pendente', substituto: null, extra: a.extra || [] }
-        salvarHoje(dataAtiva, revertido)
-        setToast({ msg: '✓ Desfeito!', tipo: 'sucesso', acao: null })
-      }})
-    }
+    if (!hoje || !baseReady) return
+    const previous = hoje.refeicoes[id] || refeicaoVazia()
+    const status = previous.status === 'limpo' ? 'pendente' : 'limpo'
+    const food = refs.find(ref => ref.id === id)
+    const revision = crypto.randomUUID()
+    const date = dataAtiva
+    salvarHoje(date, { type: 'meal', id, status, food, revision }, status === 'limpo' ? {
+      msg: 'Refeição concluída!', tipo: 'sucesso',
+      acao: () => salvarHoje(date, { type: 'meal', id, restore: previous, expectedRevision: revision, revision: crypto.randomUUID() }, { msg: '✓ Desfeito!', tipo: 'sucesso' }),
+    } : undefined)
   }
 
+  const aplicarPulo = (id) => salvarHoje(dataAtiva, {
+    type: 'meal', id, status: hoje?.refeicoes?.[id]?.status === 'pulado' ? 'pendente' : 'pulado', revision: crypto.randomUUID(),
+  })
+
   const pular = (id) => {
-    const atual = hoje?.refeicoes?.[id]
-    if (atual?.status === 'pendente') { setPularConfirmId(id); return }
-    let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
-    if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
-    const a = n.refeicoes[id]
-    n.refeicoes[id] = a.status === 'pulado'
-      ? { status: 'pendente', substituto: null, extra: a.extra || [] }
-      : { status: 'pulado', substituto: null, extra: a.extra || [] }
-    salvarHoje(dataAtiva, n)
+    if (!hoje || !baseReady) return
+    if (!hoje.refeicoes[id] || hoje.refeicoes[id].status === 'pendente') { setPularConfirmId(id); return }
+    aplicarPulo(id)
   }
 
   function validarNumero(valor, min, max, nome) {
-    const v = parseFloat(String(valor || '').replace(',', '.'))
-    if (isNaN(v) || v < min || v > max) { setErro(`${nome} inválido — deve ser entre ${min} e ${max}.`); return null }
-    return v
+    try { return validarNumeroConfig(valor, min, max, nome) }
+    catch (err) { setErro(err.message); return null }
   }
 
-  // Extra global: adicionar ou editar
   const adicionarExtraGlobal = async () => {
-    if (!extraGlobal.nome.trim()) return
-    const kcal = validarNumero(extraGlobal.kcal, 0, 99999, 'Kcal')
-    const p = validarNumero(extraGlobal.proteinas, 0, 9999, 'Proteínas')
-    const c = validarNumero(extraGlobal.carboidratos, 0, 9999, 'Carboidratos')
-    const g = validarNumero(extraGlobal.gorduras, 0, 9999, 'Gorduras')
-    if (kcal === null || p === null || c === null || g === null) return
-    const n = { ...hoje, refeicoes: { ...(hoje.refeicoes || {}) }, extras_globais: [...(hoje.extras_globais || [])] }
-    const item = { ...extraGlobal, kcal, proteinas: p, carboidratos: c, gorduras: g }
-    if (editandoExtraIdx !== null) {
-      const anterior = n.extras_globais[editandoExtraIdx]
-      const semAlteracao = anterior
-        && anterior.nome === item.nome
-        && Number(anterior.kcal) === kcal
-        && Number(anterior.proteinas) === p
-        && Number(anterior.carboidratos) === c
-        && Number(anterior.gorduras) === g
-      if (semAlteracao) {
-        showToast('Nenhuma alteração feita.', 'sucesso')
-        setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
-        setEditandoExtraIdx(null)
-        return
-      }
-      n.extras_globais[editandoExtraIdx] = item
-    } else {
-      n.extras_globais.push(item)
-      pendingExtraFocusRef.current = n.extras_globais.length - 1
+    if (!hoje || !baseReady || savingExtra.current || !extraGlobal.nome.trim()) return
+    const values = {}
+    for (const field of ['kcal', 'proteinas', 'carboidratos', 'gorduras', 'fibras']) {
+      const value = validarNumero(extraGlobal[field], 0, LIMITS[field], field)
+      if (value === null) return
+      values[field] = value
     }
-    const salvo = await salvarHoje(dataAtiva, n)
-    if (!salvo) {
-      if (editandoExtraIdx === null) pendingExtraFocusRef.current = null
+    const item = { ...values, nome: extraGlobal.nome.trim().slice(0, LIMITS.nome), id: editandoExtraIdx || crypto.randomUUID() }
+    const previous = editingOriginal.current
+    if (previous && ['nome', 'kcal', 'proteinas', 'carboidratos', 'gorduras', 'fibras'].every(key => String(previous[key] ?? 0) === String(item[key]))) {
+      limparExtras()
+      showToast('Nenhuma alteração feita.', 'sucesso')
       return
     }
-    setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
-    setEditandoExtraIdx(null)
+    const generation = context.current
+    const version = formVersion.current
+    savingExtra.current = true; setExtraSaving(true)
+    pendingExtraFocusRef.current = item.id
+    const saved = await salvarHoje(dataAtiva, previous
+      ? { type: 'extra-edit', id: item.id, previous, item }
+      : { type: 'extra-add', item })
+    savingExtra.current = false; setExtraSaving(false)
+    if (saved && generation === context.current && version === formVersion.current) limparExtras()
+    if (!saved) pendingExtraFocusRef.current = null
   }
 
   const limparExtras = () => {
-    setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '' })
+    ++formVersion.current
+    editingOriginal.current = null
+    setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '', fibras: '' })
     setEditandoExtraIdx(null)
   }
 
-  const editarExtra = (idx) => {
-    const e = hoje?.extras_globais?.[idx]
+  const editarExtra = (id) => {
+    const e = hoje?.extras_globais?.find(item => item.id === id)
     if (!e) return
     setExtraGlobal({
       nome: e.nome || '',
@@ -290,18 +262,20 @@ export default function Dieta({ onIrParaConfig }) {
       proteinas: String(e.proteinas ?? ''),
       carboidratos: String(e.carboidratos ?? ''),
       gorduras: String(e.gorduras ?? ''),
+      fibras: String(e.fibras ?? 0),
     })
-    setEditandoExtraIdx(idx)
+    ++formVersion.current
+    editingOriginal.current = e
+    setEditandoExtraIdx(id)
     requestAnimationFrame(() => extraNomeRef.current?.focus({ preventScroll: true }))
   }
 
-  const removerExtraGlobal = (idx) => {
-    const n = { ...hoje, extras_globais: (hoje.extras_globais || []).filter((_, i) => i !== idx) }
-    salvarHoje(dataAtiva, n)
-    if (editandoExtraIdx === idx) limparExtras()
+  const removerExtraGlobal = (id) => {
+    salvarHoje(dataAtiva, { type: 'extra-remove', id })
+    if (editandoExtraIdx === id) limparExtras()
   }
 
-  // IA Gemini via SDK direto (Cloud Function requer plano Blaze)
+  // IA Gemini via backend seguro (Cloud Function ou Worker)
   const analisarComIA = async () => {
     const textoSanitizado = sanitizarTexto(aiInput).slice(0, LIMITS.textoIA)
     if (!textoSanitizado || textoSanitizado.length < 3) {
@@ -326,11 +300,20 @@ export default function Dieta({ onIrParaConfig }) {
       showToast('Análise recente já feita. Use o resultado anterior.', 'sucesso')
       return
     }
+    const request = ++aiRequest.current
+    const generation = context.current
+    const version = formVersion.current
     setAnalisando(true)
     ultimoRequisicaoTime.current = agora
     setAiLoading(true); setErroIA(null)
     try {
       const parsed = await calcularMacrosIA(textoSanitizado)
+      if (request !== aiRequest.current || generation !== context.current) return
+      if (version !== formVersion.current) {
+        showToast('O formulário mudou durante a análise. Seus dados foram preservados.', 'sucesso')
+        setAiLoading(false); setAnalisando(false)
+        return
+      }
       if (parsed._erro) {
         if (parsed._erro.includes('429') || parsed._erro.includes('Too Many Requests') || parsed._erro.includes('RESOURCE_EXHAUSTED')) {
           setErroIA('Limite de análises excedido. Tente novamente em alguns minutos.')
@@ -338,12 +321,14 @@ export default function Dieta({ onIrParaConfig }) {
           setErroIA(parsed._erro)
         }
       } else {
+        setEditandoExtraIdx(null); editingOriginal.current = null
         setExtraGlobal({
           nome: parsed.nome || 'Analisado por IA',
           kcal: String(parsed.kcal || 0),
           proteinas: String(parsed.proteinas || 0),
           carboidratos: String(parsed.carboidratos || 0),
           gorduras: String(parsed.gorduras || 0),
+          fibras: String(parsed.fibras || 0),
         })
         setUltimaAnalise(prev => ({ ...prev, [cacheKey]: { timestamp: agora, resultado: parsed } }))
         setAiInput('')
@@ -357,6 +342,7 @@ export default function Dieta({ onIrParaConfig }) {
         setTimeout(() => setExtraHighlighted(false), 1600)
       }
     } catch (err) {
+      if (request !== aiRequest.current || generation !== context.current) return
       const msg = err.message || ''
       if (msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('RESOURCE_EXHAUSTED') || err.status === 429) {
         setErroIA('Limite de análises excedido. Tente novamente em alguns minutos.')
@@ -366,7 +352,7 @@ export default function Dieta({ onIrParaConfig }) {
       console.error('Erro Gemini:', err)
     }
     setAiLoading(false)
-    setTimeout(() => setAnalisando(false), 2000)
+    setAnalisando(false)
   }
 
   const totais = calcularTotais(hoje, refs)
@@ -389,23 +375,25 @@ export default function Dieta({ onIrParaConfig }) {
   const proteinasAnim   = useAnimatedNumber(totais.proteinas)
   const carboidratosAnim = useAnimatedNumber(totais.carboidratos)
   const gordurasAnim    = useAnimatedNumber(totais.gorduras)
+  const fibrasAnim       = useAnimatedNumber(totais.fibras)
   const animados = {
     kcal:         kcalAnim,
     proteinas:    proteinasAnim,
     carboidratos: carboidratosAnim,
     gorduras:     gordurasAnim,
+    fibras:       fibrasAnim,
   }
-  const refeicoesPlanejadasConcluidas = refs.filter(ref => ['limpo', 'customizado'].includes(hoje?.refeicoes?.[ref.id]?.status)).length
+  const progresso = diaryProgress(hoje, refs)
   // Um alimento extra também representa uma refeição realizada, mas continua
   // separado do almoço/jantar planejado para preservar a organização do diário.
-  const refeicoesConcluidas = Math.min(refs.length, refeicoesPlanejadasConcluidas + (hoje?.extras_globais || []).length)
+  const refeicoesConcluidas = progresso.planned ? Math.min(progresso.planned, progresso.consumed) : progresso.consumed
   const refeicoesPuladas = refs.filter(ref => hoje?.refeicoes?.[ref.id]?.status === 'pulado').length
 
   return (
     <div className="diet-page flex flex-col gap-3 pt-2 pb-4">
       {/* Toast */}
       {toast && (
-        <div className={`fixed bottom-24 left-4 right-4 z-50 flex items-center justify-center pointer-events-none`}>
+        <div className={`fixed bottom-24 left-4 right-4 z-50 flex items-center justify-center pointer-events-auto`}>
           <div className={`px-4 py-2.5 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-md flex items-center gap-3 ${
             toast.tipo === 'sucesso' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'
           }`}>
@@ -448,7 +436,7 @@ export default function Dieta({ onIrParaConfig }) {
       {aba === 'diario' ? (
         loading ? (
           <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
-        ) : (
+        ) : !hoje || !baseReady ? <p role="status">Não foi possível preparar o diário. Reabra esta aba para tentar novamente.</p> : (
           <>
             {dataAtiva !== hojeId() && (
               <div className="diet-history-banner">
@@ -460,17 +448,18 @@ export default function Dieta({ onIrParaConfig }) {
               </div>
             )}
             <div className="diet-progress card-premium p-4 space-y-3">
-              <div className="diet-progress-head"><div><p className="home-kicker">Hoje</p><h2>Progresso alimentar</h2></div><strong>{refeicoesConcluidas}/{refs.length}</strong></div>
+              <div className="diet-progress-head"><div><p className="home-kicker">{dataAtiva === hojeId() ? 'Hoje' : 'Dia selecionado'}</p><h2>Progresso alimentar</h2></div><strong>{refeicoesConcluidas}/{progresso.planned}</strong></div>
               <div className="diet-progress-summary"><span>{refeicoesConcluidas === 0 ? 'Nenhuma refeição concluída' : `${refeicoesConcluidas} ${refeicoesConcluidas === 1 ? 'refeição concluída' : 'refeições concluídas'}`}</span>{refeicoesPuladas > 0 && <span>{refeicoesPuladas} pulada{refeicoesPuladas === 1 ? '' : 's'}</span>}</div>
               {[
                 { key: 'kcal',         label: 'Calorias',     meta: userMetas.kcal,         u: 'kcal' },
                 { key: 'proteinas',    label: 'Proteínas',    meta: userMetas.proteinas,    u: 'g' },
                 { key: 'carboidratos', label: 'Carboidratos', meta: userMetas.carboidratos, u: 'g' },
                 { key: 'gorduras',     label: 'Gorduras',     meta: userMetas.gorduras,     u: 'g' },
+                { key: 'fibras',       label: 'Fibras',       meta: userMetas.fibras,       u: 'g' },
               ].map(item => {
-                const valorAlvo = ({ kcal: totais.kcal, proteinas: totais.proteinas, carboidratos: totais.carboidratos, gorduras: totais.gorduras })[item.key]
+                const valorAlvo = ({ kcal: totais.kcal, proteinas: totais.proteinas, carboidratos: totais.carboidratos, gorduras: totais.gorduras, fibras: totais.fibras })[item.key]
                 const valorExibido = Math.round(animados[item.key])
-                const pctAlvo = Math.min((valorAlvo / item.meta) * 100, 100)
+                const pctAlvo = item.meta > 0 ? Math.min((valorAlvo / item.meta) * 100, 100) : 0
                 return (
                   <div key={item.key}>
                     <div className="flex items-center justify-between text-xs mb-1">
@@ -492,6 +481,16 @@ export default function Dieta({ onIrParaConfig }) {
                 )
               })}
             </div>
+
+            {hasLegacyNutrition(hoje) && <p role="note" className="text-xs text-amber-200">Registro antigo sem nutrientes preservados: os totais usam o plano disponível e podem estar incompletos.</p>}
+            {refs.length === 0 && (
+              <div className="card-premium flex flex-col items-center gap-2 p-6 text-center">
+                <Settings size={28} className="text-cyan-400" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-white">Seu plano alimentar ainda não foi montado</h2>
+                <p className="max-w-sm text-xs leading-relaxed text-neutral-500">Configure suas refeições para acompanhar o progresso diário e registrar alimentos extras.</p>
+                {onIrParaConfig && <button type="button" onClick={onIrParaConfig} className="btn-primary mt-2 px-4 py-2.5 text-xs">Configurar refeições</button>}
+              </div>
+            )}
 
             {refs.map(ref => {
               const r = hoje?.refeicoes?.[ref.id] || refeicaoVazia()
@@ -560,7 +559,7 @@ export default function Dieta({ onIrParaConfig }) {
                     type="text"
                     placeholder="ex: banana"
                     value={extraGlobal.nome}
-                    onChange={e => setExtraGlobal(p => ({ ...p, nome: e.target.value }))}
+                    onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, nome: e.target.value })) }}
                     className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30"
                   />
                 </div>
@@ -570,6 +569,7 @@ export default function Dieta({ onIrParaConfig }) {
                     { key: 'proteinas',    label: 'Proteína (g)' },
                     { key: 'carboidratos', label: 'Carboidrato (g)' },
                     { key: 'gorduras',     label: 'Gordura (g)' },
+                    { key: 'fibras',       label: 'Fibras (g)' },
                   ].map(({ key, label }) => (
                     <div key={key}>
                       <label htmlFor={`extra-${key}`} className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">{label}</label>
@@ -579,7 +579,7 @@ export default function Dieta({ onIrParaConfig }) {
                         inputMode="decimal"
                         placeholder="0"
                         value={extraGlobal[key]}
-                        onChange={e => setExtraGlobal(p => ({ ...p, [key]: e.target.value }))}
+                        onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, [key]: e.target.value })) }}
                         className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-base text-center outline-none focus:ring-2 focus:ring-cyan-400/30 num"
                       />
                     </div>
@@ -587,7 +587,7 @@ export default function Dieta({ onIrParaConfig }) {
                 </div>
               </div>
               <div className="flex gap-2">
-                {(editandoExtraIdx !== null || extraGlobal.nome || extraGlobal.kcal || extraGlobal.proteinas || extraGlobal.carboidratos || extraGlobal.gorduras) && (
+                {(editandoExtraIdx !== null || extraGlobal.nome || extraGlobal.kcal || extraGlobal.proteinas || extraGlobal.carboidratos || extraGlobal.gorduras || extraGlobal.fibras) && (
                   <button
                     type="button"
                     onClick={limparExtras}
@@ -600,22 +600,22 @@ export default function Dieta({ onIrParaConfig }) {
                 <button
                   type="button"
                   onClick={adicionarExtraGlobal}
-                  disabled={!extraGlobal.nome.trim()}
+                  disabled={!extraGlobal.nome.trim() || extraSaving}
                   className="flex-1 btn-primary w-full py-3 flex items-center justify-center gap-1"
                 >
                   <Plus size={14} /> {editandoExtraIdx !== null ? 'Atualizar' : 'Adicionar'}
                 </button>
               </div>
-              {(hoje?.extras_globais || []).map((e, i) => (
-                <div key={i} ref={node => { if (node) extraItemRefs.current[i] = node; else delete extraItemRefs.current[i] }} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 space-y-1.5">
+              {(hoje?.extras_globais || []).map(e => (
+                <div key={e.id} ref={node => { if (node) extraItemRefs.current[e.id] = node; else delete extraItemRefs.current[e.id] }} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm text-cyan-300 font-medium">+ {e.nome || '(sem nome)'}</span>
                     <div className="diet-extra-actions">
-                      <button type="button" onClick={() => editarExtra(i)} aria-label={`Editar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-edit"><Pencil size={13} /><span>Editar</span></button>
-                      <button type="button" onClick={() => removerExtraGlobal(i)} aria-label={`Apagar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-delete"><X size={13} /><span>Apagar</span></button>
+                      <button type="button" onClick={() => editarExtra(e.id)} aria-label={`Editar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-edit"><Pencil size={13} /><span>Editar</span></button>
+                      <button type="button" onClick={() => removerExtraGlobal(e.id)} aria-label={`Apagar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-delete"><X size={13} /><span>Apagar</span></button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5 text-center font-mono num">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center font-mono num">
                     <div className="bg-cyan-500/10 rounded-md py-1">
                       <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">kcal</div>
                       <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.kcal || 0}</div>
@@ -632,6 +632,10 @@ export default function Dieta({ onIrParaConfig }) {
                       <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">G</div>
                       <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.gorduras || 0}</div>
                     </div>
+                    <div className="bg-cyan-500/10 rounded-md py-1">
+                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">Fibra</div>
+                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.fibras || 0}</div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -643,7 +647,7 @@ export default function Dieta({ onIrParaConfig }) {
               </span>
               <textarea rows={2} maxLength={LIMITS.textoIA}
                 placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
-                value={aiInput} onChange={e => setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA))}
+                value={aiInput} onChange={e => { ++formVersion.current; setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA)) }}
                 className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-400/30 resize-none" />
               <button onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading}
                 className="w-full flex items-center justify-center gap-2 bg-purple-500/10 text-purple-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30 border border-purple-500/20">
@@ -659,12 +663,13 @@ export default function Dieta({ onIrParaConfig }) {
 
             <div className="card-premium p-4">
               <span className="section-label">Total do Dia</span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
                 {[
                   { label: 'Calorias', v: Math.round(totais.kcal), m: userMetas.kcal, u: 'kcal' },
                   { label: 'Proteínas', v: Math.round(totais.proteinas), m: userMetas.proteinas, u: 'g' },
                   { label: 'Carbo', v: Math.round(totais.carboidratos), m: userMetas.carboidratos, u: 'g' },
                   { label: 'Gorduras', v: Math.round(totais.gorduras), m: userMetas.gorduras, u: 'g' },
+                  { label: 'Fibras', v: Math.round(totais.fibras), m: userMetas.fibras, u: 'g' },
                 ].map(item => (
                   <div key={item.label} className="bg-black/30 rounded-xl p-2 text-center border border-white/5">
                     <div className="text-[9px] text-neutral-500 font-mono">{item.label}</div>
@@ -681,6 +686,7 @@ export default function Dieta({ onIrParaConfig }) {
           mesDocs={mesDocs}
           carregarMes={carregarMes}
           refs={refs}
+          metaKcal={userMetas.kcal}
           mesAtual={mesAtual}
           setMesAtual={setMesAtual}
           podeAvancar={podeAvancar}
@@ -693,13 +699,7 @@ export default function Dieta({ onIrParaConfig }) {
         message="Tem certeza que deseja pular esta refeição?"
         onConfirm={() => {
           const id = pularConfirmId
-          let n = { ...hoje, refeicoes: { ...(hoje?.refeicoes || {}) } }
-          if (!n.refeicoes[id]) n.refeicoes[id] = refeicaoVazia()
-          const a = n.refeicoes[id]
-          n.refeicoes[id] = a.status === 'pulado'
-            ? { status: 'pendente', substituto: null, extra: a.extra || [] }
-            : { status: 'pulado', substituto: null, extra: a.extra || [] }
-          salvarHoje(dataAtiva, n)
+          aplicarPulo(id)
           setPularConfirmId(null)
         }}
         onCancel={() => setPularConfirmId(null)}
@@ -708,7 +708,7 @@ export default function Dieta({ onIrParaConfig }) {
   )
 }
 
-function PainelEstatisticas({ mesDocs, carregarMes, refs, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
+function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, setMesAtual, podeAvancar, onDayClick }) {
   useEffect(() => {
     carregarMes(mesAtual.ano, mesAtual.mes)
   }, [carregarMes, mesAtual.ano, mesAtual.mes])
@@ -725,52 +725,29 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, mesAtual, setMesAtual,
     if (!doc) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
     const kcal = kcalDoDia(doc)
     if (kcal === 0) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
-    if (kcal <= 2000) return { backgroundColor: 'rgb(34 197 94 / 0.4)' }
-    if (kcal <= 2250) return { backgroundColor: 'rgb(245 158 11 / 0.4)' }
-    return { backgroundColor: 'rgb(239 68 68 / 0.4)' }
+    const goal = doc.metas_snapshot?.kcal ?? metaKcal
+    if (!goal) return { backgroundColor: 'rgb(34 211 238 / 0.3)' }
+    if (kcal <= goal) return { backgroundColor: 'rgb(34 197 94 / 0.4)' }
+    return { backgroundColor: 'rgb(34 211 238 / 0.5)' }
   }
 
-  function kcalDoDia(doc) {
-    if (!doc?.refeicoes) return 0
-    let total = 0
-    Object.entries(doc.refeicoes).forEach(([id, r]) => {
-      if (!r || r.status === 'pendente' || r.status === 'pulado') return
-      const ref = refs.find(m => m.id === id)
-      if (r.status === 'customizado' && r.substituto) {
-        total += (Number(r.substituto.proteinas) * 4 + Number(r.substituto.carboidratos) * 4 + Number(r.substituto.gorduras) * 9)
-      } else if ((r.status === 'limpo' || r.status === 'livre') && ref) {
-        total += ref.kcal
-      }
-      ;(r.extra || []).forEach(e => {
-        total += (Number(e.proteinas) * 4 + Number(e.carboidratos) * 4 + Number(e.gorduras) * 9)
-      })
-    })
-    ;(doc.extras_globais || []).forEach(e => { total += Number(e.kcal) || 0 })
-    return total
-  }
+  function kcalDoDia(doc) { return calcularTotais(doc, refs).kcal }
 
   let greenDays = 0; let yellowDays = 0; let redDays = 0; let totalDiasComDado = 0
+  let consumed = 0; let planned = 0
   const diasMap = {}
-
   mesDocs.forEach(d => {
     diasMap[d.data] = d
-    if (!d.refeicoes) return
-    const refs = Object.values(d.refeicoes)
-    const todosPendentes = refs.every(r => !r || r.status === 'pendente')
-    if (todosPendentes) return
+    const progress = diaryProgress(d, refs)
+    if (!progress.registered) return
     totalDiasComDado++
-    const temLivre = refs.some(r => r?.status === 'livre')
-    const temPuladoMaisDeUm = refs.filter(r => r?.status === 'pulado').length > 1
-    const temCustom = refs.some(r => r?.status === 'customizado') || (d.extras_globais || []).length > 0
-    const temPulado = refs.some(r => r?.status === 'pulado')
-    if (temLivre || temPuladoMaisDeUm) redDays++
-    else if (temCustom || temPulado) yellowDays++
-    else greenDays++
+    consumed += Math.min(progress.planned, progress.consumed)
+    planned += progress.planned
+    if (progress.percent >= 100) greenDays++
+    else if (progress.consumed > 0) yellowDays++
+    else redDays++
   })
-
-  
-
-  const aderencia = totalDiasComDado > 0 ? Math.round((greenDays / totalDiasComDado) * 100) : 0
+  const aderencia = planned ? Math.round(consumed / planned * 100) : 0
 
   const diasArray = []
   for (let d = 1; d <= totalDias; d++) {
@@ -797,15 +774,15 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, mesAtual, setMesAtual,
         </div>
         <div className="card-premium p-4 text-center">
           <span className="text-2xl font-bold text-emerald-400">{aderencia}%</span>
-          <span className="text-neutral-500 text-xs block mt-0.5">Aderência</span>
+          <span className="text-neutral-500 text-xs block mt-0.5">Refeições registradas</span>
         </div>
       </div>
 
       <div className="card-premium p-4 space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-emerald-400 font-medium"><span className="diet-legend-dot diet-legend-good" /> {greenDays} dias consistentes</span>
-          <span className="text-yellow-400 font-medium"><span className="diet-legend-dot diet-legend-warn" /> {yellowDays} dias ajustados</span>
-          <span className="text-red-400 font-medium"><span className="diet-legend-dot diet-legend-danger" /> {redDays} dias fora da meta</span>
+        <div className="flex flex-wrap gap-2 items-center justify-between text-xs">
+          <span className="text-emerald-400 font-medium"><span className="diet-legend-dot diet-legend-good" /> {greenDays} dias com plano registrado</span>
+          <span className="text-yellow-400 font-medium"><span className="diet-legend-dot diet-legend-warn" /> {yellowDays} dias parciais</span>
+          <span className="text-red-400 font-medium"><span className="diet-legend-dot diet-legend-danger" /> {redDays} dias sem consumo registrado</span>
         </div>
         <div className="h-2 bg-neutral-800 rounded-full overflow-hidden flex">
           <div className="h-full bg-emerald-500/60" style={{ width: `${totalDiasComDado > 0 ? (greenDays / totalDiasComDado) * 100 : 0}%` }} />
@@ -838,9 +815,8 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, mesAtual, setMesAtual,
           ))}
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-2 text-[9px] text-neutral-600">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> ≤2000</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/40" /> 2001-2250</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500/40" /> &gt;2250</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> Até a meta</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-cyan-500/40" /> Acima da meta</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neutral-800" /> Sem dados</span>
         </div>
       </div>

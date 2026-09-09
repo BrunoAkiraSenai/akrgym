@@ -98,8 +98,10 @@ async function migrateAnonymousData(anonymousUid, newUid) {
       data: {
         ...config,
         treinos: config.treinos || {},
-        refeicoes: Array.isArray(config.refeicoes) ? config.refeicoes : [],
-        metas: config.metas || METAS_DIARIAS,
+        refeicoes: Array.isArray(config.refeicoes)
+          ? config.refeicoes.map(ref => ({ ...ref, fibras: Number(ref.fibras) || 0 }))
+          : [],
+        metas: { ...METAS_DIARIAS, ...(config.metas || {}), fibras: Number(config.metas?.fibras ?? METAS_DIARIAS.fibras) || 0 },
       },
     })
   }

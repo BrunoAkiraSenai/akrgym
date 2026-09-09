@@ -129,7 +129,7 @@ function routineData(ultimoTreino, treinosConfig) {
   if (!ultimoTreino) return { nome: 'Ainda não registrada', exercicios: [], contexto: 'full' }
   const rotina = treinosConfig?.[ultimoTreino.rotina_id] || PROTOCOLO_BASE[ultimoTreino.rotina_id] || {}
   const exercicios = (ultimoTreino.exercicios?.length ? ultimoTreino.exercicios : rotina.exercicios || []).map(ex => ex.nome).filter(Boolean)
-  const nome = rotina.nome || ultimoTreino.rotina_id || 'Treino'
+  const nome = ultimoTreino.rotina_nome || rotina.nome || ultimoTreino.rotina_id || 'Treino'
   return { nome, exercicios, contexto: classificarSessaoTreino({ rotinaNome: nome, exercicios }) }
 }
 
@@ -238,9 +238,9 @@ export default function Home({ onStartWorkout }) {
               <strong>{loading ? <LoadingValue /> : streak}</strong>
               <span>{streak === 1 ? 'dia seguido' : 'dias seguidos'}</span>
             </div>
-            <RhythmChart points={ritmo.pontos} loading={loading} />
+            <RhythmChart points={ritmo.pontos} loading={loading} score={ritmo.score} variacao={ritmo.variacao} />
           </div>
-          <span className="home-rhythm-note">Leitura real dos últimos 14 dias</span>
+          <span className="home-rhythm-note" title="Cada ponto mede dias ativos nos 7 dias anteriores; 4 dias ativos = 100%. A tendência compara hoje com 7 dias atrás.">Ritmo semanal · histórico de 14 dias</span>
         </article>
 
         <article className="home-stat home-history-card">
@@ -278,7 +278,7 @@ export default function Home({ onStartWorkout }) {
           })}
         </div>
         <div className="home-panel-foot">
-          <span>{sessoesNaSemana === 0 ? 'Nenhuma sessão registrada nesta semana' : `${sessoesNaSemana} ${sessoesNaSemana === 1 ? 'sessão registrada' : 'sessões registradas'} nesta semana`}</span>
+          <span>{sessoesNaSemana === 0 ? 'Nenhum dia com treino nesta semana' : `${sessoesNaSemana} ${sessoesNaSemana === 1 ? 'dia' : 'dias'} com treino nesta semana`}</span>
           {sessoesNaSemana > 0 && <span className="home-status"><CheckCircle2 size={13} /> Você está mantendo o ritmo</span>}
         </div>
       </section>

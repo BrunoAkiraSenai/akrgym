@@ -1,0 +1,33 @@
+name = "akrgym-analisar-refeicao"
+main = "src/index.js"
+compatibility_date = "2026-09-04"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+head_sampling_rate = 0.1
+
+[vars]
+FIREBASE_PROJECT_ID = "akrgym"
+FIREBASE_PROJECT_NUMBER = "272661727889"
+FIREBASE_APP_ID = "1:272661727889:web:532c4b51c35afa28d64d30"
+ALLOWED_ORIGINS = "https://akrgym.web.app,https://akrgym.firebaseapp.com"
+ALLOW_LOCAL_ORIGIN = "false"
+
+# Ambiente separado para testar a integração pelo localhost sem abrir o Worker
+# de produção para origens locais.
+[env.staging]
+name = "akrgym-analisar-refeicao-staging"
+compatibility_date = "2026-09-04"
+compatibility_flags = ["nodejs_compat"]
+
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
+
+[env.staging.vars]
+FIREBASE_PROJECT_ID = "akrgym"
+FIREBASE_PROJECT_NUMBER = "272661727889"
+FIREBASE_APP_ID = "1:272661727889:web:532c4b51c35afa28d64d30"
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+ALLOW_LOCAL_ORIGIN = "true"

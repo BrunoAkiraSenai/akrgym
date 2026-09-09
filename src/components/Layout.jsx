@@ -95,14 +95,15 @@ export default function Layout({ activeTab, onTabChange, children }) {
       <AetherParticles />
 
       <main className="flex-1 overflow-y-auto px-4 sm:px-6 pt-6 pb-28 scrollbar-thin"
-        style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))' }}>
+        style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))', paddingBottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}>
         {children}
       </main>
 
       <nav
         ref={navRef}
         className="aether-nav fixed bottom-0 left-0 right-0 md:absolute md:bottom-4 md:left-4 md:right-4 rounded-3xl h-16 flex items-center justify-around px-2 mx-3 md:mx-auto md:max-w-2xl lg:max-w-4xl mb-0 md:mb-4 z-50"
-        style={{ paddingBottom: '6px', paddingTop: '6px' }}
+        aria-label="Navegação principal"
+        style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom, 0px))', paddingTop: '6px', height: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
       >
         {indicator.ready && (
           <span
@@ -117,6 +118,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
             <button
               key={key}
               type="button"
+              aria-current={active ? 'page' : undefined}
               ref={(el) => { tabRefs.current[key] = el }}
               onClick={() => onTabChange(key)}
               className={`aether-tab flex flex-col items-center justify-center gap-1.5 h-full flex-1 rounded-2xl transition-all active:scale-90 relative z-10 ${

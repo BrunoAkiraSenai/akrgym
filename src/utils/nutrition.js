@@ -15,8 +15,13 @@ const NON_FOOD_TERMS = [
   'carro',
   'moto',
   'academia',
-  'treino',
-  'exercicio',
+]
+
+const FOOD_CONTEXT_TERMS = [
+  'arroz', 'feijao', 'frango', 'carne', 'peixe', 'banana', 'sal', 'pao', 'aveia',
+  'ovo', 'leite', 'queijo', 'iogurte', 'fruta', 'legume', 'verdura', 'comida',
+  'refeicao', 'almoco', 'jantar', 'cafe', 'bebida', 'suco', 'creme', 'milho',
+  'brocolis', 'batata', 'azeite', 'macarrao', 'prato',
 ]
 
 export const NUTRITION_INPUT_ERROR = 'Digite alimentos ou bebidas para calcular os macros. Ex.: arroz, frango e salada.'
@@ -37,11 +42,12 @@ function normalizarTexto(texto) {
 export function validarTextoAlimento(texto) {
   if (typeof texto !== 'string' || texto.trim().length < 3) return NUTRITION_INPUT_ERROR
   const normalizado = normalizarTexto(texto)
+  const temContextoAlimentar = FOOD_CONTEXT_TERMS.some((termo) => normalizado.includes(termo))
   const temTermoNaoAlimentar = NON_FOOD_TERMS.some((termo) => {
     const expressao = new RegExp(`(^|[^a-z])${termo}(?=[^a-z]|$)`, 'i')
     return expressao.test(normalizado)
   })
-  return temTermoNaoAlimentar ? NUTRITION_INPUT_ERROR : null
+  return temTermoNaoAlimentar && !temContextoAlimentar ? NUTRITION_INPUT_ERROR : null
 }
 
 /**
@@ -51,7 +57,11 @@ export function validarTextoAlimento(texto) {
  */
 export function validarResultadoMacros(resultado) {
   if (!resultado || resultado.valido !== true) return NUTRITION_RESULT_ERROR
-  const valores = [resultado.kcal, resultado.p, resultado.c, resultado.g].map(Number)
+  // Fibra é opcional apenas para manter compatibilidade com análises antigas;
+  // respostas novas da IA sempre a enviam.
+  const campos = [resultado.kcal, resultado.p, resultado.c, resultado.g, resultado.fibras]
+  if (!campos.every((valor) => typeof valor === 'number' && Number.isFinite(valor))) return NUTRITION_RESULT_ERROR
+  const valores = campos
   if (!valores.every(Number.isFinite) || valores.some((valor) => valor < 0)) return NUTRITION_RESULT_ERROR
   if (valores.every((valor) => valor === 0)) return NUTRITION_RESULT_ERROR
   return null

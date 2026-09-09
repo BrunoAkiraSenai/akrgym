@@ -43,9 +43,12 @@ function inicioDoDia(valor) {
 }
 
 function diasAtivos(lista, agora, inicio, fim) {
-  const hoje = inicioDoDia(agora).getTime()
-  const min = hoje + inicio * 86400000
-  const max = hoje + fim * 86400000
+  const primeiro = inicioDoDia(agora)
+  const ultimo = inicioDoDia(agora)
+  primeiro.setDate(primeiro.getDate() + inicio)
+  ultimo.setDate(ultimo.getDate() + fim)
+  const min = primeiro.getTime()
+  const max = ultimo.getTime()
   const dias = new Set()
   lista.forEach(treino => {
     const data = dataTreinoParaDate(treino?.data)
@@ -57,18 +60,18 @@ function diasAtivos(lista, agora, inicio, fim) {
 }
 
 export function calcularRitmoTreino(lista = [], agora = new Date()) {
-  const pontos = Array.from({ length: 7 }, (_, indice) => {
-    const fim = indice === 6 ? 0 : -((6 - indice) * 2)
-    const inicio = fim - 3
-    return Math.min(100, Math.round((diasAtivos(lista, agora, inicio, fim) / 4) * 100))
+  // Four active days in a rolling week = 100. Each point uses the same rule.
+  // This is an activity indicator, not a training prescription.
+  const pontos = Array.from({ length: 14 }, (_, indice) => {
+    const fim = indice - 13
+    return Math.min(100, Math.round((diasAtivos(lista, agora, fim - 6, fim) / 4) * 100))
   })
-  const recentes = diasAtivos(lista, agora, -13, 0)
-  const anteriores = diasAtivos(lista, agora, -27, -14)
+  const recentes = diasAtivos(lista, agora, -6, 0)
   return {
     pontos,
-    score: Math.min(100, Math.round((recentes / 4) * 100)),
+    score: pontos.at(-1),
     diasRecentes: recentes,
-    variacao: recentes - anteriores,
+    variacao: pontos.at(-1) - pontos.at(-8),
   }
 }
 

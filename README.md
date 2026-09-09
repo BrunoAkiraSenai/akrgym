@@ -50,7 +50,7 @@
 Painel principal com streak de treinos, frequência semanal, total de treinos, último treino realizado e botão rápido para iniciar um novo treino.
 
 ### 🥗 Dieta
-Diário alimentar com 4 refeições fixas (Café, Almoço, Pré-Treino, Jantar), progresso de macros do dia, alimentos extras, análise por IA Gemini e heatmap mensal de calorias.
+Diário alimentar com 4 refeições fixas (Café, Almoço, Pré-Treino, Jantar), progresso diário de calorias, proteínas, carboidratos, gorduras e fibras, alimentos extras, análise por IA Gemini e heatmap mensal de calorias.
 
 ### 🏋️ Execução de Treino
 Protocolo Top Set / Back-Off com aquecimento (60%), preparatória (85%), top set e back-off. Referência automática do último treino. Regra especial para agachamento.
@@ -84,7 +84,7 @@ Gerenciamento completo de divisões de treino, exercícios, refeições, metas d
 ### 🥗 Diário Alimentar
 - 4 refeições fixas com status: pendente, limpo, customizado, pulado
 - Extras globais (fora da dieta)
-- **IA Gemini** — descreva o prato e ela preenche os macros automaticamente
+- **IA Gemini** — descreva o prato e ela preenche calorias, macros e fibras automaticamente
 - Rate limiting + cache de análise
 - Heatmap mensal de calorias
 - Indicador de aderência (verde/amarelo/vermelho)
@@ -100,7 +100,7 @@ Gerenciamento completo de divisões de treino, exercícios, refeições, metas d
 
 ### ⚙️ Configurações
 - CRUD completo de treinos (divisões + exercícios)
-- CRUD de refeições com cálculo de macros por IA
+- CRUD de refeições com cálculo de macros e fibras por IA
 - Metas diárias com sincronização automática
 - Auto-save com debounce
 
@@ -166,9 +166,13 @@ cd akrgym
 # 2. Instale dependências
 npm install
 
-# 3. Configure Firebase
-# Crie um arquivo .env na raiz com:
-VITE_GEMINI_API_KEY=sua_chave_aqui
+# 3. Em desenvolvimento, o Vite ativa o App Check de debug automaticamente.
+#    Na primeira execução, copie o token mostrado no console do navegador e
+#    cadastre-o em Firebase Console → App Check → seu app web → Tokens de depuração.
+#    Em produção, configure a site key pública conforme `.env.example`:
+# VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=sua_site_key_publica
+# VITE_AI_BACKEND_URL=https://seu-worker.workers.dev (opcional; o Worker de produção já é o padrão)
+# VITE_FIREBASE_FUNCTIONS_URL= (fallback legado, se ainda necessário)
 
 # 4. Rode em dev
 npm run dev
@@ -204,9 +208,13 @@ Acesse em: `https://akrgym--dev-785gryhc.web.app`
 
 - Regras do Firestore restringem acesso por `auth.uid`
 - Cache persistente offline (100 MB)
-- Chave Gemini configurável via `.env` (não versionada)
+- Chave Gemini mantida no secret do backend (Cloudflare Worker ou Cloud Functions), nunca no frontend
 - Service account key removida do git
 - CORS configurado para domínios autorizados
+
+### Backend de IA sem Blaze
+
+O Worker em `cloudflare-worker/analisar-refeicao` atende a análise de refeições sem mudar a experiência do usuário. O app usa o Worker de produção por padrão; `VITE_AI_BACKEND_URL` permite apontar para staging ou outro endpoint, e `VITE_FIREBASE_FUNCTIONS_URL` mantém a Cloud Function como fallback legado explícito.
 
 ---
 

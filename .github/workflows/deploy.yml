@@ -24,8 +24,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Build
-        run: npm run build
+        env:
+          VITE_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY }}
+        run: npm run check:production && npm run build
 
       - name: Deploy Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0

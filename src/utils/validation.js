@@ -21,6 +21,7 @@ const LIMITS = {
   proteinas: 999,
   carboidratos: 999,
   gorduras: 999,
+  fibras: 999,
   peso: 500,
   medidaCm: 200,
   medidaCmPequena: 100,  // braço, coxa

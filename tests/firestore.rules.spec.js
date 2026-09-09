@@ -18,6 +18,7 @@
  */
 
 import { describe, it, before, after } from 'node:test'
+import assert from 'node:assert/strict'
 import {
   initializeTestEnvironment,
   assertFails,
@@ -26,6 +27,7 @@ import {
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { applyDiaryAction, diaryTotals } from '../src/utils/dietDiary.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const RULES = readFileSync(join(__dirname, '..', 'firestore.rules'), 'utf8')
@@ -170,12 +172,45 @@ describe('AkrGym Firestore Rules', () => {
   })
 
   describe('diario_dieta', () => {
+    it('transações concorrentes preservam duas refeições e seus snapshots', async () => {
+      const db = authedDb(ALICE)
+      const date = '2026-09-09'
+      const ref = db.doc(`users/${ALICE}/diario_dieta/${date}`)
+      const plan = [{ id: 'cafe', nome: 'Café', kcal: 100, fibras: 3 }, { id: 'almoco', nome: 'Almoço', kcal: 200, fibras: 5 }]
+      await Promise.all(plan.map(food => db.runTransaction(async transaction => {
+        const snap = await transaction.get(ref)
+        transaction.set(ref, applyDiaryAction(snap.exists ? snap.data() : null, date, {
+          type: 'meal', id: food.id, status: 'limpo', food, revision: food.id,
+        }, plan))
+      })))
+      const saved = (await ref.get()).data()
+      assert.equal(Object.keys(saved.refeicoes).length, 2)
+      assert.equal(diaryTotals(saved, []).kcal, 300)
+      assert.equal(diaryTotals(saved, []).fibras, 8)
+    })
+
     it('create com data no formato YYYY-MM-DD passa', async () => {
       const db = authedDb(ALICE)
       await assertSucceeds(db.doc(`users/${ALICE}/diario_dieta/2025-01-15`).set({
         data: '2025-01-15',
         refeicoes: {},
         extras_globais: [],
+      }))
+    })
+
+
+    it('aceita fibras em refeições e alimentos extras', async () => {
+      const db = authedDb(ALICE)
+      await assertSucceeds(db.doc(`users/${ALICE}/diario_dieta/2025-01-16`).set({
+        data: '2025-01-16',
+        refeicoes: {
+          cafe: {
+            status: 'customizado',
+            substituto: { kcal: 25, proteinas: 2, carboidratos: 5, gorduras: 0, fibras: 3 },
+            extra: [{ nome: 'brócolis', kcal: 25, proteinas: 2, carboidratos: 5, gorduras: 0, fibras: 3 }],
+          },
+        },
+        extras_globais: [{ nome: 'brócolis', kcal: 25, proteinas: 2, carboidratos: 5, gorduras: 0, fibras: 3 }],
       }))
     })
 
@@ -197,6 +232,15 @@ describe('AkrGym Firestore Rules', () => {
       }))
     })
 
+    it('data com mês ou dia impossível é rejeitada', async () => {
+      const db = authedDb(ALICE)
+      await assertFails(db.doc(`users/${ALICE}/diario_dieta/2025-01-15`).set({
+        data: '2025-99-99',
+        refeicoes: {},
+        extras_globais: [],
+      }))
+    })
+
     it('extras_globais com muitos itens (> 100) é rejeitado', async () => {
       const db = authedDb(ALICE)
       const extras = Array.from({ length: 200 }, (_, i) => ({ nome: `e${i}`, kcal: 1, proteinas: 0, carboidratos: 0, gorduras: 0 }))
@@ -206,6 +250,7 @@ describe('AkrGym Firestore Rules', () => {
         extras_globais: extras,
       }))
     })
+
 
     it('usuarioId errado na defesa em profundidade é rejeitado', async () => {
       const db = authedDb(ALICE)

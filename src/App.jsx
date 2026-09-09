@@ -62,13 +62,17 @@ export default function App() {
 
   useEffect(() => {
     let cancelado = false
+    let authSequence = 0
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (cancelado) return
+      const sequence = ++authSequence
+      const sessaoAtual = () => !cancelado && sequence === authSequence
 
       const newUid = u?.uid || null
       // Se o usuário mudou (logout ou troca de conta), reseta a UI
       if (newUid !== prevUidRef.current) {
         prevUidRef.current = newUid
+        setUser(null)
         resetUIState()
       }
 
@@ -77,21 +81,20 @@ export default function App() {
         catch (e) {
           if (import.meta.env.DEV) console.warn('ensureUserConfig falhou:', e?.message)
         }
+        if (!sessaoAtual()) return
         setUser(u)
         setLoading(false)
         setInitializing(false)
       } else {
+        setUser(null)
         // Só tenta anônimo se realmente não houver sessão
         try {
-          const anon = await signInAnonymously(auth)
-          if (!cancelado && anon?.user) {
-            await ensureUserConfig(anon.user.uid)
-            setUser(anon.user)
-          }
+          // A nova sessão é inicializada pelo próximo callback de Auth.
+          await signInAnonymously(auth)
         } catch (err) {
           if (import.meta.env.DEV) console.warn('Login anônimo não disponível:', err.code)
         }
-        if (!cancelado) {
+        if (sessaoAtual()) {
           setLoading(false)
           setInitializing(false)
         }
@@ -120,7 +123,7 @@ export default function App() {
       case 'dieta':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
       case 'treinar':
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} activeTab={activeTab} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} onIrParaConfig={() => { setAbaInicialConfig('treinos'); setActiveTab('configurar') }} activeTab={activeTab} /></Suspense>
       case 'evolucao':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Evolucao /></Suspense>
       case 'configurar':

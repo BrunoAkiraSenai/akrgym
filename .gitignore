@@ -51,3 +51,7 @@ NOTES_PRIVATE.md
 
 # === Credenciais locais do projeto (NUNCA commitar) ===
 token/
+functions/.secret.local
+cloudflare-worker/analisar-refeicao/.dev.vars
+cloudflare-worker/analisar-refeicao/.wrangler/
+cloudflare-worker/analisar-refeicao/node_modules/

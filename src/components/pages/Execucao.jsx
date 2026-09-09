@@ -1,23 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  collection, getDocs, query, where, orderBy, limit, addDoc, doc, getDoc, setDoc, serverTimestamp,
+  collection, getDocs, query, where, orderBy, runTransaction, doc, getDoc, setDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
+import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 import {
   Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
-  Flame, Info, RefreshCw, Search, Zap, SkipForward,
+  Flame, Info, RefreshCw, Search, Zap, SkipForward, Dumbbell,
 } from 'lucide-react'
 
-function exercicioPreenchido(ex) {
-  const carga = Number(ex?.carga)
-  const reps = Number(ex?.reps)
-  return Number.isFinite(carga) && carga > 0 && Number.isFinite(reps) && reps > 0
-}
-
-export default function Execucao({ onFinish, activeTab }) {
+export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
   const user = useUser()
   const STORAGE_KEY = `rascunho_treino_${user.uid}`
   const [step, setStep] = useState('select')
@@ -31,6 +26,10 @@ export default function Execucao({ onFinish, activeTab }) {
   const [treinosState, setTreinosState] = useState(null)
   const [filtroBusca, setFiltroBusca] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
+  const sessionId = useRef(null)
+  const saveLock = useRef(false)
+  const historyRequest = useRef(0)
+  useEffect(() => () => { ++historyRequest.current }, [])
   const isPrimeiroRender = useRef(true)
 
   const carregarTreinos = useCallback(async () => {
@@ -82,7 +81,7 @@ export default function Execucao({ onFinish, activeTab }) {
       if (!raw) return
       const draft = JSON.parse(raw)
       if (!draft?.rotinaKey || !draft?.topSetData?.length) return
-      if (!treinosState[draft.rotinaKey]) {
+      if (!treinosState[draft.rotinaKey] || !validDraft(draft, treinosState[draft.rotinaKey])) {
         localStorage.removeItem(STORAGE_KEY)
         return
       }
@@ -101,11 +100,12 @@ export default function Execucao({ onFinish, activeTab }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (step === 'active' && rotinaKey && topSetData.length > 0) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ rotinaKey, topSetData }))
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ rotinaKey, topSetData, sessionId: sessionId.current, fingerprint: routineFingerprint(treinosState?.[rotinaKey]) })) }
+        catch { setErro('Não foi possível guardar o rascunho neste navegador. Não feche a aba antes de finalizar.') }
       }
     }, 500)
     return () => clearTimeout(timer)
-  }, [rotinaKey, topSetData, step, STORAGE_KEY])
+  }, [rotinaKey, topSetData, step, STORAGE_KEY, treinosState])
 
   const iniciarTreino = useCallback(async (key) => {
     if (loadingHistorico) return
@@ -114,34 +114,25 @@ export default function Execucao({ onFinish, activeTab }) {
       return
     }
     const protocolo = treinosState[key]
+    const request = ++historyRequest.current
+    sessionId.current = crypto.randomUUID()
+    setTopSetData([])
     setRotinaKey(key)
     setStep('active')
     setLoadingHistorico(true)
+    setRecuperado(false)
     setErro(null); setSucesso(null)
-
     try {
       const snap = await getDocs(
-        query(collection(db, 'users', user.uid, 'historico_treinos'), where('rotina_id', '==', key), orderBy('data', 'desc'), limit(1))
+        query(collection(db, 'users', user.uid, 'historico_treinos'), where('rotina_id', '==', key), orderBy('data', 'desc'))
       )
-      const ultimo = !snap.empty ? snap.docs[0].data() : null
-
-      setTopSetData(
-        protocolo.exercicios.map(ex => {
-          const anterior = ultimo?.exercicios?.find(e => e.nome === ex.nome)
-          return {
-            nome: ex.nome,
-            meta_reps: ex.meta_reps,
-            carga: '', reps: '',
-            ref: anterior?.carga_top ?? ex.base_top,
-            repsAnterior: anterior?.reps_top ?? null,
-            tem_aquecimento: ex.tem_aquecimento ?? false,
-            IsAgachamento: ex.IsAgachamento ?? false,
-            nota: ex.nota ?? null,
-            pulado: false,
-          }
-        })
-      )
-    } catch (err) { setErro(`Erro ao buscar histórico: ${err.message}`) }
+      if (request !== historyRequest.current) return
+      setTopSetData(prepareSession(protocolo, snap.docs.map(item => item.data())))
+    } catch {
+      if (request !== historyRequest.current) return
+      setErro('Histórico indisponível. As referências abaixo são as cargas do plano, não da última sessão.')
+      setTopSetData(prepareSession(protocolo))
+    }
     setLoadingHistorico(false)
   }, [loadingHistorico, treinosState, user.uid])
 
@@ -158,6 +149,7 @@ export default function Execucao({ onFinish, activeTab }) {
   }
 
   const confirmarFinalizar = async () => {
+    if (saveLock.current) return
     setShowConfirm(false)
     const container = document.querySelector('.treino-container')
     if (container) {
@@ -173,26 +165,36 @@ export default function Execucao({ onFinish, activeTab }) {
       return
     }
     if (exerciciosPendentes.length > 0) {
-      setErro('Preencha carga e repetições dos exercícios que não foram pulados')
+      setErro('Informe carga de 0 a 1000 kg e repetições inteiras de 1 a 1000 nos exercícios não pulados.')
       setSaving(false)
       return
     }
+    saveLock.current = true
     try {
-      await addDoc(collection(db, 'users', user.uid, 'historico_treinos'), {
+      sessionId.current ||= crypto.randomUUID()
+      const target = doc(db, 'users', user.uid, 'historico_treinos', sessionId.current)
+      const record = {
         rotina_id: rotinaKey,
+        rotina_nome: treinosState[rotinaKey]?.nome || rotinaKey,
         data: new Date(),
         createdAt: serverTimestamp(),
-        exercicios: exerciciosConcluidos.map(ex => ({ nome: ex.nome, carga_top: Number(ex.carga), reps_top: Number(ex.reps) })),
+        exercicios: exerciciosConcluidos.map(recordedExercise),
         exercicios_pulados: topSetData.filter(ex => ex.pulado).map(ex => ex.nome),
+      }
+      await runTransaction(db, async transaction => {
+        const existing = await transaction.get(target)
+        if (!existing.exists()) transaction.set(target, record)
       })
-      localStorage.removeItem(STORAGE_KEY)
+      try { localStorage.removeItem(STORAGE_KEY) } catch { /* Remote record is safe. */ }
       setSucesso('Treino finalizado com sucesso!')
+      setStep('select'); setTopSetData([]); setRotinaKey(null)
       setSaving(false)
-      await new Promise(r => setTimeout(r, 1000))
+      saveLock.current = false
       onFinish()
     } catch (err) {
       console.error('Erro ao salvar treino:', err)
-      setErro('Erro ao salvar treino. Tente novamente.')
+      saveLock.current = false
+      setErro('Erro ao salvar treino. Tente novamente; esta sessão não será duplicada.')
       setSaving(false)
     }
   }
@@ -209,8 +211,10 @@ export default function Execucao({ onFinish, activeTab }) {
         )}
         {keys.length === 0 ? (
           <div className="treino-empty card-premium">
-            <p>Nenhum treino configurado.</p>
-            <span>Vá em Configurações para criar suas divisões.</span>
+            <Dumbbell size={28} aria-hidden="true" />
+            <strong>Nenhum treino configurado</strong>
+            <span>Crie uma divisão em Configurações para começar a registrar suas séries.</span>
+            {onIrParaConfig && <button type="button" onClick={onIrParaConfig} className="btn-primary mt-2 px-4 py-2.5 text-xs">Configurar treino</button>}
           </div>
         ) : keys.map(key => {
           const r = treinosState[key]
@@ -218,6 +222,7 @@ export default function Execucao({ onFinish, activeTab }) {
             <button
               key={key}
               type="button"
+              // eslint-disable-next-line react-hooks/refs
               onClick={() => iniciarTreino(key)}
               disabled={loadingHistorico}
               className="treino-routine-card card-premium"
@@ -253,7 +258,6 @@ export default function Execucao({ onFinish, activeTab }) {
         <div className="exec-feedback exec-feedback-info">
           <span><CheckCircle size={14} /> Rascunho recuperado</span>
           <button type="button" onClick={() => {
-            localStorage.removeItem(STORAGE_KEY)
             setRecuperado(false)
             setStep('select')
             setRotinaKey(null)

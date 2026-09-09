@@ -339,7 +339,7 @@ Portal React, `fixed inset-0 z-50` com backdrop `bg-black/70 backdrop-blur-sm`. 
 - **Sem React Router**: a navegação entre 5 telas é feita com `useState('activeTab')` em `App.jsx`. Justificativa: são poucas telas, todas equivalentes, e essa abordagem elimina dependência e simplifica transições.
 - **Lazy loading** de todas as páginas via `React.lazy` + `<Suspense>`. Cada aba vira um chunk separado, com `key={uid}` para forçar remount entre usuários.
 - **Firestore em modo offline-first**: `persistentLocalCache({ cacheSizeBytes: 104857600 })` — 100 MB de cache local para IndexedDB.
-- **Cloud Function desativada**: chamadas de IA são feitas client-side para não exigir plano Blaze. O arquivo `functions/index.js` é mantido comentado como referência.
+- **IA via Cloud Function**: o frontend envia o texto, o ID token e o App Check; a chave Gemini fica somente no Secret Manager da função.
 - **Sem Context API global de dados**: dados de cada página são carregados sob demanda via `useEffect` + `useCallback`. Reduz re-renders e mantém cada página desacoplada.
 - **Auto-save granular**: cada página tem seu próprio padrão de save (localStorage para rascunho, debounce para config, explícito para treino).
 
@@ -349,8 +349,8 @@ Portal React, `fixed inset-0 z-50` com backdrop `bg-black/70 backdrop-blur-sm`. 
 
 ```
 /home/akira/akrgym/akrgym/
-├── .env                            ← VITE_GEMINI_API_KEY (NÃO versionado)
-├── .env.example                    ← (sugestão — não presente, ver §9)
+├── .env                            ← App Check/URL da função (NÃO versionado)
+├── .env.example                    ← exemplo de configuração local
 ├── .gitignore
 ├── .firebase/                      ← cache do Firebase CLI
 ├── README.md
@@ -438,7 +438,7 @@ Portal React, `fixed inset-0 z-50` com backdrop `bg-black/70 backdrop-blur-sm`. 
 - Node.js ≥ 18 (Vite 8 + ESLint 10 exigem Node recente).
 - NPM 9+ ou PNPM/Yarn equivalentes.
 - Conta Firebase com projeto `akrgym` ativo.
-- Chave de API do Google AI Studio (Gemini).
+- App Check configurado para o app web.
 
 ### Passos
 
@@ -447,8 +447,10 @@ git clone https://github.com/BrunoAkiraSenai/akrgym.git
 cd akrgym
 npm install
 cp .env.example .env   # crie manualmente se não existir
-# editar .env:
-#   VITE_GEMINI_API_KEY=coloque-sua-chave-aqui
+# editar .env conforme o .env.example:
+#   VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=...
+#   VITE_AI_BACKEND_URL=https://seu-worker.workers.dev (opcional; o Worker de produção já é o padrão)
+#   VITE_FIREBASE_FUNCTIONS_URL= (fallback legado, se ainda necessário)
 npm run dev
 ```
 
@@ -463,9 +465,7 @@ npm run dev
 | `test` | `npm run test:unit` | Executa os testes unitários puros |
 | `test:unit` | `node --test tests/*.unit.spec.js` | Valida regras de cálculo e sanitização sem serviços externos |
 | `test:rules` | `firebase emulators:exec --only firestore ...` | Executa os testes das regras no emulador Firestore (Java 17+) |
-| `deploy` | `npm run build && GOOGLE_APPLICATION_CREDENTIALS=/home/akira/akrgym/keys/akrgym-service-account.json firebase deploy --only hosting --project akrgym` | Build + deploy apenas de hosting (sem functions) |
-
-> ⚠️ O caminho de `GOOGLE_APPLICATION_CREDENTIALS` em `package.json` é **específico desta máquina**. Em outro ambiente, ajuste ou use `firebase login` + `firebase use akrgym` antes do deploy.
+| `deploy` | `npm run build && firebase deploy --only hosting --project akrgym` | Build + deploy apenas de hosting (usa `firebase login` no ambiente) |
 
 ### ESLint
 
@@ -484,20 +484,15 @@ npm run dev
 
 | Nome | Tipo | Descrição | Obrigatório? |
 |---|---|---|---|
-| `VITE_GEMINI_API_KEY` | string | Chave de API do Gemini (Google AI Studio). Lida por `import.meta.env.VITE_GEMINI_API_KEY` no bundle. | Sim (funcionalidade de IA) |
+| `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` | string | Site key pública do App Check/reCAPTCHA Enterprise. | Sim em produção |
+| `VITE_FIREBASE_APPCHECK_DEBUG` | string/boolean | Token de debug do App Check, somente no desenvolvimento local. Se omitido, o Vite gera um token automaticamente. | Opcional |
+| `VITE_AI_BACKEND_URL` | string | URL do Worker Cloudflare de IA. Se omitido, usa o Worker de produção padrão. | Opcional |
+| `VITE_FIREBASE_FUNCTIONS_URL` | string | URL completa ou base da Cloud Function legada de IA. | Opcional |
 | `VITE_APP_VERSION` | string | Versão exibida no rodapé de Configurações (default `'3.1'`). | Opcional |
 
-> O `.env` está no `.gitignore`. A chave **não é commitada**. O `.env.example` não existe no repo — quem clonar precisa criar manualmente.
+> O `.env` está no `.gitignore`. A chave Gemini **não deve existir no frontend**; ela é configurada no Secret Manager das Cloud Functions.
 
-### Como o Gemini resolve a chave
-
-Em `src/utils/gemini.js:6`:
-
-```js
-const key = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY
-```
-
-> Existe um **hook futuro**: o usuário pode colar a própria chave em Configurações (campo ainda não implementado na UI; a chave `gemini_api_key` no `localStorage` está reservada).
+No localhost, o app ativa o modo de depuração do App Check automaticamente. Na primeira execução, copie o token exibido no console do navegador e cadastre-o em **Firebase Console → App Check → Tokens de depuração**. Depois de cadastrado, a análise de alimentos funciona localmente sem desativar a validação usada em produção.
 
 ---
 
@@ -592,14 +587,16 @@ Caminho raiz: `users/{uid}/`
       "kcal": 460,
       "proteinas": 29,
       "carboidratos": 42,
-      "gorduras": 19
+      "gorduras": 19,
+      "fibras": 5
     }
   ],
   "metas": {
     "kcal": 1970,
     "proteinas": 165,
     "carboidratos": 226,
-    "gorduras": 43
+    "gorduras": 43,
+    "fibras": 30
   }
 }
 ```
@@ -607,7 +604,7 @@ Caminho raiz: `users/{uid}/`
 Regras de validação no cliente (em `Configuracao.jsx`):
 
 - `kcal` ∈ [0, 99999]
-- `proteinas/carboidratos/gorduras` ∈ [0, 9999]
+- `proteinas/carboidratos/gorduras/fibras` ∈ [0, 9999]
 - `base_top` ∈ [0, 9999]
 
 Regras no servidor (`firestore.rules`):
@@ -1094,57 +1091,16 @@ Em `index.html`:
 
 ## 18. Integração com a IA Gemini
 
-`src/utils/gemini.js` (40 linhas).
+`src/utils/gemini.js` faz uma requisição autenticada ao Worker Cloudflare
+`akrgym-analisar-refeicao` (ou à Cloud Function legada quando configurada).
+O navegador envia somente `{ textoAlimentos }`, o ID token do Firebase Auth e o
+token `X-Firebase-AppCheck`. A chave Gemini fica em secret do backend e nunca é
+incluída no bundle.
 
-```js
-import { GoogleGenerativeAI } from '@google/generative-ai'
-
-const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, _erro: null }
-
-export async function calcularMacrosIA(textoAlimentos) {
-  const key = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY
-  if (!key) return { ...FALLBACK, nome: textoAlimentos.trim(), _erro: 'Chave da API Gemini não configurada. Adicione em Configurações.' }
-
-  try {
-    const genAI = new GoogleGenerativeAI(key)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
-
-    const prompt = `Você é um assistente de nutrição especialista em tabelas brasileiras (TACO/TBCA).
-Calcule os macronutrientes TOTAIS da seguinte refeição completa: "${textoAlimentos}"
-Some os valores de todos os alimentos listados.
-Responda SOMENTE com um objeto JSON puro, sem markdown, sem texto adicional, começando com { e terminando com }:
-{ "kcal": número, "p": número, "c": número, "g": número }
-Onde: kcal = calorias totais, p = proteínas em gramas, c = carboidratos em gramas, g = gorduras em gramas.
-Arredonde para números inteiros.`
-
-    const result = await model.generateContent(prompt)
-
-    const rawText = result.response?.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!rawText) throw new Error('Resposta vazia da IA')
-
-    const cleaned = rawText.replace(/```json?/gi, '').replace(/```/g, '').trim()
-
-    let parsed
-    try { parsed = JSON.parse(cleaned) }
-    catch { throw new Error('Resposta inválida (não JSON)') }
-
-    if (typeof parsed.kcal !== 'number' || typeof parsed.p !== 'number' ||
-        typeof parsed.c !== 'number' || typeof parsed.g !== 'number') {
-      throw new Error('Campos nutricionais ausentes no formato esperado')
-    }
-
-    return {
-      nome: textoAlimentos.trim(),
-      kcal: Math.round(parsed.kcal),
-      proteinas: Math.round(parsed.p),
-      carboidratos: Math.round(parsed.c),
-      gorduras: Math.round(parsed.g),
-    }
-  } catch (err) {
-    return { ...FALLBACK, nome: textoAlimentos.trim(), _erro: `IA indisponível: ${err.message}. Use o formulário manual.` }
-  }
-}
-```
+O backend valida o texto, rejeita termos obviamente não alimentares, aplica
+limite de 10 requisições por minuto por usuário, permite apenas uma chamada
+ativa por usuário, impõe timeout e sanitiza a resposta para os cinco campos
+nutricionais esperados.
 
 ### Onde é usado
 
@@ -1187,33 +1143,25 @@ if (parsed._erro.includes('429') || parsed._erro.includes('Too Many Requests') |
 
 ---
 
-## 19. Cloud Functions (legado / referência)
+## 19. Cloud Functions
 
-`functions/index.js` (70 linhas). **Função está comentada** — não está em produção.
+`functions/index.js` contém a função ativa `analisarRefeicao`, com autenticação,
+App Check, CORS restrito, validação de payload, rate limit, timeout e segredo
+Gemini via Secret Manager.
 
-> A intenção original era usar uma Cloud Function para esconder a chave do Gemini. Como o projeto está no plano Spark (gratuito), optou-se por chamar o SDK diretamente do frontend e injetar a chave via `VITE_GEMINI_API_KEY` no `.env`. Se um dia migrar para o plano Blaze, basta descomentar o bloco e fazer `firebase deploy --only functions`.
-
-### Estrutura preservada
-
-```js
-const PROMPT = `...regras para o Gemini responder JSON puro com kcal, p, c, g...`
-// exports.analisarRefeicao = functions.https.onRequest(async (req, res) => {
-//   res.set('Access-Control-Allow-Origin', 'https://akrgym.web.app')
-//   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
-//   ...
-//   const apiKey = functions.config().gemini?.key
-//   ...
-// })
-```
-
-Para reativar no futuro:
+Configuração uma vez no projeto Firebase:
 
 ```bash
 cd functions
 npm install
-firebase functions:config:set gemini.key="SUA_CHAVE"
+firebase functions:secrets:set GEMINI_API_KEY
+firebase functions:secrets:set ALLOWED_ORIGINS
 firebase deploy --only functions
 ```
+
+O deploy de Cloud Functions exige o plano Blaze. Para desenvolvimento local,
+use `.secret.local` no diretório `functions` e um token App Check de debug; não
+coloque a chave em `.env` do frontend.
 
 ---
 
@@ -1346,10 +1294,9 @@ npm run deploy
 O script faz:
 
 1. `npm run build` — gera `dist/`.
-2. Configura `GOOGLE_APPLICATION_CREDENTIALS=/home/akira/akrgym/keys/akrgym-service-account.json`.
-3. `firebase deploy --only hosting --project akrgym`.
+2. `firebase deploy --only hosting --project akrgym`.
 
-> ⚠️ O caminho da service account é específico desta máquina. Para deploy em CI/CD, gere a chave no CI, salve como secret e substitua o caminho.
+> Faça `firebase login` antes do deploy local. No CI, a autenticação continua sendo feita pelo secret do workflow; nenhuma chave é embutida no projeto.
 
 ### Deploy de regras e índices
 
@@ -1735,7 +1682,6 @@ Chaves usadas:
 | Chave | Conteúdo | Onde |
 |---|---|---|
 | `akrgym-theme` | ID do tema ativo (`roxo-suave` etc.) | `themes.js` |
-| `gemini_api_key` | Chave Gemini (reservado para futuro) | `gemini.js` |
 | `rascunho_treino_{uid}` | `{ rotinaKey, topSetData }` para auto-save de treino | `Execucao.jsx` |
 
 ### Comportamento offline
@@ -1799,11 +1745,11 @@ Chaves usadas:
 
 ### Limitações atuais
 
-- **Chave Gemini exposta no bundle**: como o SDK é chamado client-side, a chave fica acessível a usuários técnicos. Mitigação: rotacionar periodicamente e monitorar uso.
+- **IA protegida no código, mas depende de configuração operacional**: é necessário publicar a Cloud Function, configurar o segredo e ativar o App Check antes do uso em produção.
 - **Sem confirmação de e-mail** no cadastro (Firebase Auth permite, mas não foi habilitado).
-- **Sem recuperação de senha** (idêntico ao anterior).
+- Recuperação de senha por e-mail já está disponível na tela de login; confirmação de e-mail ainda não está habilitada.
 - **Sem CSP** (Content Security Policy) configurado no Hosting — recomendado adicionar.
-- **Sem rate limit server-side** nas chamadas Gemini além do cache e rate-limit client-side.
+- **Rate limit da IA em memória por instância**: suficiente para o estágio atual; em escala, migrar para um contador compartilhado/Redis ou Firestore com TTL.
 - **Anônimo não consegue login Google em popup**: a migração pode ser imperfeita em alguns cenários.
 - **Testes de interface ainda não cobrem todos os fluxos** (Playwright permanece recomendado).
 - **CI/CD configurado**: validação em pull requests e deploy do Hosting na `main`; o secret `FIREBASE_SERVICE_ACCOUNT_AKRGYM` precisa existir no GitHub.
@@ -1820,9 +1766,19 @@ Chaves usadas:
 - [x] Configurar **deploy contínuo do Hosting** pela branch `main` usando secret do GitHub.
 - [ ] Suporte a **foto de refeição** (via Capacitor Camera ou `<input type="file" capture>`).
 - [ ] **Notificações push** (Firebase Cloud Messaging) para lembretes de treino/refeição.
-- [ ] **Exportar dados** (JSON ou CSV) para backup local.
+- [x] **Exportar dados em JSON** para backup local (Configurações → Seus dados).
+- [x] Melhorar estados vazios com orientação e próximo passo em Treinar, Dieta e Evolução.
 - [ ] **Compartilhar treino** (gerar link público de uma sessão específica).
 - [x] **Modo escuro/claro** (`Original` = Escuro, `Lava` = Claro).
+
+### Preparação SaaS (sem ativação para usuários)
+
+O produto ainda não exibe planos, preços, paywall ou limites por assinatura. A preparação deve permanecer isolada até existir uma decisão comercial e um provedor de pagamentos:
+
+- preservar o acesso atual e não condicionar recursos a um plano;
+- manter o export JSON como mecanismo de portabilidade dos dados;
+- definir futuramente um documento de assinatura por usuário (`users/{uid}/subscription/current`) e regras server-side antes de qualquer cobrança;
+- ativar planos somente junto com termos, política de privacidade, cancelamento e testes de permissão.
 
 ---
 
@@ -1842,10 +1798,11 @@ Chaves usadas:
   3. Atualizar `firestore.rules` (a regra exige `metas`, `refeicoes` e `treinos`; caminhos de coleções desconhecidas são bloqueados).
 4. Ler o campo em outras páginas via `getDoc(doc(db, 'users', uid, 'config', 'data'))`.
 
-### Como mudar a chave Gemini sem deploy?
+### Como mudar a chave Gemini?
 
-- Atualizar `.env` e fazer `npm run build && npm run deploy`.
-- Alternativa: usuário pode colar a própria chave em `localStorage.setItem('gemini_api_key', '...')` (interface ainda não existe).
+- Atualizar a versão do segredo com `firebase functions:secrets:set GEMINI_API_KEY`.
+- Fazer `npm run deploy:functions` para aplicar a nova versão à função.
+- Nunca colocar a chave em `.env` do frontend, `localStorage` ou no repositório.
 
 ### Como regenerar ícones PWA?
 
@@ -1921,10 +1878,10 @@ Vite aceita `--host 0.0.0.0 --port 8080` para expor na rede. Para HTTPS local, u
 - `PROTOCOLO_BASE.upper_b` (Upper B — 5 exercícios, 1 com `nota`).
 
 ### `src/utils/gemini.js` (40 linhas)
-- `calcularMacrosIA(texto)` → `{ nome, kcal, proteinas, carboidratos, gorduras, _erro? }`.
-- Usa `gemini-2.5-flash`.
-- Lê chave de `localStorage.gemini_api_key` ou `VITE_GEMINI_API_KEY`.
-- Resposta esperada: JSON `{ kcal, p, c, g }` (campos curtos).
+- `calcularMacrosIA(texto)` → `{ nome, kcal, proteinas, carboidratos, gorduras, fibras, _erro? }`.
+- Chama o Worker `analisarRefeicao` com Auth + App Check (Cloud Function legada via variável opcional).
+- O modelo `gemini-2.5-flash` e a chave são usados somente no backend.
+- Resposta esperada: JSON `{ kcal, proteinas, carboidratos, gorduras, fibras }`.
 
 ### `src/utils/themes.js` (234 linhas)
 - 10 paletas (purple, indigo, emerald, cyan, blue, sky, orange, red, pink, fuchsia).

@@ -94,30 +94,30 @@ export const TREINOS_FEMININOS = {
 // e podem ser ajustados na aba Configuração conforme rotina e necessidades.
 export const DIETAS_FEMININAS = {
   perder_peso: {
-    metas: { kcal: 1650, proteinas: 125, carboidratos: 171, gorduras: 55 },
+    metas: { kcal: 1650, proteinas: 125, carboidratos: 171, gorduras: 55, fibras: 25 },
     refeicoes: [
-      { id: 'cafe', nome: 'Café da Manhã', horario: '08:00', alimentos: ['Iogurte natural', '30g Aveia', '1 Banana'], kcal: 340, proteinas: 18, carboidratos: 48, gorduras: 9 },
-      { id: 'almoco', nome: 'Almoço', horario: '12:30', alimentos: ['130g Frango', '100g Arroz', 'Feijão', 'Salada'], kcal: 470, proteinas: 43, carboidratos: 48, gorduras: 9 },
-      { id: 'lanche', nome: 'Lanche', horario: '16:00', alimentos: ['1 Ovo', '1 fatia Pão Integral', '1 fruta'], kcal: 250, proteinas: 12, carboidratos: 31, gorduras: 9 },
-      { id: 'jantar', nome: 'Jantar', horario: '20:00', alimentos: ['150g Peixe', '150g Batata', 'Legumes'], kcal: 390, proteinas: 36, carboidratos: 37, gorduras: 10 },
+      { id: 'cafe', nome: 'Café da Manhã', horario: '08:00', alimentos: ['Iogurte natural', '30g Aveia', '1 Banana'], kcal: 340, proteinas: 18, carboidratos: 48, gorduras: 9, fibras: 5 },
+      { id: 'almoco', nome: 'Almoço', horario: '12:30', alimentos: ['130g Frango', '100g Arroz', 'Feijão', 'Salada'], kcal: 470, proteinas: 43, carboidratos: 48, gorduras: 9, fibras: 8 },
+      { id: 'lanche', nome: 'Lanche', horario: '16:00', alimentos: ['1 Ovo', '1 fatia Pão Integral', '1 fruta'], kcal: 250, proteinas: 12, carboidratos: 31, gorduras: 9, fibras: 4 },
+      { id: 'jantar', nome: 'Jantar', horario: '20:00', alimentos: ['150g Peixe', '150g Batata', 'Legumes'], kcal: 390, proteinas: 36, carboidratos: 37, gorduras: 10, fibras: 5 },
     ],
   },
   ganhar_massa: {
-    metas: { kcal: 2200, proteinas: 145, carboidratos: 276, gorduras: 67 },
+    metas: { kcal: 2200, proteinas: 145, carboidratos: 276, gorduras: 67, fibras: 30 },
     refeicoes: [
-      { id: 'cafe', nome: 'Café da Manhã', horario: '08:00', alimentos: ['2 Ovos', '2 fatias Pão Integral', '30g Aveia', '1 fruta'], kcal: 560, proteinas: 25, carboidratos: 72, gorduras: 19 },
-      { id: 'almoco', nome: 'Almoço', horario: '12:30', alimentos: ['150g Frango', '180g Arroz', 'Feijão', 'Salada'], kcal: 620, proteinas: 49, carboidratos: 79, gorduras: 11 },
-      { id: 'lanche', nome: 'Pré-Treino', horario: '16:30', alimentos: ['Iogurte natural', 'Banana', '30g Aveia'], kcal: 370, proteinas: 17, carboidratos: 63, gorduras: 7 },
-      { id: 'jantar', nome: 'Jantar', horario: '20:30', alimentos: ['150g Patinho', '200g Batata', 'Legumes', 'Azeite'], kcal: 570, proteinas: 44, carboidratos: 62, gorduras: 17 },
+      { id: 'cafe', nome: 'Café da Manhã', horario: '08:00', alimentos: ['2 Ovos', '2 fatias Pão Integral', '30g Aveia', '1 fruta'], kcal: 560, proteinas: 25, carboidratos: 72, gorduras: 19, fibras: 6 },
+      { id: 'almoco', nome: 'Almoço', horario: '12:30', alimentos: ['150g Frango', '180g Arroz', 'Feijão', 'Salada'], kcal: 620, proteinas: 49, carboidratos: 79, gorduras: 11, fibras: 8 },
+      { id: 'lanche', nome: 'Pré-Treino', horario: '16:30', alimentos: ['Iogurte natural', 'Banana', '30g Aveia'], kcal: 370, proteinas: 17, carboidratos: 63, gorduras: 7, fibras: 5 },
+      { id: 'jantar', nome: 'Jantar', horario: '20:30', alimentos: ['150g Patinho', '200g Batata', 'Legumes', 'Azeite'], kcal: 570, proteinas: 44, carboidratos: 62, gorduras: 17, fibras: 5 },
     ],
   },
   manter_saude: {
-    metas: { kcal: 1900, proteinas: 130, carboidratos: 220, gorduras: 60 },
+    metas: { kcal: 1900, proteinas: 130, carboidratos: 220, gorduras: 60, fibras: 25 },
     refeicoes: [
-      { id: 'cafe', nome: 'Café da Manhã', horario: '08:30', alimentos: ['2 Ovos', '2 fatias Pão Integral', '1 fruta'], kcal: 430, proteinas: 22, carboidratos: 49, gorduras: 16 },
-      { id: 'almoco', nome: 'Almoço', horario: '12:30', alimentos: ['130g Frango', '150g Arroz', 'Feijão', 'Salada'], kcal: 520, proteinas: 45, carboidratos: 65, gorduras: 9 },
-      { id: 'lanche', nome: 'Lanche', horario: '16:30', alimentos: ['Iogurte natural', '30g Aveia', '1 fruta'], kcal: 330, proteinas: 16, carboidratos: 53, gorduras: 7 },
-      { id: 'jantar', nome: 'Jantar', horario: '20:30', alimentos: ['150g Peixe', '150g Batata', 'Legumes', 'Azeite'], kcal: 500, proteinas: 39, carboidratos: 49, gorduras: 17 },
+      { id: 'cafe', nome: 'Café da Manhã', horario: '08:30', alimentos: ['2 Ovos', '2 fatias Pão Integral', '1 fruta'], kcal: 430, proteinas: 22, carboidratos: 49, gorduras: 16, fibras: 4 },
+      { id: 'almoco', nome: 'Almoço', horario: '12:30', alimentos: ['130g Frango', '150g Arroz', 'Feijão', 'Salada'], kcal: 520, proteinas: 45, carboidratos: 65, gorduras: 9, fibras: 8 },
+      { id: 'lanche', nome: 'Lanche', horario: '16:30', alimentos: ['Iogurte natural', '30g Aveia', '1 fruta'], kcal: 330, proteinas: 16, carboidratos: 53, gorduras: 7, fibras: 5 },
+      { id: 'jantar', nome: 'Jantar', horario: '20:30', alimentos: ['150g Peixe', '150g Batata', 'Legumes', 'Azeite'], kcal: 500, proteinas: 39, carboidratos: 49, gorduras: 17, fibras: 5 },
     ],
   },
 }

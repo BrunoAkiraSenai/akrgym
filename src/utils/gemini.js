@@ -1,65 +1,105 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { getToken } from 'firebase/app-check'
+import { auth, appCheck } from '../firebase'
 import { NUTRITION_RESULT_ERROR, validarResultadoMacros, validarTextoAlimento } from './nutrition.js'
 
 /**
- * calcularMacrosIA — análise de macros via Gemini.
+ * calcularMacrosIA — análise de macros via backend seguro.
  *
- * IMPORTANTE (decisão de produto): a chave da API é injetada em build via
- * `VITE_GEMINI_API_KEY` e fica visível no bundle JS do navegador. Isso é
- * intencional: o tier gratuito do Gemini não permite expor cobrança caso
- * a chave vaze, e a conta é pessoal (1 usuário).
- *
- * Se um dia migrar para Cloud Function, basta trocar esta implementação
- * por `fetch(...)` e remover `@google/generative-ai` das dependências.
- * A Cloud Function `analisarRefeicao` em `functions/index.js` está pronta
- * para ser ativada nesse caso.
+ * A chave Gemini nunca é enviada ao navegador. O cliente envia apenas o
+ * texto, o ID token do Firebase Auth e o token App Check para o backend.
  */
 
-const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, _erro: null }
+const FALLBACK = { nome: '', kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0, _erro: null }
+const DEFAULT_WORKER_URL = 'https://akrgym-analisar-refeicao.akrgym-analisar-refeicao-worker.workers.dev'
+const CLIENT_REQUEST_TIMEOUT_MS = 55_000
+
+function functionUrl() {
+  const workerUrl = String(import.meta.env.VITE_AI_BACKEND_URL || '').trim().replace(/\/$/, '')
+  if (workerUrl) return workerUrl
+  const configured = String(import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || '').trim().replace(/\/$/, '')
+  if (!configured) return DEFAULT_WORKER_URL
+  return configured.endsWith('/analisarRefeicao') ? configured : `${configured}/analisarRefeicao`
+}
 
 export async function calcularMacrosIA(textoAlimentos) {
   const texto = typeof textoAlimentos === 'string' ? textoAlimentos.trim() : ''
   const erroDeEntrada = validarTextoAlimento(texto)
   if (erroDeEntrada) return { ...FALLBACK, nome: texto, _erro: erroDeEntrada }
 
-  const key = localStorage.getItem('gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY
-  if (!key) return { ...FALLBACK, nome: texto, _erro: 'Chave da API Gemini não configurada. Adicione em Configurações.' }
+  const usuario = auth.currentUser
+  if (!usuario) return { ...FALLBACK, nome: texto, _erro: 'Sua sessão expirou. Entre novamente para usar a análise por IA.' }
+  if (!appCheck) return { ...FALLBACK, nome: texto, _erro: 'A proteção da IA ainda não está configurada neste ambiente.' }
 
   try {
-    const genAI = new GoogleGenerativeAI(key)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+    const [idToken, appCheckToken] = await Promise.all([
+      usuario.getIdToken(),
+      getToken(appCheck, false),
+    ])
+    if (!appCheckToken?.token) throw new Error('Token App Check ausente')
 
-    const prompt = `Você é um assistente de nutrição especialista em tabelas brasileiras (TACO/TBCA).
-Analise somente alimentos, bebidas ou ingredientes consumíveis. Objetos, móveis, eletrônicos, exercícios, serviços, pessoas e textos sem relação com alimentação devem ser rejeitados.
-Calcule os macronutrientes TOTAIS da seguinte refeição completa: "${texto}"
-Some os valores de todos os alimentos listados.
-Responda SOMENTE com um objeto JSON puro, sem markdown, sem texto adicional, começando com { e terminando com }.
-Para uma entrada alimentar válida, use: { "valido": true, "kcal": número, "p": número, "c": número, "g": número }
-Para uma entrada que não seja alimento ou bebida, use: { "valido": false, "kcal": 0, "p": 0, "c": 0, "g": 0 }
-Onde: kcal = calorias totais, p = proteínas em gramas, c = carboidratos em gramas, g = gorduras em gramas.
-Arredonde para números inteiros. Nunca invente macros para entradas inválidas.`
-
-    const result = await model.generateContent(prompt)
-
-    const rawText = result.response?.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!rawText) throw new Error('Resposta vazia da IA')
-
-    const cleaned = rawText.replace(/```json?/gi, '').replace(/```/g, '').trim()
-
-    let parsed
-    try { parsed = JSON.parse(cleaned) }
-    catch { throw new Error('Resposta inválida (não JSON)') }
-
-    if (typeof parsed.valido !== 'boolean' || typeof parsed.kcal !== 'number' || typeof parsed.p !== 'number' || typeof parsed.c !== 'number' || typeof parsed.g !== 'number') {
-      throw new Error('Campos nutricionais ausentes no formato esperado')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), CLIENT_REQUEST_TIMEOUT_MS)
+    let response
+    try {
+      response = await fetch(functionUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+          'X-Firebase-AppCheck': appCheckToken.token,
+        },
+        body: JSON.stringify({ textoAlimentos: texto }),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timer)
     }
+    const payload = await response.json().catch(() => ({}))
+    if (response.status === 429) {
+      return {
+        ...FALLBACK,
+        nome: texto,
+        _erro: payload._erro || 'Limite da API de IA atingido. Aguarde a renovação da cota e tente novamente.',
+      }
+    }
+    if (!response.ok) throw new Error(payload._erro || `Serviço de IA indisponível (${response.status})`)
 
+    const parsed = {
+      valido: true,
+      kcal: Number(payload.kcal),
+      p: Number(payload.proteinas),
+      c: Number(payload.carboidratos),
+      g: Number(payload.gorduras),
+      fibras: Number(payload.fibras ?? 0),
+    }
     const erroNutricional = validarResultadoMacros(parsed)
     if (erroNutricional) return { ...FALLBACK, nome: texto, _erro: erroNutricional }
 
-    return { nome: texto, kcal: Math.round(parsed.kcal), proteinas: Math.round(parsed.p), carboidratos: Math.round(parsed.c), gorduras: Math.round(parsed.g) }
+    return {
+      nome: texto,
+      kcal: Math.round(parsed.kcal),
+      proteinas: Math.round(parsed.p),
+      carboidratos: Math.round(parsed.c),
+      gorduras: Math.round(parsed.g),
+      fibras: Math.round(parsed.fibras),
+    }
   } catch (err) {
-    const mensagem = err.message === NUTRITION_RESULT_ERROR ? err.message : `IA indisponível: ${err.message}. Use o formulário manual.`
+    if (err instanceof TypeError && /Failed to fetch|NetworkError|Load failed/i.test(err.message || '')) {
+      return {
+        ...FALLBACK,
+        nome: texto,
+        _erro: 'Não foi possível conectar ao backend da IA. Verifique se a Cloud Function ou o Worker está publicado e configurado para este ambiente.',
+      }
+    }
+    if (err?.code?.startsWith('appCheck/') || /App Check|app check/i.test(err?.message || '')) {
+      const detalhe = import.meta.env.DEV
+        ? ' Confirme que a API Firebase App Check está ativada no projeto e que o token de debug está cadastrado no app Web.'
+        : ' Confirme a configuração do App Check no projeto Firebase.'
+      return { ...FALLBACK, nome: texto, _erro: `A proteção da IA não autorizou este ambiente.${detalhe}` }
+    }
+    const mensagem = err.message === NUTRITION_RESULT_ERROR
+      ? err.message
+      : `IA indisponível: ${err.message}. Use o formulário manual.`
     return { ...FALLBACK, nome: texto, _erro: mensagem }
   }
 }

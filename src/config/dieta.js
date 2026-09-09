@@ -8,6 +8,7 @@ export const REFEICOES = [
     proteinas: 29,
     carboidratos: 42,
     gorduras: 19,
+    fibras: 5,
   },
   {
     id: 'almoco',
@@ -18,6 +19,7 @@ export const REFEICOES = [
     proteinas: 55,
     carboidratos: 56,
     gorduras: 4,
+    fibras: 8,
   },
   {
     id: 'pre_treino',
@@ -28,6 +30,7 @@ export const REFEICOES = [
     proteinas: 35,
     carboidratos: 42,
     gorduras: 13,
+    fibras: 1,
   },
   {
     id: 'jantar',
@@ -38,6 +41,7 @@ export const REFEICOES = [
     proteinas: 46,
     carboidratos: 86,
     gorduras: 7,
+    fibras: 5,
   },
 ]
 
@@ -46,6 +50,7 @@ export const METAS_DIARIAS = {
   proteinas: 165,
   carboidratos: 226,
   gorduras: 43,
+  fibras: 30,
 }
 
 export const STATUS = {

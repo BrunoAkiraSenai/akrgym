@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { collection, getDocs, query, orderBy, limit, startAfter, addDoc, deleteDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy, getDoc, addDoc, deleteDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
-import PROTOCOLO_BASE from '../../config/protocolo'
+import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { useThemeColor } from '../../utils/themes'
 import { diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../../utils/fitness'
@@ -9,7 +9,7 @@ import TrendChart from '../../components/TrendChart'
 import {
   Dumbbell, BarChart3, Trophy, Target, Flame,
   Activity, Save, ChevronDown, ChevronUp, Minus, Weight, Trash, Pencil, X,
-  Search, Clock3, TrendingUp, Gauge, CalendarDays, Check, RefreshCw,
+  Search, Clock3, TrendingUp, Gauge, CalendarDays, Check,
 } from 'lucide-react'
 
 function dataLocalStr(data) {
@@ -21,18 +21,6 @@ function dataLocalStr(data) {
 
 const PAD = { top: 24, right: 16, bottom: 44, left: 56 }
 const H = 280
-
-function encontrarMeta(nome) {
-  for (const rotina of Object.values(PROTOCOLO_BASE)) {
-    const ex = (rotina.exercicios || []).find(e => e.nome === nome)
-    if (ex) return ex.meta_reps
-  }
-  return null
-}
-
-function nomeRotina(id) {
-  return PROTOCOLO_BASE[id]?.nome || id
-}
 
 function normalizarTexto(valor) {
   return String(valor || '')
@@ -77,10 +65,7 @@ export default function Evolucao() {
   const [medidaGrafico, setMedidaGrafico] = useState('peso')
   const [filtroPeriodo, setFiltroPeriodo] = useState('tudo')
   const [limiteRegistros, setLimiteRegistros] = useState(5)
-  const [lastTreinoDoc, setLastTreinoDoc] = useState(null)
-  const [lastCorporalDoc, setLastCorporalDoc] = useState(null)
-  const [carregandoMaisTreinos, setCarregandoMaisTreinos] = useState(false)
-  const [carregandoMaisCorporais, setCarregandoMaisCorporais] = useState(false)
+  const [treinosConfig, setTreinosConfig] = useState({})
   const exercicioBuscaRef = useRef(null)
   const pageRef = useRef(null)
   const [agora] = useState(() => new Date())
@@ -118,16 +103,18 @@ export default function Evolucao() {
       if (!db || !uid) { setErro('Sessão do usuário ainda não está pronta.'); setLoading(false); return }
       const q = query(
         collection(db, 'users', uid, 'historico_treinos'),
-        orderBy('data', 'desc'),
-        limit(20)
+        orderBy('data', 'desc')
       )
       const snap = await getDocs(q)
       const docs = snap.docs.map(d => {
         const raw = d.data()
-        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
+        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date(NaN)) }
       })
-      setTodosTreinos([...docs].reverse())
-      setLastTreinoDoc(snap.docs[snap.docs.length - 1] || null)
+      setTodosTreinos(docs.filter(item => Number.isFinite(item.data.getTime())).reverse())
+      try {
+        const config = await getDoc(doc(db, 'users', uid, 'config', 'data'))
+        setTreinosConfig(config.exists() ? config.data().treinos || {} : {})
+      } catch { setTreinosConfig({}) }
       const nomes = new Set()
       docs.forEach(t => { if (t.exercicios) t.exercicios.forEach(ex => { if (ex.nome) nomes.add(ex.nome) }) })
       setExercicios([...nomes].sort())
@@ -140,75 +127,29 @@ export default function Evolucao() {
       if (!uid) return
       const q = query(
         collection(db, 'users', uid, 'historico_corporal'),
-        orderBy('data', 'desc'),
-        limit(20)
+        orderBy('data', 'desc')
       )
       const snap = await getDocs(q)
       const docs = snap.docs.map(d => {
         const raw = d.data()
-        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
+        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date(NaN)) }
       })
-      setMedidas(docs)
-      setLastCorporalDoc(snap.docs[snap.docs.length - 1] || null)
+      setMedidas(docs.filter(item => Number.isFinite(item.data.getTime())))
     } catch (err) { setErro(`Erro ao carregar medidas: ${err.message}`) }
   }, [uid])
-
-  const carregarMaisTreinos = async () => {
-    if (!lastTreinoDoc) return
-    setCarregandoMaisTreinos(true)
-    try {
-      const q = query(
-        collection(db, 'users', user.uid, 'historico_treinos'),
-        orderBy('data', 'desc'),
-        startAfter(lastTreinoDoc),
-        limit(20)
-      )
-      const snap = await getDocs(q)
-      const docs = snap.docs.map(d => {
-        const raw = d.data()
-        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
-      })
-      setTodosTreinos(prev => [...docs.reverse(), ...prev])
-      setLastTreinoDoc(snap.docs[snap.docs.length - 1] || null)
-      const nomes = new Set()
-      docs.forEach(t => { if (t.exercicios) t.exercicios.forEach(ex => { if (ex.nome) nomes.add(ex.nome) }) })
-      setExercicios(prev => [...new Set([...prev, ...nomes])].sort())
-    } catch (err) { setErro(`Erro: ${err.message}`) }
-    setCarregandoMaisTreinos(false)
-  }
-
-  const carregarMaisCorporais = async () => {
-    if (!lastCorporalDoc) return
-    setCarregandoMaisCorporais(true)
-    try {
-      const q = query(
-        collection(db, 'users', user.uid, 'historico_corporal'),
-        orderBy('data', 'desc'),
-        startAfter(lastCorporalDoc),
-        limit(20)
-      )
-      const snap = await getDocs(q)
-      const docs = snap.docs.map(d => {
-        const raw = d.data()
-        return { id: d.id, ...raw, data: raw.data?.toDate?.() || (raw.data ? new Date(raw.data) : new Date()) }
-      })
-      setMedidas(prev => [...prev, ...docs])
-      setLastCorporalDoc(snap.docs[snap.docs.length - 1] || null)
-    } catch (err) { setErro(`Erro: ${err.message}`) }
-    setCarregandoMaisCorporais(false)
-  }
 
   // O carregamento sincroniza o estado local com o Firestore ao montar a tela.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregarTreinos() }, [carregarTreinos])
 
   function validarMedida(valor, min, max, nome) {
-    const v = parseFloat(String(valor || '').replace(',', '.'))
-    if (isNaN(v) || v < min || v > max) { setErro(`${nome} inválido — deve ser entre ${min} e ${max}.`); return null }
-    return v
+    try { return validarNumeroConfig(valor, min, max, nome) }
+    catch (err) { setErro(err.message); return null }
   }
 
   const registrarMedida = async () => {
+    if (savingMedida) return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(medidaData) || !Number.isFinite(new Date(medidaData + 'T12:00:00').getTime()) || dataLocalStr(new Date(medidaData + 'T12:00:00')) !== medidaData) { setErro('Escolha uma data válida para o registro.'); return }
     const camposPreenchidos = CAMPOS_MEDIDA.every(c => novaMedida[c.key] !== '')
     if (!camposPreenchidos) return
     setSavingMedida(true); setErro(null)
@@ -293,7 +234,11 @@ export default function Evolucao() {
 
   const ultimoTreino = dadosTreino.length > 0 ? dadosTreino[dadosTreino.length - 1] : null
   const recorde = dadosTreino.length > 0 ? Math.max(...dadosTreino.map(d => d.carga)) : null
-  const metaReps = encontrarMeta(selecionado)
+  const lastMatching = [...todosTreinos].reverse().find(t => (rotinaFiltro === 'todas' || t.rotina_id === rotinaFiltro) && t.exercicios?.some(ex => ex.nome === selecionado))
+  const historicalExercise = lastMatching?.exercicios?.find(ex => ex.nome === selecionado)
+  const configuredExercise = treinosConfig[lastMatching?.rotina_id]?.exercicios?.find(ex => ex.nome === selecionado)
+  const metaReps = historicalExercise?.meta_reps ?? configuredExercise?.meta_reps ?? null
+  const nomeRotina = id => [...todosTreinos].reverse().find(t => t.rotina_id === id && t.rotina_nome)?.rotina_nome || treinosConfig[id]?.nome || id
   const tetoMeta = parseMetaTeto(metaReps)
   const atingiuMeta = ultimoTreino && tetoMeta !== Infinity ? ultimoTreino.reps >= tetoMeta : false
 
@@ -441,9 +386,6 @@ export default function Evolucao() {
     return { w, points, yTicks, floor, ceiling }
   })()
 
-  const ultimaMedida = medidas[0]
-  const medidaAnterior = medidas[1]
-
   const medidasFiltradas = useMemo(() => {
     if (filtroPeriodo === 'tudo') return [...medidas]
     const corte = new Date()
@@ -451,11 +393,13 @@ export default function Evolucao() {
     return medidas.filter(m => m.data >= corte)
   }, [medidas, filtroPeriodo])
 
+  const ultimaMedida = medidasFiltradas[0]
+  const medidaAnterior = medidasFiltradas[1]
   const primeiraMedida = medidasFiltradas.length > 0 ? medidasFiltradas[medidasFiltradas.length - 1] : null
 
   function diffValor(atual, anterior) {
     if (atual == null || anterior == null) return null
-    return (atual - anterior).toFixed(1)
+    return Number((atual - anterior).toFixed(1))
   }
 
   return (
@@ -576,7 +520,11 @@ export default function Evolucao() {
           {loading ? (
             <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
           ) : !exercicios.length ? (
-            <p className="text-neutral-600 text-center py-8 text-sm">Nenhum treino registrado ainda.</p>
+            <div className="card-premium flex flex-col items-center gap-2 p-8 text-center">
+              <Dumbbell size={30} className="text-emerald-400/70" aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-white">Ainda não há evolução para mostrar</h2>
+              <p className="max-w-sm text-xs leading-relaxed text-neutral-500">Registre seu primeiro treino e esta área vai transformar suas séries em tendências, recordes e gráficos.</p>
+            </div>
           ) : (
             <>
               <div ref={exercicioBuscaRef} className="relative z-20">
@@ -798,13 +746,6 @@ export default function Evolucao() {
                       Carregar mais ({dadosTreino.length - limiteRegistros} restantes)
                     </button>
                   )}
-                  {lastTreinoDoc && (
-                    <button type="button" onClick={carregarMaisTreinos} disabled={carregandoMaisTreinos}
-                      className="btn-secondary flex w-full items-center justify-center gap-2 py-2 text-xs mt-1">
-                      <RefreshCw size={13} className={carregandoMaisTreinos ? 'animate-spin' : ''} />
-                      {carregandoMaisTreinos ? 'Carregando...' : 'Carregar mais treinos'}
-                    </button>
-                  )}
                 </div>
               )}
             </>
@@ -825,15 +766,15 @@ export default function Evolucao() {
               )}
             </div>
             <div className="mb-2">
-              <label className="text-[9px] text-neutral-600 uppercase tracking-wider block mb-0.5">Data</label>
-              <input type="date" value={medidaData} onChange={e => setMedidaData(e.target.value)}
+              <label htmlFor="medida-data" className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-0.5">Data</label>
+              <input id="medida-data" type="date" value={medidaData} onChange={e => setMedidaData(e.target.value)}
                 className="w-full bg-neutral-800 text-white p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all" />
             </div>
             <div className="grid grid-cols-3 gap-2">
               {CAMPOS_MEDIDA.map(c => (
                 <div key={c.key}>
-                  <label className="text-[9px] text-neutral-600 uppercase tracking-wider block mb-0.5">{c.label} ({c.unidade})</label>
-                  <input type="number" inputMode="decimal" placeholder="0"
+                  <label htmlFor={`medida-${c.key}`} className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-0.5">{c.label} ({c.unidade})</label>
+                  <input id={`medida-${c.key}`} type="text" inputMode="decimal" placeholder="0"
                     value={novaMedida[c.key]}
                     onChange={e => setNovaMedida(p => ({ ...p, [c.key]: e.target.value }))}
                     className="w-full bg-neutral-800 text-white placeholder-neutral-700 p-3 rounded-xl text-sm text-center outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
@@ -860,7 +801,7 @@ export default function Evolucao() {
             ))}
           </div>
 
-          {medidas.length > 0 && ultimaMedida && (
+          {medidasFiltradas.length > 0 && ultimaMedida && (
             <div className="card-premium p-4">
               <span className="section-label flex items-center gap-1.5 mb-3">
                 <Weight size={12} className="text-cyan-400" /> Último Registro
@@ -916,7 +857,7 @@ export default function Evolucao() {
             </div>
           )}
 
-          {medidas.length >= 2 && (
+          {medidasFiltradas.length >= 2 && (
             <div className="card-premium p-4">
               <span className="section-label flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Evolução Gráfica
@@ -928,7 +869,7 @@ export default function Evolucao() {
                 </select>
               </div>
               {(() => {
-                const sorted = [...medidas].sort((a, b) => a.data - b.data)
+                const sorted = [...medidasFiltradas].sort((a, b) => a.data - b.data)
                 const valores = sorted.map(m => m[medidaGrafico]).filter(v => v != null)
                 if (valores.length < 2) return <p className="text-neutral-600 text-xs text-center py-4">Mais registros para gerar gráfico.</p>
                 const maxVal = Math.max(...valores)
@@ -1002,7 +943,7 @@ export default function Evolucao() {
             </div>
           )}
 
-          {medidas.length >= 1 && (
+          {medidasFiltradas.length >= 1 && (
             <div className="card-premium p-4">
               <span className="section-label flex items-center gap-1.5 mb-2">
                 <Activity size={12} className="text-cyan-400" /> Histórico
@@ -1018,7 +959,7 @@ export default function Evolucao() {
                     </tr>
                   </thead>
                   <tbody>
-                    {medidas.map((m, i) => (
+                    {medidasFiltradas.map((m, i) => (
                       <tr key={m.id || i} className="border-b border-white/5 last:border-0">
                         <td className="text-neutral-500 font-mono py-2 pr-2 whitespace-nowrap">
                           {m.data.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
@@ -1045,7 +986,7 @@ export default function Evolucao() {
               </div>
               {/* Cards empilhados em telas pequenas */}
               <div className="sm:hidden space-y-2">
-                {medidas.map((m, i) => (
+                {medidasFiltradas.map((m, i) => (
                   <div key={m.id || i} className="bg-black/30 rounded-xl p-3 border border-white/5">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-neutral-400 font-mono text-xs">
@@ -1078,15 +1019,6 @@ export default function Evolucao() {
             </div>
           )}
 
-          {lastCorporalDoc && (
-            <button type="button" onClick={carregarMaisCorporais} disabled={carregandoMaisCorporais}
-              className="btn-secondary w-full py-2 text-xs">
-              {carregandoMaisCorporais ? 'Carregando...' : 'Carregar mais medidas'}
-            </button>
-          )}
-          {medidas.length === 0 && !loading && (
-            <p className="text-neutral-600 text-center py-8 text-sm">Nenhuma medida registrada ainda.</p>
-          )}
         </>
       )}
     </div>

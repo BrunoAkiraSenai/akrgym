@@ -1,39 +1,81 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, Download } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
+import { buildUserDataExport, formatExportFilename } from '../../utils/exportData'
+import { prepararConfigParaSalvar } from '../../utils/configValidation'
 
 function gerarIdRefeicao() {
   return `refeicao_${Date.now()}`
 }
 
+function normalizarListaAlimentos(texto) {
+  return String(texto || '').split(',').map(item => item.trim()).filter(Boolean)
+}
+
 const CONFIG_REF = (uid) => doc(db, 'users', uid, 'config', 'data')
+const METAS_PADRAO = { kcal: 1970, proteinas: 165, carboidratos: 226, gorduras: 43, fibras: 30 }
+
+function numeroNutricional(valor, fallback = 0) {
+  const numero = Number(typeof valor === 'string' ? valor.replace(',', '.') : valor)
+  return Number.isFinite(numero) && numero >= 0 ? numero : fallback
+}
+
+function normalizarConfigNutricional(data) {
+  return {
+    ...data,
+    metas: { ...METAS_PADRAO, ...(data.metas || {}), fibras: numeroNutricional(data.metas?.fibras, METAS_PADRAO.fibras) },
+    refeicoes: (Array.isArray(data.refeicoes) ? data.refeicoes : []).map(ref => ({
+      ...ref,
+      fibras: numeroNutricional(ref.fibras),
+    })),
+  }
+}
 
 export default function Configuracao({ abaInicial }) {
   const user = useUser()
   const [themeId, setThemeId] = useTheme()
-  const [config, setConfig] = useState({ treinos: {}, refeicoes: [], metas: {} })
+  const [config, setConfig] = useState({ treinos: {}, refeicoes: [], metas: METAS_PADRAO })
   const [loading, setLoading] = useState(true)
+  const [configCarregada, setConfigCarregada] = useState(false)
+  const [nutricaoAlterada, setNutricaoAlterada] = useState(false)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState(null)
   const [sucesso, setSucesso] = useState(null)
   const [sincronizando, setSincronizando] = useState(false)
+  const [exportando, setExportando] = useState(false)
   const [aba, setAba] = useState(abaInicial || 'treinos')
   const [expandedKey, setExpandedKey] = useState(null)
   const [showNewRoutine, setShowNewRoutine] = useState(false)
   const [newKey, setNewKey] = useState('')
   const [newNome, setNewNome] = useState('')
   const [textoAlimentos, setTextoAlimentos] = useState({})
+  const textoAlimentosRef = useRef(textoAlimentos)
+  useEffect(() => { textoAlimentosRef.current = textoAlimentos }, [textoAlimentos])
   const [aiLoadingIdx, setAiLoadingIdx] = useState(null)
   const sucessoTimerRef = useRef(null)
   const pendingFocusRef = useRef(null)
   const routineRefs = useRef({})
   const exerciseRefs = useRef({})
   const mealRefs = useRef({})
+  const mountedRef = useRef(false)
+  const loadedUidRef = useRef(null)
+  const loadSequenceRef = useRef(0)
+  const aiSequenceRef = useRef(0)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadedUidRef.current = null
+      loadSequenceRef.current += 1
+      aiSequenceRef.current += 1
+    }
+  }, [])
 
   const mostrarSucesso = useCallback((mensagem) => {
     if (sucessoTimerRef.current) clearTimeout(sucessoTimerRef.current)
@@ -63,18 +105,28 @@ export default function Configuracao({ abaInicial }) {
   }, [config])
 
   const carregar = useCallback(async () => {
+    const sequence = ++loadSequenceRef.current
+    loadedUidRef.current = null
+    setConfigCarregada(false)
     setLoading(true); setErro(null)
     try {
       const snap = await getDoc(CONFIG_REF(user.uid))
+      if (!mountedRef.current || sequence !== loadSequenceRef.current) return
       if (snap.exists()) {
-        setConfig(snap.data())
-        const refs = snap.data().refeicoes || []
+        const dados = normalizarConfigNutricional(snap.data())
+        setConfig(dados)
+        const refs = dados.refeicoes || []
         const init = {}
-        refs.forEach((r, i) => { init[i] = (r.alimentos || []).join(', ') })
+        refs.forEach(r => { init[r.id] = (r.alimentos || []).join(', ') })
         setTextoAlimentos(init)
+        setNutricaoAlterada(false)
+        loadedUidRef.current = user.uid
+        setConfigCarregada(true)
       }
-    } catch (err) { setErro(`Erro: ${err.message}`) }
-    setLoading(false)
+    } catch (err) {
+      if (mountedRef.current && sequence === loadSequenceRef.current) setErro(`Erro: ${err.message}`)
+    }
+    if (mountedRef.current && sequence === loadSequenceRef.current) setLoading(false)
   }, [user.uid])
 
   // Sincroniza a configuração inicial com o Firestore ao montar a tela.
@@ -82,38 +134,12 @@ export default function Configuracao({ abaInicial }) {
   useEffect(() => { carregar() }, [carregar])
 
 
-  function validarNumero(valor, min, max, nome) {
-    const v = parseFloat(String(valor || '').replace(',', '.'))
-    if (isNaN(v) || v < min || v > max) {
-      throw new Error(`${nome} inválido — deve ser entre ${min} e ${max}.`)
-    }
-    return v
-  }
-
   const salvar = async (novo) => {
+    if (loading || loadedUidRef.current !== user.uid) return
     setSaving(true); setErro(null); setSucesso(null)
     try {
-      const sanitizado = { ...novo, metas: { ...(novo.metas || {}) }, refeicoes: [...(novo.refeicoes || [])] }
-      if (sanitizado.metas) {
-        sanitizado.metas.kcal = validarNumero(sanitizado.metas.kcal, 0, 99999, 'Kcal')
-        sanitizado.metas.proteinas = validarNumero(sanitizado.metas.proteinas, 0, 9999, 'Proteínas')
-        sanitizado.metas.carboidratos = validarNumero(sanitizado.metas.carboidratos, 0, 9999, 'Carboidratos')
-        sanitizado.metas.gorduras = validarNumero(sanitizado.metas.gorduras, 0, 9999, 'Gorduras')
-      }
-      sanitizado.refeicoes = sanitizado.refeicoes.map(r => ({
-        ...r,
-        kcal: validarNumero(r.kcal, 0, 99999, `Kcal de "${r.nome}"`),
-        proteinas: validarNumero(r.proteinas, 0, 9999, `Proteínas de "${r.nome}"`),
-        carboidratos: validarNumero(r.carboidratos, 0, 9999, `Carboidratos de "${r.nome}"`),
-        gorduras: validarNumero(r.gorduras, 0, 9999, `Gorduras de "${r.nome}"`),
-      }))
-      if (sanitizado.treinos) {
-        for (const key of Object.keys(sanitizado.treinos)) {
-          sanitizado.treinos[key] = { ...sanitizado.treinos[key], exercicios: (sanitizado.treinos[key].exercicios || []).map(ex => ({ ...ex, base_top: validarNumero(ex.base_top, 0, 9999, `Base Top de "${ex.nome}"`) })) }
-        }
-      }
+      const sanitizado = prepararConfigParaSalvar(novo)
       await setDoc(CONFIG_REF(user.uid), sanitizado)
-      setConfig(sanitizado)
       mostrarSucesso('Alterações salvas com sucesso.')
     } catch (err) { setErro(err.message); setSaving(false); return }
     setSaving(false)
@@ -131,7 +157,7 @@ export default function Configuracao({ abaInicial }) {
     pendingFocusRef.current = { type: 'routine', key }
     setConfig(n)
     try {
-      await setDoc(CONFIG_REF(user.uid), n)
+      await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n))
       mostrarSucesso(`Divisão "${nome}" criada.`)
     } catch (err) {
       setConfig(config)
@@ -147,7 +173,7 @@ export default function Configuracao({ abaInicial }) {
     const n = { ...config, treinos: { ...config.treinos } }
     delete n.treinos[key]
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso(`Divisão "${config.treinos[key]?.nome || key}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso(`Divisão "${config.treinos[key]?.nome || key}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
     if (expandedKey === key) setExpandedKey(null)
   }
 
@@ -157,7 +183,7 @@ export default function Configuracao({ abaInicial }) {
     n.treinos[key] = { ...n.treinos[key], exercicios }
     pendingFocusRef.current = { type: 'exercise', key: `${key}:${exercicios.length - 1}` }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso('Exercício adicionado.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso('Exercício adicionado.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
   }
 
   const updateExercise = async (key, idx, campo, valor) => {
@@ -166,49 +192,52 @@ export default function Configuracao({ abaInicial }) {
     exs[idx] = { ...exs[idx], [campo]: valor }
     n.treinos[key] = { ...n.treinos[key], exercicios: exs }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
   const deleteExercise = async (key, idx) => {
     const n = { ...config, treinos: { ...config.treinos } }
     n.treinos[key] = { ...n.treinos[key], exercicios: n.treinos[key].exercicios.filter((_, i) => i !== idx) }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso('Exercício excluído.') } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso('Exercício excluído.') } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
   const updateMeta = (campo, valor) => {
-    const num = valor === '' ? '' : Number(valor)
-    const n = { ...config, metas: { ...(config.metas || {}), [campo]: num } }
+    const n = { ...config, metas: { ...(config.metas || {}), [campo]: valor } }
     setConfig(n)
+    setNutricaoAlterada(true)
   }
 
   const updateRefeicao = (idx, campo, valor) => {
-    const v = campo === 'nome' || campo === 'horario' || campo === 'alimentos' ? valor : (valor === '' ? '' : Number(valor))
-    const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, [campo]: v } : r) }
+    const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, [campo]: valor } : r) }
     setConfig(n)
+    setNutricaoAlterada(true)
   }
 
   // Debounced save for metas and refeicoes (600ms after last change)
   const configRef = useRef(config)
   useEffect(() => { configRef.current = config }, [config])
   useEffect(() => {
+    if (loading || !nutricaoAlterada || loadedUidRef.current !== user.uid) return
     const timer = setTimeout(async () => {
       try {
-        await setDoc(CONFIG_REF(user.uid), configRef.current)
+        const atual = configRef.current
+        await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(atual))
+        if (mountedRef.current && configRef.current === atual) setNutricaoAlterada(false)
       } catch (err) {
-        setErro('Erro ao salvar: ' + err.message)
+        if (mountedRef.current) setErro('Erro ao salvar: ' + err.message)
       }
     }, 600)
     return () => clearTimeout(timer)
-  }, [config.metas, config.refeicoes, user.uid])
+  }, [config.metas, config.refeicoes, user.uid, loading, nutricaoAlterada])
 
   const addRefeicao = async () => {
     const id = gerarIdRefeicao()
-    const refeicoes = [...(config.refeicoes || []), { id, nome: 'Nova Refeição', horario: '00:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 }]
+    const refeicoes = [...(config.refeicoes || []), { id, nome: 'Nova Refeição', horario: '00:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 }]
     const n = { ...config, refeicoes }
     pendingFocusRef.current = { type: 'meal', key: id }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso('Refeição adicionada.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso('Refeição adicionada.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
   }
 
   const deleteRefeicao = async (idx) => {
@@ -217,42 +246,93 @@ export default function Configuracao({ abaInicial }) {
     if (!window.confirm(`Deseja excluir a refeição "${ref.nome}"? Os dados históricos não serão afetados.`)) return
     const n = { ...config, refeicoes: (config.refeicoes || []).filter((_, i) => i !== idx) }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso(`Refeição "${ref.nome}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso(`Refeição "${ref.nome}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
   const sincronizarMetas = async () => {
     setSincronizando(true)
     setErro(null)
-    const refeicoes = config.refeicoes || []
+    let refeicoes
+    try { refeicoes = prepararConfigParaSalvar(config).refeicoes }
+    catch (err) { setErro(err.message); setSincronizando(false); return }
     const total = refeicoes.reduce((acc, r) => ({
       kcal: acc.kcal + (Number(r.kcal) || 0),
       proteinas: acc.proteinas + (Number(r.proteinas) || 0),
       carboidratos: acc.carboidratos + (Number(r.carboidratos) || 0),
       gorduras: acc.gorduras + (Number(r.gorduras) || 0),
-    }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
+      fibras: acc.fibras + (Number(r.fibras) || 0),
+    }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 })
     const n = { ...config, metas: total }
     setConfig(n)
     try {
-      await setDoc(CONFIG_REF(user.uid), n)
-      mostrarSucesso(`Metas sincronizadas: ${total.kcal} kcal, ${total.proteinas}g P, ${total.carboidratos}g C e ${total.gorduras}g G.`)
+      await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n))
+      mostrarSucesso(`Metas sincronizadas: ${total.kcal} kcal, ${total.proteinas}g P, ${total.carboidratos}g C, ${total.gorduras}g G e ${total.fibras}g de fibras.`)
     } catch (err) { setErro('Erro ao salvar: ' + err.message) }
     setSincronizando(false)
   }
 
   const calcularMacrosRefeicao = async (idx) => {
-    const texto = textoAlimentos[idx]
-    if (!texto?.trim()) return
+    const refeicao = config.refeicoes?.[idx]
+    const texto = textoAlimentos[refeicao?.id]
+    if (!texto?.trim() || !refeicao || loadedUidRef.current !== user.uid) return
+    const sequence = ++aiSequenceRef.current
+    // O clique pode ocorrer imediatamente depois de editar o input. Nesse
+    // caso, o onBlur já atualizou a refeição no estado mais recente; comparar
+    // com a lista capturada antes do blur faria a análise válida ser descartada.
+    const alimentosAnalisados = JSON.stringify(normalizarListaAlimentos(texto))
     setAiLoadingIdx(idx)
     const macros = await calcularMacrosIA(texto)
+    if (!mountedRef.current || sequence !== aiSequenceRef.current) return
+    const atual = configRef.current
+    const targetIdx = (atual.refeicoes || []).findIndex(ref => ref.id === refeicao.id)
+    if (targetIdx < 0 || textoAlimentosRef.current[refeicao.id] !== texto || JSON.stringify(atual.refeicoes[targetIdx].alimentos || []) !== alimentosAnalisados) {
+      setErro('A refeição mudou durante a análise. Analise os alimentos atuais novamente.')
+      setAiLoadingIdx(null)
+      return
+    }
     if (macros._erro) {
       setErro(macros._erro)
       setTimeout(() => setErro(null), 3000)
     } else {
-      const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, kcal: macros.kcal, proteinas: macros.proteinas, carboidratos: macros.carboidratos, gorduras: macros.gorduras } : r) }
+      const n = { ...atual, refeicoes: (atual.refeicoes || []).map((r, i) => i === targetIdx ? { ...r, kcal: macros.kcal, proteinas: macros.proteinas, carboidratos: macros.carboidratos, gorduras: macros.gorduras, fibras: macros.fibras } : r) }
       setConfig(n)
-      try { await setDoc(CONFIG_REF(user.uid), n); mostrarSucesso(`Macros de "${n.refeicoes[idx].nome}" atualizados pela IA.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+      setNutricaoAlterada(true)
+      mostrarSucesso(`Macros de "${n.refeicoes[targetIdx].nome}" preenchidos. Salvamento automático em andamento.`)
     }
     setAiLoadingIdx(null)
+  }
+
+  const exportarDados = async () => {
+    setExportando(true)
+    setErro(null)
+    try {
+      const [configSnap, treinosSnap, dietaSnap, medidasSnap] = await Promise.all([
+        getDoc(CONFIG_REF(user.uid)),
+        getDocs(collection(db, 'users', user.uid, 'historico_treinos')),
+        getDocs(collection(db, 'users', user.uid, 'diario_dieta')),
+        getDocs(collection(db, 'users', user.uid, 'historico_corporal')),
+      ])
+      const dados = buildUserDataExport({
+        config: configSnap.exists() ? configSnap.data() : config,
+        treinos: treinosSnap.docs.map(snapshot => ({ id: snapshot.id, ...snapshot.data() })),
+        diarioDieta: dietaSnap.docs.map(snapshot => ({ id: snapshot.id, ...snapshot.data() })),
+        medidas: medidasSnap.docs.map(snapshot => ({ id: snapshot.id, ...snapshot.data() })),
+      })
+      const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = formatExportFilename()
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+      mostrarSucesso('Seus dados foram exportados em JSON.')
+    } catch (err) {
+      setErro(`Não foi possível exportar os dados: ${err.message}`)
+    } finally {
+      setExportando(false)
+    }
   }
 
   const totalTreinos = Object.keys(config.treinos || {}).length
@@ -284,6 +364,20 @@ export default function Configuracao({ abaInicial }) {
           <LogOut size={15} /> <span className="hidden sm:inline">Sair</span>
         </button>
       </div>
+
+      <section className="card-premium flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="exportar-dados-heading">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="settings-account-avatar"><Download size={18} /></div>
+          <div className="min-w-0">
+            <h2 id="exportar-dados-heading" className="text-sm font-semibold text-white">Seus dados</h2>
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500">Baixe uma cópia local da sua configuração, treinos, diário alimentar e medidas.</p>
+          </div>
+        </div>
+        <button type="button" onClick={exportarDados} disabled={exportando} className="settings-action settings-action-outline shrink-0 self-stretch sm:self-auto">
+          {exportando ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+          {exportando ? 'Preparando...' : 'Exportar JSON'}
+        </button>
+      </section>
 
       <div className="card-premium space-y-3 p-4">
         <div className="flex items-center gap-2">
@@ -320,10 +414,11 @@ export default function Configuracao({ abaInicial }) {
       {erro && <div className="settings-feedback settings-feedback-error" role="alert"><AlertTriangle size={16} /><span>{erro}</span><button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso"><X size={14} /></button></div>}
       {sucesso && <div className="settings-feedback settings-feedback-success" role="status" aria-live="polite"><CheckCircle2 size={16} /><span>{sucesso}</span></div>}
 
-      {aba === 'treinos' ? (
-        loading ? (
-          <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
-        ) : (
+      {loading ? (
+        <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
+      ) : !configCarregada ? (
+        <div role="status"><p>Não foi possível carregar seu plano com segurança.</p><button type="button" onClick={carregar} className="settings-action settings-action-outline">Tentar novamente</button></div>
+      ) : aba === 'treinos' ? (
           <section className="settings-section" aria-labelledby="treinos-heading">
             <div className="settings-section-head">
               <div><span className="section-label" id="treinos-heading">Divisões de treino</span><p className="mt-1 text-xs text-neutral-500">Organize exercícios, carga inicial e meta de repetições.</p></div>
@@ -370,24 +465,24 @@ export default function Configuracao({ abaInicial }) {
             </div>
             <button type="button" onClick={() => salvar(config)} disabled={saving} className="settings-save-button"><span>{saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}</span>{saving ? 'Salvando alterações...' : 'Salvar alterações de treino'}</button>
           </section>
-        )
       ) : (
         <section className="settings-section" aria-labelledby="dieta-heading">
           <div className="settings-section-head"><div><span className="section-label" id="dieta-heading">Plano alimentar</span><p className="mt-1 text-xs text-neutral-500">Defina suas metas e deixe cada refeição pronta para o dia.</p></div><span className="settings-count-badge">{totalRefeicoes} refeições</span></div>
 
           <div className="settings-goals card-premium p-4">
             <div className="settings-form-head"><div><h2 className="text-sm font-bold text-white">Metas diárias</h2><p className="mt-0.5 text-[10px] text-neutral-500">Esses valores orientam o progresso mostrado no Diário.</p></div><RefreshCw size={17} className="text-cyan-400" /></div>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {[
                 { key: 'kcal', label: 'Calorias', unit: 'kcal', val: config.metas?.kcal ?? 1970 },
                 { key: 'proteinas', label: 'Proteínas', unit: 'g', val: config.metas?.proteinas ?? 165 },
                 { key: 'carboidratos', label: 'Carboidratos', unit: 'g', val: config.metas?.carboidratos ?? 226 },
                 { key: 'gorduras', label: 'Gorduras', unit: 'g', val: config.metas?.gorduras ?? 43 },
+                { key: 'fibras', label: 'Fibras', unit: 'g', val: config.metas?.fibras ?? 30 },
               ].map(c => <label key={c.key} className="settings-goal"><span>{c.label}</span><div><input type="text" inputMode="numeric" value={c.val} onChange={e => updateMeta(c.key, e.target.value)} aria-label={`Meta de ${c.label}`} /><small>{c.unit}</small></div></label>)}
             </div>
             {(() => {
-              const somaRefeicoes = (config.refeicoes || []).reduce((acc, r) => ({ kcal: acc.kcal + (Number(r.kcal) || 0), proteinas: acc.proteinas + (Number(r.proteinas) || 0), carboidratos: acc.carboidratos + (Number(r.carboidratos) || 0), gorduras: acc.gorduras + (Number(r.gorduras) || 0) }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0 })
-              return <div className="settings-goals-footer"><span>Total das refeições</span><strong>{somaRefeicoes.kcal} kcal · {somaRefeicoes.proteinas}g P · {somaRefeicoes.carboidratos}g C · {somaRefeicoes.gorduras}g G</strong><button type="button" onClick={sincronizarMetas} disabled={sincronizando} className="settings-action settings-action-outline"><RefreshCw size={13} className={sincronizando ? 'animate-spin' : ''} /> {sincronizando ? 'Sincronizando...' : 'Sincronizar metas'}</button></div>
+              const somaRefeicoes = (config.refeicoes || []).reduce((acc, r) => ({ kcal: acc.kcal + numeroNutricional(r.kcal), proteinas: acc.proteinas + numeroNutricional(r.proteinas), carboidratos: acc.carboidratos + numeroNutricional(r.carboidratos), gorduras: acc.gorduras + numeroNutricional(r.gorduras), fibras: acc.fibras + numeroNutricional(r.fibras) }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 })
+              return <div className="settings-goals-footer"><span>Total das refeições</span><strong>{somaRefeicoes.kcal} kcal · {somaRefeicoes.proteinas}g P · {somaRefeicoes.carboidratos}g C · {somaRefeicoes.gorduras}g G · {somaRefeicoes.fibras}g fibras</strong><button type="button" onClick={sincronizarMetas} disabled={sincronizando} className="settings-action settings-action-outline"><RefreshCw size={13} className={sincronizando ? 'animate-spin' : ''} /> {sincronizando ? 'Sincronizando...' : 'Sincronizar metas'}</button></div>
             })()}
           </div>
 
@@ -398,9 +493,9 @@ export default function Configuracao({ abaInicial }) {
               {(config.refeicoes || []).map((ref, i) => (
                 <article key={ref.id || i} ref={node => { const refKey = ref.id || String(i); if (node) mealRefs.current[refKey] = node; else delete mealRefs.current[refKey] }} className="settings-meal">
                   <div className="settings-meal-head"><span className="settings-meal-index">{String(i + 1).padStart(2, '0')}</span><label className="settings-field settings-field-grow"><span>Nome da refeição</span><input type="text" value={ref.nome || ''} onChange={e => updateRefeicao(i, 'nome', e.target.value)} /></label><label className="settings-field settings-time"><span>Horário</span><input type="text" value={ref.horario || ''} onChange={e => updateRefeicao(i, 'horario', e.target.value)} /></label><button type="button" onClick={() => deleteRefeicao(i)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ref.nome || 'refeição'}`}><Trash size={15} /></button></div>
-                  <div className="settings-food-row"><label className="settings-field settings-field-grow"><span>Alimentos</span><input type="text" value={textoAlimentos[i] ?? (ref.alimentos || []).join(', ')} onChange={e => setTextoAlimentos(p => ({ ...p, [i]: e.target.value }))} onBlur={e => updateRefeicao(i, 'alimentos', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} placeholder="Ex: arroz, frango, salada" /></label><button type="button" onClick={() => calcularMacrosRefeicao(i)} disabled={!textoAlimentos[i]?.trim() || aiLoadingIdx === i} className="settings-ai-button" title="Calcular macros com IA"><Sparkles size={15} /> <span>{aiLoadingIdx === i ? 'Analisando' : 'Calcular IA'}</span></button></div>
+                      <div className="settings-food-row"><label className="settings-field settings-field-grow"><span>Alimentos</span><input type="text" value={textoAlimentos[ref.id] ?? (ref.alimentos || []).join(', ')} onChange={e => setTextoAlimentos(p => ({ ...p, [ref.id]: e.target.value }))} onBlur={e => updateRefeicao(i, 'alimentos', normalizarListaAlimentos(e.target.value))} placeholder="Ex: arroz, frango, salada" /></label><button type="button" onClick={() => calcularMacrosRefeicao(i)} disabled={!textoAlimentos[ref.id]?.trim() || aiLoadingIdx === i} className="settings-ai-button" title="Calcular macros com IA"><Sparkles size={15} /> <span>{aiLoadingIdx === i ? 'Analisando' : 'Calcular IA'}</span></button></div>
                   <div className="settings-macro-grid">
-                    {[{ key: 'kcal', label: 'Calorias', unit: 'kcal' }, { key: 'proteinas', label: 'Proteínas', unit: 'g' }, { key: 'carboidratos', label: 'Carboidratos', unit: 'g' }, { key: 'gorduras', label: 'Gorduras', unit: 'g' }].map(c => <label key={c.key} className="settings-field"><span>{c.label} ({c.unit})</span><input type="text" inputMode="decimal" value={ref[c.key] ?? ''} onChange={e => updateRefeicao(i, c.key, e.target.value)} aria-label={`${c.label} da refeição`} /></label>)}
+                    {[{ key: 'kcal', label: 'Calorias', unit: 'kcal' }, { key: 'proteinas', label: 'Proteínas', unit: 'g' }, { key: 'carboidratos', label: 'Carboidratos', unit: 'g' }, { key: 'gorduras', label: 'Gorduras', unit: 'g' }, { key: 'fibras', label: 'Fibras', unit: 'g' }].map(c => <label key={c.key} className="settings-field"><span>{c.label} ({c.unit})</span><input type="text" inputMode="decimal" value={ref[c.key] ?? 0} onChange={e => updateRefeicao(i, c.key, e.target.value)} aria-label={`${c.label} da refeição`} /></label>)}
                   </div>
                 </article>
               ))}

@@ -1,0 +1,13 @@
+{
+  "name": "akrgym-analisar-refeicao-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "dry-run": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "^4.129.0"
+  }
+}
