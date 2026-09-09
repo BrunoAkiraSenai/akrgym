@@ -156,6 +156,13 @@ users/{uid}/
 
 ---
 
+## 🔀 Padrão de branches
+
+- `QA`: desenvolvimento, correções e testes locais antes da publicação.
+- `PRD`: versão aprovada que representa o site em produção (`https://akrgym.web.app`).
+- O fluxo recomendado é implementar e validar em `QA`, depois promover para `PRD`.
+- A branch `main` permanece temporariamente como alias legado no GitHub até a troca da branch padrão do repositório.
+
 ## 🚀 Como rodar localmente
 
 ```bash
