@@ -665,8 +665,8 @@ export default function Dieta({ onIrParaConfig }) {
               ))}
             </div>
 
-            <div className="diet-ai-card rounded-2xl p-4 space-y-2">
-              <div className="diet-ai-head"><span className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Analisar alimento com IA</span><span className="diet-ai-helper">Revise antes de adicionar</span></div>
+            <div className={`diet-ai-card rounded-2xl p-4 space-y-2 ${aiLoading ? 'diet-ai-card--loading' : ''}`} aria-busy={aiLoading}>
+              <div className="diet-ai-head"><span className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Analisar alimento com IA</span><span className={`diet-ai-helper ${aiLoading ? 'diet-ai-helper-loading' : ''}`} aria-live="polite">{aiLoading ? 'Processando sua descrição...' : 'Revise antes de adicionar'}</span></div>
               <textarea rows={2} maxLength={LIMITS.textoIA}
                 placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
                 value={aiInput} onChange={e => { ++formVersion.current; setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA)) }}

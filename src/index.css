@@ -1481,8 +1481,13 @@ img, svg, video, canvas { max-width: 100%; }
 .diet-extra-entry-icon { color: var(--accent-bright); }
 .diet-extra-entry-status { border-color: rgba(var(--brand-rgb),0.24); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.09); }
 .diet-extra-entry-actions { justify-content: flex-end; padding-top: 0.05rem; }
-.diet-ai-card { border: 1px solid rgba(var(--brand-rgb),0.18); background: rgba(var(--brand-rgb),0.035); }
+@keyframes diet-ai-border-spin { to { transform: rotate(360deg); } }
+.diet-ai-card { position: relative; isolation: isolate; overflow: hidden; border: 1px solid rgba(var(--brand-rgb),0.18); background: rgba(var(--brand-rgb),0.035); }
+.diet-ai-card > * { position: relative; z-index: 1; }
+.diet-ai-card--loading { border-color: rgba(var(--brand-rgb),0.28); }
+.diet-ai-card--loading::before { position: absolute; inset: 0; z-index: 0; border-radius: inherit; padding: 1px; background: conic-gradient(from -45deg, transparent 0deg, transparent 270deg, rgba(var(--brand-rgb),0.48) 320deg, rgba(var(--brand-rgb),0.86) 360deg); content: ''; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: diet-ai-border-spin 1.4s linear infinite; opacity: 0.88; transform-origin: center; will-change: transform; pointer-events: none; }
 .diet-ai-helper { color: var(--text-secondary); font-size: 0.56rem; }
+.diet-ai-helper-loading { color: var(--brand-bright); }
 .diet-ai-submit { border: 1px solid rgba(var(--brand-rgb),0.26); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.10); }
 .diet-ai-submit:hover { border-color: rgba(var(--brand-rgb),0.46); background: rgba(var(--brand-rgb),0.16); }
 .diet-extra-actions { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
