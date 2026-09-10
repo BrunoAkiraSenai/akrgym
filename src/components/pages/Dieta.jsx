@@ -8,7 +8,19 @@ import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
 import { LIMITS, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
-import { Apple, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Loader, Pencil, Plus, Settings, SkipForward, Sparkles, X } from 'lucide-react'
+import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Droplets, Dumbbell, Flame, Leaf, Loader, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
+
+const NUTRIENTE_DEFINICOES = [
+  { key: 'proteinas', label: 'Proteína', icon: Beef },
+  { key: 'carboidratos', label: 'Carboidratos', icon: Wheat },
+  { key: 'gorduras', label: 'Gorduras', icon: Droplets },
+  { key: 'fibras', label: 'Fibras', icon: Leaf },
+]
+
+function IconeNutriente({ nutrientKey, size = 13 }) {
+  const Icon = NUTRIENTE_DEFINICOES.find(item => item.key === nutrientKey)?.icon
+  return Icon ? <Icon size={size} strokeWidth={1.8} aria-hidden="true" /> : null
+}
 
 function hojeId() {
   const d = new Date()
@@ -30,6 +42,23 @@ function diasNoMes(ano, mes) { return new Date(ano, mes, 0).getDate() }
 
 function clonarRefs(refs) {
   return refs.map(r => ({ ...r }))
+}
+
+function formatoDataCurta(data) {
+  return new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')
+}
+
+function tipoRefeicao(nome = '') {
+  const texto = nome.toLowerCase()
+  if (texto.includes('café') || texto.includes('manhã')) return 'manha'
+  if (texto.includes('pré') || texto.includes('treino')) return 'treino'
+  if (texto.includes('jantar') || texto.includes('noite')) return 'noite'
+  if (texto.includes('almoço') || texto.includes('almoco')) return 'almoco'
+  return 'outro'
+}
+
+function iconeRefeicao(tipo) {
+  return ({ manha: Sun, almoco: Flame, treino: Dumbbell, noite: Moon, outro: Utensils })[tipo] || Utensils
 }
 
 export default function Dieta({ onIrParaConfig }) {
@@ -61,6 +90,7 @@ export default function Dieta({ onIrParaConfig }) {
   const [mesAtual, setMesAtual] = useState({ ano: new Date().getFullYear(), mes: new Date().getMonth() + 1 })
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [aiResultReady, setAiResultReady] = useState(false)
   const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 30 })
   const [toast, setToast] = useState(null)
   const [erroIA, setErroIA] = useState(null)
@@ -249,6 +279,7 @@ export default function Dieta({ onIrParaConfig }) {
   const limparExtras = () => {
     ++formVersion.current
     editingOriginal.current = null
+    setAiResultReady(false)
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '', fibras: '' })
     setEditandoExtraIdx(null)
   }
@@ -330,6 +361,7 @@ export default function Dieta({ onIrParaConfig }) {
           gorduras: String(parsed.gorduras || 0),
           fibras: String(parsed.fibras || 0),
         })
+        setAiResultReady(true)
         setUltimaAnalise(prev => ({ ...prev, [cacheKey]: { timestamp: agora, resultado: parsed } }))
         setAiInput('')
         showToast('Valores preenchidos! Revise e adicione.', 'sucesso')
@@ -356,14 +388,6 @@ export default function Dieta({ onIrParaConfig }) {
   }
 
   const totais = calcularTotais(hoje, refs)
-
-  const corMeta = (atual, meta) => {
-    const p = meta > 0 ? (atual / meta) * 100 : 0
-    if (p >= 100) return 'from-emerald-500 to-cyan-500'
-    if (p >= 75) return 'from-emerald-500/80 to-emerald-400/60'
-    if (p >= 50) return 'from-cyan-500/60 to-cyan-400/40'
-    return 'from-neutral-600 to-neutral-500'
-  }
 
   const hojeData = new Date()
   const podeAvancar = mesAtual.ano < hojeData.getFullYear() || (mesAtual.ano === hojeData.getFullYear() && mesAtual.mes < hojeData.getMonth() + 1)
@@ -409,8 +433,16 @@ export default function Dieta({ onIrParaConfig }) {
       )}
 
       <header className="diet-header">
-        <div><p className="home-kicker">Acompanhamento diário</p><h1 className="text-2xl font-bold tracking-tight text-white">Sua alimentação</h1><p>Registre o que aconteceu e mantenha o plano visível.</p></div>
-        <div className="diet-header-actions"><button type="button" onClick={() => onIrParaConfig?.()} aria-label="Abrir configurações da dieta" className="diet-icon-button"><Settings size={17} /></button><div className="diet-header-mark" aria-hidden="true"><Apple size={18} /></div></div>
+        <div><p className="home-kicker">Acompanhamento diário</p><h1 className="text-2xl font-bold tracking-tight text-white">Dieta</h1><p>Seu progresso também se constrói no prato.</p></div>
+        <div className="diet-header-actions">
+          <label className="diet-date-picker">
+            <CalendarDays size={15} aria-hidden="true" />
+            <span>{dataAtiva === hojeId() ? 'Hoje' : formatoDataCurta(dataAtiva)}</span>
+            <input type="date" value={dataAtiva} max={hojeId()} onChange={e => e.target.value && setDataAtiva(e.target.value)} aria-label="Selecionar dia do diário" />
+          </label>
+          <button type="button" onClick={() => onIrParaConfig?.()} aria-label="Abrir configurações da dieta" className="diet-icon-button"><Settings size={17} /></button>
+          <div className="diet-header-mark" aria-hidden="true"><Apple size={18} /></div>
+        </div>
       </header>
 
       <div className="diet-tabs" role="tablist" aria-label="Visões da dieta">
@@ -447,39 +479,27 @@ export default function Dieta({ onIrParaConfig }) {
                 </button>
               </div>
             )}
-            <div className="diet-progress card-premium p-4 space-y-3">
-              <div className="diet-progress-head"><div><p className="home-kicker">{dataAtiva === hojeId() ? 'Hoje' : 'Dia selecionado'}</p><h2>Progresso alimentar</h2></div><strong>{refeicoesConcluidas}/{progresso.planned}</strong></div>
-              <div className="diet-progress-summary"><span>{refeicoesConcluidas === 0 ? 'Nenhuma refeição concluída' : `${refeicoesConcluidas} ${refeicoesConcluidas === 1 ? 'refeição concluída' : 'refeições concluídas'}`}</span>{refeicoesPuladas > 0 && <span>{refeicoesPuladas} pulada{refeicoesPuladas === 1 ? '' : 's'}</span>}</div>
-              {[
-                { key: 'kcal',         label: 'Calorias',     meta: userMetas.kcal,         u: 'kcal' },
-                { key: 'proteinas',    label: 'Proteínas',    meta: userMetas.proteinas,    u: 'g' },
-                { key: 'carboidratos', label: 'Carboidratos', meta: userMetas.carboidratos, u: 'g' },
-                { key: 'gorduras',     label: 'Gorduras',     meta: userMetas.gorduras,     u: 'g' },
-                { key: 'fibras',       label: 'Fibras',       meta: userMetas.fibras,       u: 'g' },
-              ].map(item => {
-                const valorAlvo = ({ kcal: totais.kcal, proteinas: totais.proteinas, carboidratos: totais.carboidratos, gorduras: totais.gorduras, fibras: totais.fibras })[item.key]
-                const valorExibido = Math.round(animados[item.key])
-                const pctAlvo = item.meta > 0 ? Math.min((valorAlvo / item.meta) * 100, 100) : 0
-                return (
-                  <div key={item.key}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-neutral-400">{item.label}</span>
-                      <span className="text-white font-semibold font-mono">
-                        {valorExibido} <span className="text-neutral-500 font-normal">/ {item.meta}{item.u}</span>
-                      </span>
-                    </div>
-                    <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full bg-gradient-to-r ${corMeta(valorAlvo, item.meta)}`}
-                        style={{
-                          width: `${pctAlvo}%`,
-                          transition: 'width 600ms cubic-bezier(0.2, 0.7, 0.2, 1)',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="diet-goal-card">
+              <div className="diet-goal-copy"><span><Flame size={15} /> Meta diária</span><strong>~ {Math.round(userMetas.kcal)} <small>kcal</small></strong></div>
+              <button type="button" onClick={() => onIrParaConfig?.()} className="diet-goal-edit" aria-label="Editar meta diária"><Pencil size={15} /></button>
+            </div>
+
+            <div className="diet-summary-card card-premium">
+              <div className="diet-summary-top"><div><span className="section-label">Resumo do dia</span><p>{refeicoesConcluidas === 0 ? 'Nenhuma refeição concluída' : `${refeicoesConcluidas} ${refeicoesConcluidas === 1 ? 'refeição concluída' : 'refeições concluídas'}`}</p></div><strong>{refeicoesConcluidas}/{progresso.planned}</strong></div>
+              {refeicoesPuladas > 0 && <div className="diet-progress-summary"><span>{refeicoesPuladas === 1 ? '1 refeição pulada' : `${refeicoesPuladas} refeições puladas`}</span></div>}
+              <div className="diet-summary-body">
+                <div className="diet-kcal-ring" style={{ '--diet-kcal-pct': `${userMetas.kcal > 0 ? Math.min((totais.kcal / userMetas.kcal) * 100, 100) : 0}%` }}>
+                  <div><strong>{Math.round(animados.kcal).toLocaleString('pt-BR')}</strong><span>kcal</span><small>de {Math.round(userMetas.kcal).toLocaleString('pt-BR')}</small></div>
+                </div>
+                <div className="diet-macro-list">
+                  {NUTRIENTE_DEFINICOES.map(item => {
+                    const atual = totais[item.key]
+                    const meta = userMetas[item.key]
+                    const pct = meta > 0 ? Math.min((atual / meta) * 100, 100) : 0
+                    return <div className="diet-macro-item" key={item.key}><div className="diet-macro-item-head"><span><span className="diet-macro-item-icon" title={item.label}><IconeNutriente nutrientKey={item.key} /></span>{item.label}</span><strong>{Math.round(animados[item.key])} <small>/ {Math.round(meta)}g</small></strong></div><div className="diet-macro-track"><span style={{ width: `${pct}%` }} /></div></div>
+                  })}
+                </div>
+              </div>
             </div>
 
             {hasLegacyNutrition(hoje) && <p role="note" className="text-xs text-amber-200">Registro antigo sem nutrientes preservados: os totais usam o plano disponível e podem estar incompletos.</p>}
@@ -497,24 +517,37 @@ export default function Dieta({ onIrParaConfig }) {
               const eLimpo = r.status === 'limpo'
               const eCustom = r.status === 'customizado'
               const ePulado = r.status === 'pulado'
+              const MealIcon = iconeRefeicao(tipoRefeicao(ref.nome))
 
               return (
                 <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`diet-meal-card card-premium p-4 space-y-2 transition-all ${
                   eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'opacity-40' : ''
                 }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-white font-semibold text-sm tracking-tight">{ref.nome}</span>
-                      <span className="text-neutral-500 text-xs ml-2 font-mono">{ref.horario}</span>
+                  <div className="diet-meal-head">
+                    <div className="diet-meal-identity">
+                      <span className="diet-meal-icon" aria-hidden="true"><MealIcon size={19} /></span>
+                      <div><span className="text-white font-semibold text-sm tracking-tight">{ref.nome}</span><span className="diet-meal-time">{ref.horario}</span></div>
                     </div>
-                    <span className={`text-[10px] font-mono ${
-                      eLimpo ? 'text-emerald-400' : eCustom ? 'text-yellow-400' : ePulado ? 'text-neutral-500' : 'text-neutral-600'
+                    <span className={`diet-meal-status ${
+                      eLimpo ? 'diet-meal-status-complete' : eCustom ? 'diet-meal-status-custom' : ePulado ? 'diet-meal-status-skipped' : 'diet-meal-status-pending'
                     }`}>
-                      {eLimpo ? '✓ Concluído' : eCustom ? 'Customizado' : ePulado ? 'Pulado' : 'Pendente'}
+                      {eLimpo ? <><Check size={12} /> Concluído</> : eCustom ? 'Customizado' : ePulado ? 'Pulado' : 'Pendente'}
                     </span>
                   </div>
 
+                  <div className="diet-meal-context" aria-hidden="true"><MealIcon size={50} strokeWidth={1.35} /></div>
+                  <ChevronRight className="diet-meal-chevron" size={19} strokeWidth={1.7} aria-hidden="true" />
+
                   <div className="text-[11px] text-neutral-500 font-mono">{ref.alimentos?.join(' · ') || ref.nome}</div>
+
+                  <div className="diet-meal-nutrition" aria-label={`Nutrientes de ${ref.nome}`}>
+                    <div className="diet-meal-kcal"><strong>{Math.round(Number(ref.kcal) || 0)}</strong><span>kcal</span></div>
+                    {NUTRIENTE_DEFINICOES.map(item => (
+                      <div key={item.key} title={item.label} aria-label={`${item.label}: ${Math.round(Number(ref[item.key]) || 0)} g`}><strong>{Math.round(Number(ref[item.key]) || 0)}</strong><span className="diet-meal-nutrient-icon"><IconeNutriente nutrientKey={item.key} /></span></div>
+                    ))}
+                  </div>
+
+                  {eLimpo && <div className="diet-meal-confirmed"><Check size={13} /> Incluída no progresso alimentar</div>}
 
                   <div className="flex items-center gap-2 pt-1">
                     <button type="button" onClick={() => confirmar(ref.id)}
@@ -541,15 +574,18 @@ export default function Dieta({ onIrParaConfig }) {
               ref={extraCardRef}
               aria-live="polite"
               className={[
-                'rounded-2xl p-4 space-y-2 transition-shadow duration-300',
+                'diet-extra-card rounded-2xl p-4 space-y-2 transition-shadow duration-300',
                 extraHighlighted
                   ? 'bg-cyan-500/10 border-2 border-cyan-400 shadow-[0_0_24px_rgba(34,211,238,0.5)]'
                   : 'bg-neutral-900/50 backdrop-blur-md border border-cyan-500/20',
               ].join(' ')}
             >
-              <span className="diet-section-label">
-                {editandoExtraIdx !== null ? <><Pencil size={13} /> Editar alimento</> : <><Plus size={13} /> Alimento extra</>}
-              </span>
+              <div className="diet-extra-card-head">
+                <span className="diet-section-label">
+                  {editandoExtraIdx !== null ? <><Pencil size={13} /> Editar alimento</> : <><Plus size={13} /> Alimento extra</>}
+                </span>
+                {aiResultReady && <span className="diet-ai-ready"><Sparkles size={12} /> Resultado da IA</span>}
+              </div>
               <div className="space-y-1.5">
                 <div>
                   <label htmlFor="extra-nome" className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Nome</label>
@@ -607,50 +643,36 @@ export default function Dieta({ onIrParaConfig }) {
                 </button>
               </div>
               {(hoje?.extras_globais || []).map(e => (
-                <div key={e.id} ref={node => { if (node) extraItemRefs.current[e.id] = node; else delete extraItemRefs.current[e.id] }} className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm text-cyan-300 font-medium">+ {e.nome || '(sem nome)'}</span>
-                    <div className="diet-extra-actions">
-                      <button type="button" onClick={() => editarExtra(e.id)} aria-label={`Editar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-edit"><Pencil size={13} /><span>Editar</span></button>
-                      <button type="button" onClick={() => removerExtraGlobal(e.id)} aria-label={`Apagar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-delete"><X size={13} /><span>Apagar</span></button>
+                <div key={e.id} ref={node => { if (node) extraItemRefs.current[e.id] = node; else delete extraItemRefs.current[e.id] }} className="diet-extra-entry diet-extra-meal-card">
+                  <div className="diet-extra-entry-head diet-meal-head">
+                    <div className="diet-meal-identity">
+                      <span className="diet-meal-icon diet-extra-entry-icon" aria-hidden="true"><Utensils size={18} /></span>
+                      <div><span className="truncate text-sm text-white font-semibold">{e.nome || '(sem nome)'}</span><span className="diet-meal-time">Alimento extra</span></div>
                     </div>
+                    <span className="diet-meal-status diet-extra-entry-status"><Check size={12} /> Incluído</span>
                   </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-center font-mono num">
-                    <div className="bg-cyan-500/10 rounded-md py-1">
-                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">kcal</div>
-                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.kcal || 0}</div>
-                    </div>
-                    <div className="bg-cyan-500/10 rounded-md py-1">
-                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">P</div>
-                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.proteinas || 0}</div>
-                    </div>
-                    <div className="bg-cyan-500/10 rounded-md py-1">
-                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">C</div>
-                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.carboidratos || 0}</div>
-                    </div>
-                    <div className="bg-cyan-500/10 rounded-md py-1">
-                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">G</div>
-                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.gorduras || 0}</div>
-                    </div>
-                    <div className="bg-cyan-500/10 rounded-md py-1">
-                      <div className="text-[10px] text-cyan-300/70 uppercase tracking-wider leading-none">Fibra</div>
-                      <div className="text-sm text-cyan-200 font-semibold mt-0.5 leading-tight">{e.fibras || 0}</div>
-                    </div>
+                  <div className="diet-meal-nutrition" aria-label={`Nutrientes de ${e.nome || 'alimento extra'}`}>
+                    <div className="diet-meal-kcal"><strong>{Math.round(Number(e.kcal) || 0)}</strong><span>kcal</span></div>
+                    {NUTRIENTE_DEFINICOES.map(item => (
+                      <div key={item.key} title={item.label} aria-label={`${item.label}: ${Math.round(Number(e[item.key]) || 0)} g`}><strong>{Math.round(Number(e[item.key]) || 0)}</strong><span className="diet-meal-nutrient-icon"><IconeNutriente nutrientKey={item.key} /></span></div>
+                    ))}
+                  </div>
+                  <div className="diet-extra-actions diet-extra-entry-actions">
+                    <button type="button" onClick={() => editarExtra(e.id)} aria-label={`Editar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-edit"><Pencil size={13} /><span>Editar</span></button>
+                    <button type="button" onClick={() => removerExtraGlobal(e.id)} aria-label={`Apagar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-delete"><X size={13} /><span>Apagar</span></button>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="bg-neutral-900/50 backdrop-blur-md border border-purple-500/20 rounded-2xl p-4 space-y-2">
-              <span className="diet-section-label diet-section-label-ai">
-                <Sparkles size={13} /> Analisar alimento com IA
-              </span>
+            <div className="diet-ai-card rounded-2xl p-4 space-y-2">
+              <div className="diet-ai-head"><span className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Analisar alimento com IA</span><span className="diet-ai-helper">Revise antes de adicionar</span></div>
               <textarea rows={2} maxLength={LIMITS.textoIA}
                 placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
                 value={aiInput} onChange={e => { ++formVersion.current; setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA)) }}
-                className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-400/30 resize-none" />
+                className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30 resize-none" />
               <button onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading}
-                className="w-full flex items-center justify-center gap-2 bg-purple-500/10 text-purple-400 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30 border border-purple-500/20">
+                className="diet-ai-submit w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30">
                 {aiLoading ? <><Loader size={14} className="animate-spin" /> Analisando...</> : <><Sparkles size={14} /> Analisar alimento</>}
               </button>
               {erroIA && (
