@@ -65,5 +65,5 @@ const bg = [10, 8, 26] // roxo escuro Aether
 fs.writeFileSync(path.join(out, 'pwa-192x192.png'), makePNG(192, bg))
 fs.writeFileSync(path.join(out, 'pwa-512x512.png'), makePNG(512, bg))
 fs.writeFileSync(path.join(out, 'apple-touch-icon.png'), makePNG(180, bg))
-fs.writeFileSync(path.join(out, 'robots.txt'), 'User-agent: *\nAllow: /\n')
+fs.writeFileSync(path.join(out, 'robots.txt'), 'User-agent: *\nAllow: /\n\nSitemap: https://akrgym.web.app/sitemap.xml\n')
 console.log('OK: gerados pwa-192x192.png, pwa-512x512.png, apple-touch-icon.png, robots.txt')
