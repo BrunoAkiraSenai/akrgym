@@ -8,7 +8,7 @@ import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
 import { LIMITS, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
-import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Droplets, Dumbbell, Flame, Leaf, Loader, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
+import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Droplets, Dumbbell, Flame, Leaf, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
 
 const NUTRIENTE_DEFINICOES = [
   { key: 'proteinas', label: 'Proteína', icon: Beef },
@@ -666,6 +666,11 @@ export default function Dieta({ onIrParaConfig }) {
             </div>
 
             <div className={`diet-ai-card rounded-2xl p-4 space-y-2 ${aiLoading ? 'diet-ai-card--loading' : ''}`} aria-busy={aiLoading}>
+              {aiLoading && (
+                <svg className="diet-ai-border-loader" aria-hidden="true" focusable="false">
+                  <rect x="0.75" y="0.75" width="calc(100% - 1.5px)" height="calc(100% - 1.5px)" rx="15" pathLength="100" />
+                </svg>
+              )}
               <div className="diet-ai-head"><span className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Analisar alimento com IA</span><span className={`diet-ai-helper ${aiLoading ? 'diet-ai-helper-loading' : ''}`} aria-live="polite">{aiLoading ? 'Processando sua descrição...' : 'Revise antes de adicionar'}</span></div>
               <textarea rows={2} maxLength={LIMITS.textoIA}
                 placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
@@ -673,7 +678,7 @@ export default function Dieta({ onIrParaConfig }) {
                 className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30 resize-none" />
               <button onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading}
                 className="diet-ai-submit w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30">
-                {aiLoading ? <><Loader size={14} className="animate-spin" /> Analisando...</> : <><Sparkles size={14} /> Analisar alimento</>}
+                {aiLoading ? 'Analisando...' : <><Sparkles size={14} /> Analisar alimento</>}
               </button>
               {erroIA && (
                 <div role="alert" className="flex items-start justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] text-red-300">
