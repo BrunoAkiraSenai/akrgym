@@ -1491,6 +1491,18 @@ img, svg, video, canvas { max-width: 100%; }
 .diet-ai-helper-loading { color: var(--brand-bright); }
 .diet-ai-submit { border: 1px solid rgba(var(--brand-rgb),0.26); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.10); }
 .diet-ai-submit:hover { border-color: rgba(var(--brand-rgb),0.46); background: rgba(var(--brand-rgb),0.16); }
+.diet-copy-summary { margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid rgba(255,255,255,0.08); }
+.diet-copy-button { display: flex; width: 100%; min-height: 2.75rem; align-items: center; justify-content: center; gap: 0.55rem; padding: 0.7rem 0.9rem; border-color: rgba(var(--brand-rgb),0.28); color: var(--text-primary); font-size: 0.72rem; }
+.diet-copy-button:hover { border-color: rgba(var(--brand-rgb),0.48); color: var(--text-primary); }
+.diet-copy-button:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }
+.diet-copy-button:disabled, .diet-copy-button:disabled:hover { cursor: not-allowed; transform: none; border-color: rgba(255,255,255,0.10); background: rgba(255,255,255,0.035); box-shadow: none; color: var(--text-muted); opacity: 0.62; }
+.diet-copy-button[data-status="copiado"] { border-color: rgba(var(--brand-rgb),0.46); background: rgba(var(--brand-rgb),0.12); color: var(--brand-bright); }
+.diet-copy-button[data-status="copiado"]:hover { background: rgba(var(--brand-rgb),0.16); color: var(--brand-bright); }
+.diet-copy-feedback { margin: 0.55rem 0 0; color: var(--text-secondary); font-size: 0.64rem; line-height: 1.45; text-align: center; }
+.diet-copy-feedback-error { color: #fca5a5; }
+.diet-copy-fallback-wrap { margin-top: 0.65rem; }
+.diet-copy-fallback { width: 100%; min-height: 8rem; resize: vertical; border: 1px solid rgba(255,255,255,0.12); border-radius: 0.75rem; padding: 0.7rem; color: var(--text-primary); background: rgba(0,0,0,0.28); font-size: 0.72rem; line-height: 1.5; outline: none; }
+.diet-copy-fallback:focus { border-color: rgba(var(--brand-rgb),0.55); }
 @media (prefers-reduced-motion: reduce) {
   .diet-ai-border-loader rect { animation: none !important; stroke-dashoffset: 0; }
 }

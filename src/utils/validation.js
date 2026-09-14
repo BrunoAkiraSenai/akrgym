@@ -12,6 +12,7 @@
 
 const LIMITS = {
   nome: 80,
+  nomeAlimentoExtra: 500, // pode conter a descrição completa enviada para análise por IA
   horario: 5,           // HH:MM
   texto: 1000,
   textoIA: 500,         // limite da Cloud Function
@@ -58,6 +59,10 @@ export function sanitizarTexto(s) {
   if (typeof s !== 'string') return ''
   // eslint-disable-next-line no-control-regex
   return s.replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '')
+}
+
+export function normalizarNomeAlimentoExtra(s) {
+  return truncar(sanitizarTexto(s).trim(), LIMITS.nomeAlimentoExtra)
 }
 
 export { LIMITS }

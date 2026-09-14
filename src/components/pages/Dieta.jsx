@@ -6,9 +6,10 @@ import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
-import { LIMITS, sanitizarTexto } from '../../utils/validation'
+import { LIMITS, normalizarNomeAlimentoExtra, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
-import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Droplets, Dumbbell, Flame, Leaf, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
+import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Copy, Droplets, Dumbbell, Flame, Leaf, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
+import { diaryText } from '../../utils/dietDiary'
 
 const NUTRIENTE_DEFINICOES = [
   { key: 'proteinas', label: 'Proteína', icon: Beef },
@@ -61,6 +62,43 @@ function iconeRefeicao(tipo) {
   return ({ manha: Sun, almoco: Flame, treino: Dumbbell, noite: Moon, outro: Utensils })[tipo] || Utensils
 }
 
+async function copiarTexto(texto) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(texto)
+      return
+    } catch {
+      // Fall back to selection-based copy for browsers that deny clipboard access.
+    }
+  }
+
+  const focoAnterior = document.activeElement
+  const campo = document.createElement('textarea')
+  campo.value = texto
+  campo.readOnly = true
+  campo.tabIndex = -1
+  campo.setAttribute('aria-hidden', 'true')
+  Object.assign(campo.style, {
+    position: 'fixed', left: '0', top: '0', width: '1px', height: '1px',
+    padding: '0', opacity: '0.01', pointerEvents: 'none', fontSize: '16px',
+  })
+  document.body.appendChild(campo)
+
+  let copiado
+  try {
+    try { campo.focus({ preventScroll: true }) } catch { campo.focus() }
+    campo.select()
+    campo.setSelectionRange(0, campo.value.length)
+    copiado = document.execCommand('copy')
+  } finally {
+    campo.remove()
+    if (focoAnterior && focoAnterior !== document.body && focoAnterior.isConnected) {
+      try { focoAnterior.focus({ preventScroll: true }) } catch { focoAnterior.focus() }
+    }
+  }
+  if (!copiado) throw new Error('A área de transferência não está disponível.')
+}
+
 export default function Dieta({ onIrParaConfig }) {
   const user = useUser()
   const [aba, setAba] = useState('diario')
@@ -93,6 +131,9 @@ export default function Dieta({ onIrParaConfig }) {
   const [aiResultReady, setAiResultReady] = useState(false)
   const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 30 })
   const [toast, setToast] = useState(null)
+  const [copiandoRefeicoes, setCopiandoRefeicoes] = useState(false)
+  const [feedbackCopia, setFeedbackCopia] = useState({ data: null, status: '' })
+  const feedbackCopiaTimer = useRef(null)
   const [erroIA, setErroIA] = useState(null)
   const [pularConfirmId, setPularConfirmId] = useState(null)
   const [analisando, setAnalisando] = useState(false)
@@ -105,6 +146,8 @@ export default function Dieta({ onIrParaConfig }) {
     const t = setTimeout(() => setToast(null), 5000)
     return () => clearTimeout(t)
   }, [toast])
+
+  useEffect(() => () => clearTimeout(feedbackCopiaTimer.current), [])
 
   useEffect(() => {
     const index = pendingExtraFocusRef.current
@@ -257,7 +300,7 @@ export default function Dieta({ onIrParaConfig }) {
       if (value === null) return
       values[field] = value
     }
-    const item = { ...values, nome: extraGlobal.nome.trim().slice(0, LIMITS.nome), id: editandoExtraIdx || crypto.randomUUID() }
+    const item = { ...values, nome: normalizarNomeAlimentoExtra(extraGlobal.nome), id: editandoExtraIdx || crypto.randomUUID() }
     const previous = editingOriginal.current
     if (previous && ['nome', 'kcal', 'proteinas', 'carboidratos', 'gorduras', 'fibras'].every(key => String(previous[key] ?? 0) === String(item[key]))) {
       limparExtras()
@@ -388,6 +431,27 @@ export default function Dieta({ onIrParaConfig }) {
   }
 
   const totais = calcularTotais(hoje, refs)
+  const textoRefeicoes = diaryText(hoje, refs, dataAtiva)
+  const statusCopiaAtivo = feedbackCopia.data === dataAtiva ? feedbackCopia.status : ''
+
+  const copiarRefeicoes = async () => {
+    if (!textoRefeicoes || copiandoRefeicoes) return
+    const data = dataAtiva
+    setCopiandoRefeicoes(true)
+    setFeedbackCopia({ data, status: 'copiando' })
+    clearTimeout(feedbackCopiaTimer.current)
+    try {
+      await copiarTexto(textoRefeicoes)
+      setFeedbackCopia({ data, status: 'copiado' })
+      feedbackCopiaTimer.current = setTimeout(() => {
+        setFeedbackCopia(current => current.data === data && current.status === 'copiado' ? { data: null, status: '' } : current)
+      }, 2400)
+    } catch {
+      setFeedbackCopia({ data, status: 'erro' })
+    } finally {
+      setCopiandoRefeicoes(false)
+    }
+  }
 
   const hojeData = new Date()
   const podeAvancar = mesAtual.ano < hojeData.getFullYear() || (mesAtual.ano === hojeData.getFullYear() && mesAtual.mes < hojeData.getMonth() + 1)
@@ -593,6 +657,7 @@ export default function Dieta({ onIrParaConfig }) {
                     id="extra-nome"
                     ref={extraNomeRef}
                     type="text"
+                    maxLength={LIMITS.nomeAlimentoExtra}
                     placeholder="ex: banana"
                     value={extraGlobal.nome}
                     onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, nome: e.target.value })) }}
@@ -704,6 +769,34 @@ export default function Dieta({ onIrParaConfig }) {
                     <div className="text-[9px] text-neutral-600">{item.m}{item.u}</div>
                   </div>
                 ))}
+              </div>
+              <div className="diet-copy-summary">
+                <button
+                  type="button"
+                  onClick={copiarRefeicoes}
+                  disabled={!textoRefeicoes || copiandoRefeicoes}
+                  aria-busy={copiandoRefeicoes}
+                  data-status={statusCopiaAtivo}
+                  className="btn-secondary diet-copy-button"
+                >
+                  {statusCopiaAtivo === 'copiado' ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+                  <span>{copiandoRefeicoes ? 'Copiando...' : statusCopiaAtivo === 'copiado' ? 'Copiado!' : statusCopiaAtivo === 'erro' ? 'Tentar copiar novamente' : 'Copiar refeições realizadas'}</span>
+                </button>
+                {statusCopiaAtivo ? (
+                  <p className={`diet-copy-feedback ${statusCopiaAtivo === 'erro' ? 'diet-copy-feedback-error' : ''}`} role={statusCopiaAtivo === 'erro' ? 'alert' : 'status'} aria-live={statusCopiaAtivo === 'erro' ? 'assertive' : 'polite'}>
+                    {statusCopiaAtivo === 'copiando' ? 'Preparando o texto...' : statusCopiaAtivo === 'copiado' ? 'Texto copiado. Agora é só colar onde quiser.' : 'Não foi possível copiar automaticamente. Selecione o texto abaixo para copiar manualmente.'}
+                  </p>
+                ) : (
+                  <p className="diet-copy-feedback">
+                    {textoRefeicoes ? 'Inclui refeições concluídas e alimentos extras; pendentes e puladas ficam de fora.' : 'Registre uma refeição ou alimento extra para liberar a cópia.'}
+                  </p>
+                )}
+                {statusCopiaAtivo === 'erro' && (
+                  <div className="diet-copy-fallback-wrap">
+                    <label htmlFor="diet-copy-fallback" className="sr-only">Texto das refeições para copiar manualmente</label>
+                    <textarea id="diet-copy-fallback" className="diet-copy-fallback" value={textoRefeicoes} readOnly onFocus={event => event.currentTarget.select()} rows={8} />
+                  </div>
+                )}
               </div>
             </div>
           </>

@@ -1,5 +1,6 @@
 // Pure diary operations: transactions always apply an intent to the latest document.
 const fields = ['kcal', 'proteinas', 'carboidratos', 'gorduras', 'fibras']
+const completedMealStatuses = ['limpo', 'livre', 'customizado']
 export const emptyMeal = () => ({ status: 'pendente', substituto: null, extra: [] })
 
 export function nutrients(food = {}) {
@@ -25,6 +26,14 @@ export function normalizeDay(day, date) {
   }
 }
 
+function snapshotFood(food = {}) {
+  const snapshot = { ...nutrients(food), nome: food.nome || '' }
+  if (Array.isArray(food.alimentos)) snapshot.alimentos = food.alimentos.map(item => String(item))
+  else if (typeof food.alimentos === 'string') snapshot.alimentos = food.alimentos
+  if (food.horario != null) snapshot.horario = String(food.horario)
+  return snapshot
+}
+
 export function applyDiaryAction(day, date, action, plan = [], goals = {}) {
   const next = normalizeDay(day, date)
   // Only newly created days have a known original plan. Never invent a past plan.
@@ -37,7 +46,7 @@ export function applyDiaryAction(day, date, action, plan = [], goals = {}) {
     if (action.expectedRevision && previous.revision !== action.expectedRevision) throw new Error('Esta refeição mudou. Atualize o diário antes de desfazer.')
     next.refeicoes[action.id] = action.restore
       ? { ...action.restore, revision: action.revision }
-      : { ...previous, status: action.status, substituto: null, consumido: action.status === 'limpo' ? { ...nutrients(action.food), nome: action.food.nome || '' } : null, revision: action.revision }
+      : { ...previous, status: action.status, substituto: null, consumido: action.status === 'limpo' ? snapshotFood(action.food) : null, revision: action.revision }
   } else if (action.type === 'extra-add') {
     if (!next.extras_globais.some(item => item.id === action.item.id)) next.extras_globais.push(action.item)
   } else {
@@ -66,6 +75,118 @@ export function diaryTotals(day, plan = []) {
   }
   for (const extra of day?.extras_globais || []) add(extra)
   return total
+}
+
+function cleanDiaryText(value) {
+  const text = String(value ?? '').replaceAll('\n', ' ').replaceAll('\r', ' ').replaceAll('\t', ' ').replace(/\s+/g, ' ').trim()
+  return Array.from(text).filter(character => character.codePointAt(0) >= 32 && character.codePointAt(0) !== 127).join('')
+}
+
+function formatDiaryDate(date) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ''))
+  if (!match) return 'data não informada'
+  const parsed = new Date(`${date}T12:00:00Z`)
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return 'data não informada'
+  return `${match[3]}/${match[2]}/${match[1]}`
+}
+
+function foodDescriptions(food, fallback) {
+  const source = food?.alimentos ?? fallback?.alimentos
+  if (Array.isArray(source)) return source.map(cleanDiaryText).filter(Boolean)
+  if (typeof source === 'string') return source.split('·').map(cleanDiaryText).filter(Boolean)
+  return []
+}
+
+function formatNutritionText(food) {
+  const values = nutrients(food)
+  const format = value => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(value)
+  return `${format(values.kcal)} kcal | Proteínas ${format(values.proteinas)} g | Carboidratos ${format(values.carboidratos)} g | Gorduras ${format(values.gorduras)} g | Fibras ${format(values.fibras)} g`
+}
+
+function formatMealSection(label, time, food, fallback, includeFoodName = false) {
+  const heading = `${cleanDiaryText(label) || 'Refeição registrada'}${cleanDiaryText(time) ? ` - ${cleanDiaryText(time)}` : ''}`
+  let descriptions = foodDescriptions(food, fallback)
+  const foodName = cleanDiaryText(food?.nome)
+  if (descriptions.length === 0 && includeFoodName && foodName && foodName.toLocaleLowerCase('pt-BR') !== cleanDiaryText(label).toLocaleLowerCase('pt-BR')) {
+    descriptions = [foodName]
+  }
+  const lines = descriptions.length
+    ? descriptions.map(item => `• ${item}`)
+    : ['• Itens não detalhados no histórico.']
+  lines.push(formatNutritionText(food))
+  return [heading, ...lines].join('\n')
+}
+
+function formatExtraSection(title, items) {
+  if (!Array.isArray(items) || items.length === 0) return ''
+  const lines = items.map(item => `• ${cleanDiaryText(item?.nome) || 'Alimento extra'}\n  ${formatNutritionText(item)}`)
+  return `${title}\n${lines.join('\n')}`
+}
+
+export function diaryText(day, plan = [], date = day?.data) {
+  const sections = []
+  const plannedIds = new Set()
+  const entries = day?.refeicoes || {}
+
+  for (const ref of plan) {
+    if (!ref?.id || plannedIds.has(ref.id)) continue
+    plannedIds.add(ref.id)
+    const meal = entries[ref.id]
+    if (!meal) continue
+
+    if (['limpo', 'livre'].includes(meal.status)) {
+      const food = meal.consumido || ref
+      sections.push(formatMealSection(
+        meal.consumido?.nome || ref.nome,
+        meal.consumido?.horario || (meal.consumido ? '' : ref.horario),
+        food,
+        meal.consumido ? null : ref,
+      ))
+    } else if (meal.status === 'customizado' && meal.substituto) {
+      sections.push(formatMealSection(
+        ref.nome || 'Refeição personalizada',
+        meal.substituto.horario || ref.horario,
+        meal.substituto,
+        null,
+        true,
+      ))
+    }
+
+    if (Array.isArray(meal.extra) && meal.extra.length) sections.push(formatExtraSection(`Alimentos extras - ${cleanDiaryText(ref.nome) || 'refeição'}`, meal.extra))
+  }
+
+  for (const [id, meal] of Object.entries(entries)) {
+    if (plannedIds.has(id)) continue
+    if (completedMealStatuses.includes(meal?.status)) {
+      const food = meal.status === 'customizado' ? meal.substituto : meal.consumido
+      if (food) {
+        const isCustom = meal.status === 'customizado'
+        sections.push(formatMealSection(
+          isCustom ? 'Refeição personalizada' : food.nome || 'Refeição registrada',
+          food.horario,
+          food,
+          null,
+          isCustom,
+        ))
+      }
+    }
+    if (Array.isArray(meal?.extra) && meal.extra.length) sections.push(formatExtraSection('Alimentos extras registrados', meal.extra))
+  }
+
+  const extrasGlobais = Array.isArray(day?.extras_globais) ? day.extras_globais : []
+  if (extrasGlobais.length) sections.push(formatExtraSection('Alimentos extras', extrasGlobais))
+  if (sections.length === 0) return ''
+
+  const lines = [
+    `Refeições realizadas - ${formatDiaryDate(date)}`,
+    '',
+    ...sections.flatMap((section, index) => index === sections.length - 1 ? [section] : [section, '']),
+    '',
+    'TOTAL DO DIA',
+    formatNutritionText(diaryTotals(day, plan)),
+  ]
+  if (hasLegacyNutrition(day)) lines.push('', 'Observação: há registros antigos sem snapshot nutricional; alguns valores podem usar o plano atual.')
+  return lines.join('\n')
 }
 
 export function hasLegacyNutrition(day) {

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition } from '../src/utils/dietDiary.js'
+import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition, diaryText } from '../src/utils/dietDiary.js'
 
 const date = '2026-09-09'
 const breakfast = { id: 'cafe', nome: 'Café', kcal: 460, proteinas: 30, carboidratos: 50, gorduras: 15, fibras: 5 }
@@ -22,6 +22,80 @@ test('confirmed nutrients survive plan edits and deletion including calories', (
   assert.equal(diaryTotals(day, []).kcal, 460)
   assert.equal(diaryTotals(day, []).fibras, 5)
   assert.equal(hasLegacyNutrition(day), false)
+})
+
+test('meal snapshots preserve foods and time for later copy after the plan changes', () => {
+  const mealWithDetails = { ...breakfast, alimentos: ['2 ovos', 'Pão integral'], horario: '08:30' }
+  const day = applyDiaryAction(null, date, { type: 'meal', id: 'cafe', status: 'limpo', food: mealWithDetails, revision: '1' }, [mealWithDetails])
+  const changedPlan = [{ ...mealWithDetails, nome: 'Café atualizado', alimentos: ['Plano novo'], horario: '09:00', kcal: 999 }]
+  const text = diaryText(day, changedPlan, date)
+
+  assert.match(text, /2 ovos/)
+  assert.match(text, /Pão integral/)
+  assert.doesNotMatch(text, /Plano novo/)
+  assert.match(text, /08:30/)
+  assert.match(text, /460 kcal/)
+})
+
+test('older meal snapshots without item details do not copy the current plan as if it were historical', () => {
+  const saved = applyDiaryAction(null, date, { type: 'meal', id: 'cafe', status: 'limpo', food: breakfast, revision: '1' }, [breakfast])
+  const oldSnapshot = { ...saved.refeicoes.cafe.consumido }
+  delete oldSnapshot.alimentos
+  delete oldSnapshot.horario
+  const text = diaryText(
+    { data: date, refeicoes: { cafe: { status: 'limpo', consumido: oldSnapshot } }, extras_globais: [] },
+    [{ ...breakfast, alimentos: ['Plano atualizado'], horario: '09:00', kcal: 999 }],
+    date,
+  )
+
+  assert.match(text, /Itens não detalhados no histórico/)
+  assert.doesNotMatch(text, /Plano atualizado/)
+  assert.doesNotMatch(text, /09:00/)
+  assert.match(text, /460 kcal/)
+})
+
+test('copy text includes completed meals and extras, omits pending and skipped meals, and totals only recorded food', () => {
+  const banana = { nome: 'Banana (100 g)', kcal: 105, proteinas: 1.3, carboidratos: 27, gorduras: 0.4, fibras: 3 }
+  const day = {
+    data: date,
+    refeicoes: {
+      cafe: { status: 'limpo', consumido: { ...breakfast, nome: 'Café da manhã', horario: '08:30', alimentos: ['2 ovos', 'Pão integral'] } },
+      almoco: { status: 'pulado' },
+      jantar: { status: 'pendente' },
+    },
+    extras_globais: [banana],
+  }
+
+  const text = diaryText(day, plan, date)
+  assert.match(text, /Refeições realizadas - 09\/09\/2026/)
+  assert.match(text, /Café da manhã - 08:30/)
+  assert.match(text, /Banana \(100 g\)/)
+  assert.doesNotMatch(text, /Almoço/)
+  assert.doesNotMatch(text, /jantar/i)
+  assert.match(text, /TOTAL DO DIA\n565 kcal/)
+  assert.match(text, /Fibras 8 g/)
+})
+
+test('copy text returns empty when there are no completed meals or logged foods', () => {
+  assert.equal(diaryText({ data: date, refeicoes: { cafe: { status: 'pendente' }, almoco: { status: 'pulado' } }, extras_globais: [] }, plan, date), '')
+})
+
+test('copy text includes customized meals and foods logged against a skipped meal', () => {
+  const cheese = { nome: 'Queijo extra', kcal: 60, proteinas: 4, carboidratos: 1, gorduras: 4, fibras: 0 }
+  const day = {
+    data: date,
+    refeicoes: {
+      cafe: { status: 'customizado', substituto: { nome: 'Omelete', kcal: 200, proteinas: 18, carboidratos: 3, gorduras: 13, fibras: 1 }, extra: [cheese] },
+      almoco: { status: 'pulado', extra: [{ ...cheese, nome: 'Doce depois do almoço' }] },
+    },
+    extras_globais: [],
+  }
+
+  const text = diaryText(day, plan, date)
+  assert.match(text, /Omelete/)
+  assert.match(text, /Queijo extra/)
+  assert.match(text, /Doce depois do almoço/)
+  assert.match(text, /320 kcal/)
 })
 
 test('legacy days are explicit, do not invent snapshots, and normalize absent extras', () => {

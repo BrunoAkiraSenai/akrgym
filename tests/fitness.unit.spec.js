@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { calcularRitmoTreino, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
-import { LIMITS, parseNumero, sanitizarTexto, truncar } from '../src/utils/validation.js'
+import { LIMITS, normalizarNomeAlimentoExtra, parseNumero, sanitizarTexto, truncar } from '../src/utils/validation.js'
 
 test('parseMetaTeto interpreta meta simples e intervalo', () => {
   assert.equal(parseMetaTeto('8-10'), 10)
@@ -38,6 +38,13 @@ test('validação sanitiza e limita entradas', () => {
   assert.equal(sanitizarTexto('ok\u0000\u0007\ntexto'), 'ok\ntexto')
   assert.equal(truncar('abcdef', 3), 'abc')
   assert.equal(LIMITS.textoIA, 500)
+})
+
+test('descrição completa do alimento extra não é cortada no limite de nomes curtos', () => {
+  const descricao = 'Uma porção e meia de nachos feito em casa, salgadinho tortilhas carne moída e guacamole'
+  assert.equal(descricao.length, 87)
+  assert.equal(normalizarNomeAlimentoExtra(descricao), descricao)
+  assert.equal(normalizarNomeAlimentoExtra('a'.repeat(501)).length, LIMITS.nomeAlimentoExtra)
 })
 
 test('calcularRitmoTreino reage à frequência recente e compara com a janela anterior', () => {
