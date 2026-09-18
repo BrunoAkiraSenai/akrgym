@@ -1,0 +1,17 @@
+# O cérebro versionado contém apenas Markdown sanitizado.
+.obsidian/
+*.canvas
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.pdf
+.env*
+.dev.vars
+*.key
+*.pem
+*service-account*.json
+*firebase-adminsdk*.json
+secrets/
+attachments/
