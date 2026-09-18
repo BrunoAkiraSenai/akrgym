@@ -14,7 +14,16 @@ export function validDraft(draft, routine) {
   // Old drafts without a fingerprint can no longer prove which plan they used.
   return draft.fingerprint === routineFingerprint(routine)
     && draft.topSetData.length === routine.exercicios.length
-    && draft.topSetData.every((ex, i) => ex.id === exerciseId(routine.exercicios[i], i) && ex.nome === routine.exercicios[i].nome)
+    && draft.topSetData.every((ex, i) => {
+      const original = routine.exercicios[i]
+      const originalId = exerciseId(original, i)
+      if (ex.substituidoDe) {
+        return Boolean(ex.nome?.trim())
+          && ex.substituidoDe === original.nome
+          && ex.substituidoDeId === originalId
+      }
+      return ex.id === originalId && ex.nome === original.nome
+    })
 }
 
 export function prepareSession(routine, history = []) {
@@ -40,5 +49,10 @@ export function prepareSession(routine, history = []) {
 }
 
 export function recordedExercise(ex) {
-  return { id: ex.id, nome: ex.nome, meta_reps: ex.meta_reps, carga_top: decimal(ex.carga), reps_top: decimal(ex.reps) }
+  const recorded = { id: ex.id, nome: ex.nome, meta_reps: ex.meta_reps, carga_top: decimal(ex.carga), reps_top: decimal(ex.reps) }
+  if (ex.substituidoDe) {
+    recorded.substituido_de = ex.substituidoDe
+    recorded.substituido_de_id = ex.substituidoDeId
+  }
+  return recorded
 }

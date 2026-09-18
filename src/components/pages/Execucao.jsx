@@ -9,7 +9,7 @@ import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, re
 import ConfirmModal from '../ConfirmModal'
 import {
   Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
-  Flame, Info, RefreshCw, Search, Zap, SkipForward, Dumbbell,
+  ArrowLeftRight, Flame, Info, RefreshCw, Search, Zap, SkipForward, Dumbbell,
 } from 'lucide-react'
 
 export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
@@ -25,6 +25,9 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
   const [sucesso, setSucesso] = useState(null)
   const [treinosState, setTreinosState] = useState(null)
   const [filtroBusca, setFiltroBusca] = useState('')
+  const [trocaAberta, setTrocaAberta] = useState(null)
+  const [buscaTroca, setBuscaTroca] = useState('')
+  const [erroTroca, setErroTroca] = useState(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const sessionId = useRef(null)
   const saveLock = useRef(false)
@@ -119,6 +122,9 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     setTopSetData([])
     setRotinaKey(key)
     setStep('active')
+    setTrocaAberta(null)
+    setBuscaTroca('')
+    setErroTroca(null)
     setLoadingHistorico(true)
     setRecuperado(false)
     setErro(null); setSucesso(null)
@@ -142,6 +148,51 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
 
   const alternarPulo = (exIdx) => {
     setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, pulado: !ex.pulado } : { ...ex }))
+  }
+
+  const abrirTroca = (exIdx) => {
+    setTrocaAberta(exIdx)
+    setBuscaTroca('')
+    setErroTroca(null)
+    setErro(null)
+  }
+
+  const fecharTroca = () => {
+    setTrocaAberta(null)
+    setBuscaTroca('')
+    setErroTroca(null)
+  }
+
+  const substituirExercicio = (exIdx, novoNome) => {
+    const nomeBruto = String(novoNome || '')
+    if (nomeBruto && !/^[A-Za-zÀ-ÖØ-öø-ÿ]/.test(nomeBruto)) {
+      setErroTroca('O nome não pode começar com números ou caracteres especiais.')
+      return
+    }
+    const nome = nomeBruto.trim()
+    const atual = topSetData[exIdx]
+    if (!atual || !nome) return
+    if (nome.toLocaleLowerCase('pt-BR') === atual.nome.toLocaleLowerCase('pt-BR')) {
+      setErroTroca('Escolha um exercício diferente do atual.')
+      return
+    }
+    const originalNome = atual.substituidoDe || atual.nome
+    const originalId = atual.substituidoDeId || atual.id
+    const token = crypto.randomUUID()
+    setTopSetData(prev => prev.map((ex, i) => i === exIdx ? {
+      ...ex,
+      id: `substituicao:${originalId}:${token}`,
+      nome,
+      substituidoDe: originalNome,
+      substituidoDeId: originalId,
+      carga: '',
+      reps: '',
+      ref: 0,
+      repsAnterior: null,
+      pulado: false,
+    } : ex))
+    fecharTroca()
+    setSucesso(`${nome} entrou no lugar de ${originalNome} nesta sessão.`)
   }
 
   const finalizarTreino = async () => {
@@ -173,21 +224,26 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     try {
       sessionId.current ||= crypto.randomUUID()
       const target = doc(db, 'users', user.uid, 'historico_treinos', sessionId.current)
-      const record = {
-        rotina_id: rotinaKey,
-        rotina_nome: treinosState[rotinaKey]?.nome || rotinaKey,
-        data: new Date(),
-        createdAt: serverTimestamp(),
-        exercicios: exerciciosConcluidos.map(recordedExercise),
-        exercicios_pulados: topSetData.filter(ex => ex.pulado).map(ex => ex.nome),
-      }
+        const record = {
+          rotina_id: rotinaKey,
+          rotina_nome: treinosState[rotinaKey]?.nome || rotinaKey,
+          data: new Date(),
+          createdAt: serverTimestamp(),
+          exercicios: exerciciosConcluidos.map(recordedExercise),
+          exercicios_pulados: topSetData.filter(ex => ex.pulado).map(ex => ex.nome),
+        }
+        const substituicoes = exerciciosConcluidos.filter(ex => ex.substituidoDe).map(ex => ({
+          original: ex.substituidoDe,
+          substituto: ex.nome,
+        }))
+        if (substituicoes.length > 0) record.exercicios_substituidos = substituicoes
       await runTransaction(db, async transaction => {
         const existing = await transaction.get(target)
         if (!existing.exists()) transaction.set(target, record)
       })
       try { localStorage.removeItem(STORAGE_KEY) } catch { /* Remote record is safe. */ }
       setSucesso('Treino finalizado com sucesso!')
-      setStep('select'); setTopSetData([]); setRotinaKey(null)
+      setStep('select'); setTopSetData([]); setRotinaKey(null); setTrocaAberta(null); setBuscaTroca(''); setErroTroca(null)
       setSaving(false)
       saveLock.current = false
       onFinish()
@@ -240,13 +296,14 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
   const rotina = treinosState?.[rotinaKey]
   const exerciciosPreenchidos = topSetData.filter(ex => !ex.pulado && exercicioPreenchido(ex)).length
   const exerciciosPulados = topSetData.filter(ex => ex.pulado).length
+  const exerciciosSubstituidos = topSetData.filter(ex => ex.substituidoDe).length
   const exerciciosPendentes = topSetData.filter(ex => !ex.pulado && !exercicioPreenchido(ex)).length
   const podeFinalizar = topSetData.length > 0 && exerciciosPreenchidos > 0 && exerciciosPendentes === 0
 
   return (
     <div className="treino-container flex flex-col gap-3 pt-1 pb-4">
       <div className="treino-active-header">
-        <button type="button" onClick={() => { setStep('select'); setRotinaKey(null); setErro(null); setRecuperado(false); setSucesso(null) }}
+          <button type="button" onClick={() => { setStep('select'); setRotinaKey(null); setErro(null); setRecuperado(false); setSucesso(null); setTrocaAberta(null); setBuscaTroca(''); setErroTroca(null) }}
           className="treino-back-button" aria-label="Voltar para escolher o treino">
           <ChevronLeft size={22} />
         </button>
@@ -262,7 +319,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
             setStep('select')
             setRotinaKey(null)
             setTopSetData([])
-            setErro(null); setSucesso(null)
+            setErro(null); setSucesso(null); setTrocaAberta(null); setBuscaTroca(''); setErroTroca(null)
           }} className="exec-discard-button">Descartar</button>
         </div>
       )}
@@ -312,11 +369,53 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                 <span className="text-neutral-500 text-[11px] font-mono">meta {ex.meta_reps}</span>
               </div>
 
+              {ex.substituidoDe && (
+                <div className="exec-substitution-note">
+                  <ArrowLeftRight size={13} aria-hidden="true" />
+                  <span>Substitui <strong>{ex.substituidoDe}</strong> somente neste treino</span>
+                </div>
+              )}
+
               <div className="exec-exercise-actions">
+                <button type="button" onClick={() => trocaAberta === originalIndex ? fecharTroca() : abrirTroca(originalIndex)}
+                  className={`exec-replace-button${trocaAberta === originalIndex ? ' is-open' : ''}`} aria-expanded={trocaAberta === originalIndex}>
+                  <ArrowLeftRight size={14} /> Trocar exercício
+                </button>
                 <button type="button" onClick={() => alternarPulo(originalIndex)} className={`exec-skip-button${ex.pulado ? ' is-skipped' : ''}`}>
                   {ex.pulado ? <><RefreshCw size={14} /> Fazer exercício</> : <><SkipForward size={14} /> Pular exercício</>}
                 </button>
               </div>
+
+              {trocaAberta === originalIndex && (
+                <div className="exec-replace-panel">
+                  <div className="exec-replace-heading">
+                    <div><strong>Trocar exercício</strong><span>A alteração vale apenas para esta sessão.</span></div>
+                    <button type="button" onClick={fecharTroca} aria-label="Fechar troca de exercício"><X size={14} /></button>
+                  </div>
+                  <label className="exec-replace-field">
+                    <span>Nome do novo exercício</span>
+                    <input autoFocus type="text" placeholder="Ex.: Agachamento livre" value={buscaTroca}
+                      aria-invalid={Boolean(erroTroca)}
+                      onChange={e => {
+                        const value = e.target.value
+                        if (!value || /^[A-Za-zÀ-ÖØ-öø-ÿ]/.test(value)) {
+                          setBuscaTroca(value)
+                          setErroTroca(null)
+                        } else {
+                          setErroTroca('O nome não pode começar com números ou caracteres especiais.')
+                        }
+                      }}
+                      onKeyDown={e => { if (e.key === 'Enter') substituirExercicio(originalIndex, buscaTroca) }} />
+                    {erroTroca && <small className="exec-replace-error" role="alert">{erroTroca}</small>}
+                  </label>
+                  <div className="exec-replace-actions">
+                    <button type="button" className="exec-replace-cancel" onClick={fecharTroca}>Cancelar</button>
+                    <button type="button" className="exec-replace-custom" disabled={!buscaTroca.trim() || Boolean(erroTroca)} onClick={() => substituirExercicio(originalIndex, buscaTroca)}>
+                      Trocar exercício
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {ex.pulado ? (
                 <div className="exec-skipped-state">
@@ -411,7 +510,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
       })()}
 
       <div className="treino-footer">
-        <div className="treino-footer-status"><span>{exerciciosPreenchidos} de {topSetData.length} exercícios preenchidos{exerciciosPulados > 0 ? ` · ${exerciciosPulados} pulado${exerciciosPulados === 1 ? '' : 's'}` : ''}</span><strong>{podeFinalizar ? 'Tudo pronto' : exerciciosPulados > 0 ? 'Preencha os demais ou pule outros exercícios' : 'Preencha os dois campos de cada exercício'}</strong></div>
+        <div className="treino-footer-status"><span>{exerciciosPreenchidos} de {topSetData.length} exercícios preenchidos{exerciciosPulados > 0 ? ` · ${exerciciosPulados} pulado${exerciciosPulados === 1 ? '' : 's'}` : ''}{exerciciosSubstituidos > 0 ? ` · ${exerciciosSubstituidos} trocado${exerciciosSubstituidos === 1 ? '' : 's'}` : ''}</span><strong>{podeFinalizar ? 'Tudo pronto' : exerciciosPulados > 0 ? 'Preencha os demais ou pule outros exercícios' : 'Preencha os dois campos de cada exercício'}</strong></div>
         <button
           type="button"
           onClick={finalizarTreino}

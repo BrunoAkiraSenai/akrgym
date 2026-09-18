@@ -9,7 +9,7 @@ import TrendChart from '../../components/TrendChart'
 import {
   Dumbbell, BarChart3, Trophy, Target, Flame,
   Activity, Save, ChevronDown, ChevronUp, Minus, Weight, Trash, Pencil, X,
-  Search, Clock3, TrendingUp, Gauge, CalendarDays, Check,
+  Search, Clock3, TrendingUp, Gauge, CalendarDays, Check, Info,
 } from 'lucide-react'
 
 function dataLocalStr(data) {
@@ -31,12 +31,12 @@ function normalizarTexto(valor) {
 }
 
 const CAMPOS_MEDIDA = [
-  { key: 'peso', label: 'Peso', unidade: 'kg', lowerBetter: false },
-  { key: 'cintura', label: 'Cintura', unidade: 'cm', lowerBetter: true },
-  { key: 'abdomen', label: 'Abdômen', unidade: 'cm', lowerBetter: true },
-  { key: 'braco_dir', label: 'Braço', unidade: 'cm', lowerBetter: false },
-  { key: 'peito', label: 'Peito', unidade: 'cm', lowerBetter: false },
-  { key: 'coxa_dir', label: 'Coxa', unidade: 'cm', lowerBetter: false },
+  { key: 'peso', label: 'Peso', unidade: 'kg', lowerBetter: false, dica: 'Suba na balança. Tente se pesar sempre no mesmo horário e com roupas parecidas.' },
+  { key: 'cintura', label: 'Cintura', unidade: 'cm', lowerBetter: true, dica: 'Fique em pé e passe a fita na parte mais fina da barriga, logo acima do umbigo. Não aperte.' },
+  { key: 'abdomen', label: 'Abdômen', unidade: 'cm', lowerBetter: true, dica: 'Coloque a fita na altura do umbigo. Fique relaxado e não prenda a respiração.' },
+  { key: 'braco_dir', label: 'Braço', unidade: 'cm', lowerBetter: false, dica: 'Meça sempre o braço direito, na parte mais grossa, com o braço solto ao lado do corpo.' },
+  { key: 'peito', label: 'Peito', unidade: 'cm', lowerBetter: false, dica: 'Passe a fita na parte mais grossa do peito. Deixe os braços relaxados.' },
+  { key: 'coxa_dir', label: 'Coxa', unidade: 'cm', lowerBetter: false, dica: 'Meça sempre a coxa direita, na parte mais grossa. Use o mesmo lugar todas as vezes.' },
 ]
 
 export default function Evolucao() {
@@ -62,6 +62,7 @@ export default function Evolucao() {
   const [novaMedida, setNovaMedida] = useState({ peso: '', cintura: '', abdomen: '', braco_dir: '', peito: '', coxa_dir: '' })
   const [savingMedida, setSavingMedida] = useState(false)
   const [editandoId, setEditandoId] = useState(null)
+  const [mostrarDicasMedidas, setMostrarDicasMedidas] = useState(false)
   const [medidaGrafico, setMedidaGrafico] = useState('peso')
   const [filtroPeriodo, setFiltroPeriodo] = useState('tudo')
   const [limiteRegistros, setLimiteRegistros] = useState(5)
@@ -754,17 +755,46 @@ export default function Evolucao() {
       ) : (
         <>
             <div className="card-premium p-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="section-label flex items-center gap-1.5">
                 <Activity size={12} className="text-cyan-400" /> {editandoId ? 'Editar Medida' : 'Novo Registro'}
               </span>
-              {editandoId && (
-                <button type="button" onClick={cancelarEdicao}
-                  className="text-neutral-500 hover:text-white flex items-center gap-1 text-xs transition-all active:scale-90">
-                  <X size={14} /> Cancelar
+              <div className="flex items-center gap-2">
+                {editandoId && (
+                  <button type="button" onClick={cancelarEdicao}
+                    className="text-neutral-500 hover:text-white flex items-center gap-1 text-xs transition-all active:scale-90">
+                    <X size={14} /> Cancelar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setMostrarDicasMedidas(prev => !prev)}
+                  aria-expanded={mostrarDicasMedidas}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-cyan-400/20 px-2 text-[10px] font-semibold text-cyan-300 transition hover:border-cyan-400/40 hover:bg-cyan-400/10"
+                >
+                  <Info size={13} aria-hidden="true" /> Como medir
                 </button>
-              )}
+              </div>
             </div>
+            {mostrarDicasMedidas && (
+              <div className="rounded-2xl border border-cyan-400/15 bg-cyan-400/5 p-3" role="region" aria-label="Dicas para medir o corpo">
+                <div className="flex items-start gap-2">
+                  <Info size={15} className="mt-0.5 shrink-0 text-cyan-300" aria-hidden="true" />
+                  <div>
+                    <strong className="text-xs text-cyan-200">Dica rápida</strong>
+                    <p className="mt-1 text-[10px] leading-relaxed text-neutral-400">Use a mesma fita e tente medir sempre do mesmo jeito.</p>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {CAMPOS_MEDIDA.map(c => (
+                    <div key={c.key} className="rounded-xl border border-white/5 bg-black/20 p-2.5">
+                      <strong className="text-[10px] text-neutral-200">{c.label}</strong>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-neutral-500">{c.dica}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mb-2">
               <label htmlFor="medida-data" className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-0.5">Data</label>
               <input id="medida-data" type="date" value={medidaData} onChange={e => setMedidaData(e.target.value)}
