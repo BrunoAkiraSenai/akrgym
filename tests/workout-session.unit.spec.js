@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise } from '../src/utils/workoutSession.js'
+import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise } from '../src/utils/workoutSession.js'
 
 test('sessão aceita peso corporal, decimais brasileiros e somente repetições inteiras', () => {
   assert.equal(exercicioPreenchido({ carga: '0', reps: '8' }), true)
@@ -25,4 +25,24 @@ test('rascunhos só são retomados se ainda correspondem ao plano', () => {
   assert.equal(validDraft(draft, routine), true)
   assert.equal(validDraft(draft, { exercicios: [{ nome: 'Remada' }] }), false)
   assert.equal(validDraft({ topSetData: draft.topSetData }, routine), false)
+})
+
+test('substituição não herda protocolo específico do exercício original', () => {
+  const original = {
+    id: 'agachamento-1', nome: 'Agachamento livre', meta_reps: '8',
+    tem_aquecimento: true, IsAgachamento: true, nota: 'Usar barra olímpica',
+    carga: '100', reps: '5', ref: 90, repsAnterior: 5, pulado: false,
+  }
+  const replacement = createReplacementExercise(original, 'Supino reto', 'token')
+
+  assert.equal(replacement.nome, 'Supino reto')
+  assert.equal(replacement.substituidoDe, 'Agachamento livre')
+  assert.equal(replacement.substituidoDeId, 'agachamento-1')
+  assert.equal(replacement.tem_aquecimento, false)
+  assert.equal(replacement.IsAgachamento, false)
+  assert.equal(replacement.nota, null)
+  assert.equal(replacement.carga, '')
+  assert.equal(replacement.reps, '')
+  assert.equal(replacement.ref, 0)
+  assert.equal(replacement.repsAnterior, null)
 })

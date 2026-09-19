@@ -5,7 +5,7 @@ import {
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
-import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise } from '../../utils/workoutSession'
+import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 import {
   Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
@@ -176,23 +176,11 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
       setErroTroca('Escolha um exercício diferente do atual.')
       return
     }
-    const originalNome = atual.substituidoDe || atual.nome
-    const originalId = atual.substituidoDeId || atual.id
     const token = crypto.randomUUID()
-    setTopSetData(prev => prev.map((ex, i) => i === exIdx ? {
-      ...ex,
-      id: `substituicao:${originalId}:${token}`,
-      nome,
-      substituidoDe: originalNome,
-      substituidoDeId: originalId,
-      carga: '',
-      reps: '',
-      ref: 0,
-      repsAnterior: null,
-      pulado: false,
-    } : ex))
+    const substituto = createReplacementExercise(atual, nome, token)
+    setTopSetData(prev => prev.map((ex, i) => i === exIdx ? substituto : ex))
     fecharTroca()
-    setSucesso(`${nome} entrou no lugar de ${originalNome} nesta sessão.`)
+    setSucesso(`${nome} entrou no lugar de ${substituto.substituidoDe} nesta sessão.`)
   }
 
   const finalizarTreino = async () => {
@@ -354,7 +342,8 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
           {filtroBusca && <button type="button" onClick={() => setFiltroBusca('')} aria-label="Limpar busca"><X size={14} /></button>}
         </div>)
         const cards = exercicios.map(({ ex, originalIndex }) => {
-          const isAgachamento = ex.IsAgachamento || ex.nome?.toLowerCase().includes('agachamento')
+          // Custom replacements do not have catalog metadata, so keep the generic protocol.
+          const isAgachamento = !ex.substituidoDe && (ex.IsAgachamento || ex.nome?.toLowerCase().includes('agachamento'))
           const aqPeso = ex.tem_aquecimento && !isAgachamento ? Math.round(ex.ref * 0.6) : null
           const prepPeso = Math.round(ex.ref * 0.85)
           const cargaHoje = Number(ex.carga)

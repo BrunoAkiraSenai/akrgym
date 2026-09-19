@@ -56,3 +56,24 @@ export function recordedExercise(ex) {
   }
   return recorded
 }
+
+export function createReplacementExercise(ex, nome, token) {
+  const originalNome = ex.substituidoDe || ex.nome
+  const originalId = ex.substituidoDeId || ex.id
+  return {
+    ...ex,
+    id: `substituicao:${originalId}:${token}`,
+    nome,
+    substituidoDe: originalNome,
+    substituidoDeId: originalId,
+    carga: '',
+    reps: '',
+    ref: 0,
+    repsAnterior: null,
+    pulado: false,
+    // A replacement has no catalog metadata yet; never reuse the old protocol.
+    tem_aquecimento: false,
+    IsAgachamento: false,
+    nota: null,
+  }
+}
