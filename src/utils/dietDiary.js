@@ -1,6 +1,13 @@
 // Pure diary operations: transactions always apply an intent to the latest document.
 const fields = ['kcal', 'proteinas', 'carboidratos', 'gorduras', 'fibras']
 const completedMealStatuses = ['limpo', 'livre', 'customizado']
+export const DIET_DAY_STATUS = Object.freeze({
+  COMPLETE: 'concluido',
+  OUT_OF_PLAN: 'fora_da_dieta',
+  EMPTY: 'nao_preenchido',
+})
+export const DIET_CALORIC_TOLERANCE_ABOVE = 300
+export const DIET_CALORIC_MINIMUM_DEFICIT = 1000
 export const emptyMeal = () => ({ status: 'pendente', substituto: null, extra: [] })
 
 export function nutrients(food = {}) {
@@ -75,6 +82,27 @@ export function diaryTotals(day, plan = []) {
   }
   for (const extra of day?.extras_globais || []) add(extra)
   return total
+}
+
+export function classificarDiaPorCalorias(day, plan = [], metaKcal = 0) {
+  const kcal = Math.max(0, Number(diaryTotals(day, plan).kcal) || 0)
+  const meta = Number(day?.metas_snapshot?.kcal ?? metaKcal)
+  if (kcal <= 0 || !Number.isFinite(meta) || meta <= 0) {
+    return {
+      status: DIET_DAY_STATUS.EMPTY,
+      kcal,
+      metaKcal: Number.isFinite(meta) && meta > 0 ? meta : 0,
+      minimoKcal: null,
+      maximoKcal: null,
+    }
+  }
+
+  const minimoKcal = Math.max(0, meta - DIET_CALORIC_MINIMUM_DEFICIT)
+  const maximoKcal = meta + DIET_CALORIC_TOLERANCE_ABOVE
+  const status = kcal >= minimoKcal && kcal <= maximoKcal
+    ? DIET_DAY_STATUS.COMPLETE
+    : DIET_DAY_STATUS.OUT_OF_PLAN
+  return { status, kcal, metaKcal: meta, minimoKcal, maximoKcal }
 }
 
 function cleanDiaryText(value) {

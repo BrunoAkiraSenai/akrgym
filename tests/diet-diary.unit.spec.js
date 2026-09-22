@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition, diaryText } from '../src/utils/dietDiary.js'
+import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition, diaryText, classificarDiaPorCalorias, DIET_DAY_STATUS } from '../src/utils/dietDiary.js'
 
 const date = '2026-09-09'
 const breakfast = { id: 'cafe', nome: 'Café', kcal: 460, proteinas: 30, carboidratos: 50, gorduras: 15, fibras: 5 }
@@ -140,4 +140,19 @@ test('legacy extras receive deterministic IDs and explicit kcal is preserved', (
   const day = { extras_globais: [breakfast, { nome: 'Extra', kcal: 12, proteinas: 1, carboidratos: 1, gorduras: 1, fibras: 2 }] }
   assert.deepEqual(normalizeDay(day, date), normalizeDay(day, date))
   assert.equal(diaryTotals(day).kcal, 472)
+})
+
+test('classificação do dia usa a faixa calórica da meta', () => {
+  const day = kcal => ({ metas_snapshot: { kcal: 2000 }, refeicoes: { cafe: { status: 'limpo', consumido: { ...breakfast, kcal } } } })
+
+  assert.equal(classificarDiaPorCalorias(null, [], 2000).status, DIET_DAY_STATUS.EMPTY)
+  assert.equal(classificarDiaPorCalorias(day(1000), [], 2000).status, DIET_DAY_STATUS.COMPLETE)
+  assert.equal(classificarDiaPorCalorias(day(2300), [], 2000).status, DIET_DAY_STATUS.COMPLETE)
+  assert.equal(classificarDiaPorCalorias(day(999), [], 2000).status, DIET_DAY_STATUS.OUT_OF_PLAN)
+  assert.equal(classificarDiaPorCalorias(day(2301), [], 2000).status, DIET_DAY_STATUS.OUT_OF_PLAN)
+})
+
+test('dia sem meta calórica permanece não preenchido para não inventar aderência', () => {
+  const day = { refeicoes: { cafe: { status: 'limpo', consumido: { ...breakfast, kcal: 500 } } } }
+  assert.equal(classificarDiaPorCalorias(day).status, DIET_DAY_STATUS.EMPTY)
 })

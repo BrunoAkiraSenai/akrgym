@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, runTransaction, onSnapshot, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, diaryProgress } from '../../utils/dietDiary'
+import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, diaryProgress, classificarDiaPorCalorias, DIET_DAY_STATUS } from '../../utils/dietDiary'
 import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
@@ -472,6 +472,7 @@ export default function Dieta({ onIrParaConfig }) {
     fibras:       fibrasAnim,
   }
   const progresso = diaryProgress(hoje, refs)
+  const classificacaoDia = classificarDiaPorCalorias(hoje, refs, userMetas.kcal)
   // Um alimento extra também representa uma refeição realizada, mas continua
   // separado do almoço/jantar planejado para preservar a organização do diário.
   const refeicoesConcluidas = progresso.planned ? Math.min(progresso.planned, progresso.consumed) : progresso.consumed
@@ -550,6 +551,10 @@ export default function Dieta({ onIrParaConfig }) {
 
             <div className="diet-summary-card card-premium">
               <div className="diet-summary-top"><div><span className="section-label">Resumo do dia</span><p>{refeicoesConcluidas === 0 ? 'Nenhuma refeição concluída' : `${refeicoesConcluidas} ${refeicoesConcluidas === 1 ? 'refeição concluída' : 'refeições concluídas'}`}</p></div><strong>{refeicoesConcluidas}/{progresso.planned}</strong></div>
+              <div className={`diet-day-status diet-day-status-${classificacaoDia.status}`} role="status">
+                <span>{classificacaoDia.status === DIET_DAY_STATUS.COMPLETE ? 'Dia concluído' : classificacaoDia.status === DIET_DAY_STATUS.OUT_OF_PLAN ? 'Fora da dieta' : 'Dia não preenchido'}</span>
+                <small>{classificacaoDia.status === DIET_DAY_STATUS.EMPTY ? 'Registre o consumo para avaliar a aderência.' : `Faixa considerada: ${Math.round(classificacaoDia.minimoKcal).toLocaleString('pt-BR')}–${Math.round(classificacaoDia.maximoKcal).toLocaleString('pt-BR')} kcal`}</small>
+              </div>
               {refeicoesPuladas > 0 && <div className="diet-progress-summary"><span>{refeicoesPuladas === 1 ? '1 refeição pulada' : `${refeicoesPuladas} refeições puladas`}</span></div>}
               <div className="diet-summary-body">
                 <div className="diet-kcal-ring" style={{ '--diet-kcal-pct': `${userMetas.kcal > 0 ? Math.min((totais.kcal / userMetas.kcal) * 100, 100) : 0}%` }}>
@@ -840,39 +845,33 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, se
   const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     .replace(/^(\w)/, l => l.toUpperCase())
 
-  function corDia(dataStr) {
-    const doc = diasMap[dataStr]
-    if (!doc) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
-    const kcal = kcalDoDia(doc)
-    if (kcal === 0) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
-    const goal = doc.metas_snapshot?.kcal ?? metaKcal
-    if (!goal) return { backgroundColor: 'rgb(34 211 238 / 0.3)' }
-    if (kcal <= goal) return { backgroundColor: 'rgb(34 197 94 / 0.4)' }
-    return { backgroundColor: 'rgb(34 211 238 / 0.5)' }
-  }
-
-  function kcalDoDia(doc) { return calcularTotais(doc, refs).kcal }
-
-  let greenDays = 0; let yellowDays = 0; let redDays = 0; let totalDiasComDado = 0
-  let consumed = 0; let planned = 0
-  const diasMap = {}
-  mesDocs.forEach(d => {
-    diasMap[d.data] = d
-    const progress = diaryProgress(d, refs)
-    if (!progress.registered) return
-    totalDiasComDado++
-    consumed += Math.min(progress.planned, progress.consumed)
-    planned += progress.planned
-    if (progress.percent >= 100) greenDays++
-    else if (progress.consumed > 0) yellowDays++
-    else redDays++
-  })
-  const aderencia = planned ? Math.round(consumed / planned * 100) : 0
-
+  const hoje = hojeId()
   const diasArray = []
   for (let d = 1; d <= totalDias; d++) {
     diasArray.push({ dia: d, data: `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}` })
   }
+  const diasMap = {}
+  mesDocs.forEach(d => { diasMap[d.data] = d })
+
+  function corDia(dataStr) {
+    if (dataStr > hoje) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
+    const doc = diasMap[dataStr]
+    const status = classificarDiaPorCalorias(doc, refs, metaKcal).status
+    if (status === DIET_DAY_STATUS.COMPLETE) return { backgroundColor: 'rgb(34 197 94 / 0.4)' }
+    if (status === DIET_DAY_STATUS.OUT_OF_PLAN) return { backgroundColor: 'rgb(248 113 113 / 0.5)' }
+    return { backgroundColor: 'rgb(251 191 36 / 0.45)' }
+  }
+
+  let greenDays = 0; let yellowDays = 0; let redDays = 0
+  diasArray.forEach(({ data }) => {
+    if (data > hoje) return
+    const status = classificarDiaPorCalorias(diasMap[data], refs, metaKcal).status
+    if (status === DIET_DAY_STATUS.COMPLETE) greenDays++
+    else if (status === DIET_DAY_STATUS.OUT_OF_PLAN) redDays++
+    else yellowDays++
+  })
+  const totalDiasAvaliados = greenDays + yellowDays + redDays
+  const aderencia = totalDiasAvaliados ? Math.round(greenDays / totalDiasAvaliados * 100) : 0
 
   const voltarMes = () => {
     if (mes === 1) setMesAtual({ ano: ano - 1, mes: 12 })
@@ -889,25 +888,25 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, se
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-2">
         <div className="card-premium p-4 text-center">
-          <span className="text-2xl font-bold text-white">{totalDiasComDado}</span>
-          <span className="text-neutral-500 text-xs block mt-0.5">Dias no mês</span>
+          <span className="text-2xl font-bold text-white">{totalDiasAvaliados}</span>
+          <span className="text-neutral-500 text-xs block mt-0.5">Dias avaliados</span>
         </div>
         <div className="card-premium p-4 text-center">
           <span className="text-2xl font-bold text-emerald-400">{aderencia}%</span>
-          <span className="text-neutral-500 text-xs block mt-0.5">Refeições registradas</span>
+          <span className="text-neutral-500 text-xs block mt-0.5">Dias dentro da meta</span>
         </div>
       </div>
 
       <div className="card-premium p-4 space-y-2">
         <div className="flex flex-wrap gap-2 items-center justify-between text-xs">
-          <span className="text-emerald-400 font-medium"><span className="diet-legend-dot diet-legend-good" /> {greenDays} dias com plano registrado</span>
-          <span className="text-yellow-400 font-medium"><span className="diet-legend-dot diet-legend-warn" /> {yellowDays} dias parciais</span>
-          <span className="text-red-400 font-medium"><span className="diet-legend-dot diet-legend-danger" /> {redDays} dias sem consumo registrado</span>
+          <span className="text-emerald-400 font-medium"><span className="diet-legend-dot diet-legend-good" /> {greenDays} dias concluídos</span>
+          <span className="text-yellow-400 font-medium"><span className="diet-legend-dot diet-legend-warn" /> {yellowDays} não preenchidos</span>
+          <span className="text-red-400 font-medium"><span className="diet-legend-dot diet-legend-danger" /> {redDays} fora da dieta</span>
         </div>
         <div className="h-2 bg-neutral-800 rounded-full overflow-hidden flex">
-          <div className="h-full bg-emerald-500/60" style={{ width: `${totalDiasComDado > 0 ? (greenDays / totalDiasComDado) * 100 : 0}%` }} />
-          <div className="h-full bg-yellow-500/60" style={{ width: `${totalDiasComDado > 0 ? (yellowDays / totalDiasComDado) * 100 : 0}%` }} />
-          <div className="h-full bg-red-500/60" style={{ width: `${totalDiasComDado > 0 ? (redDays / totalDiasComDado) * 100 : 0}%` }} />
+          <div className="h-full bg-emerald-500/60" style={{ width: `${totalDiasAvaliados > 0 ? (greenDays / totalDiasAvaliados) * 100 : 0}%` }} />
+          <div className="h-full bg-yellow-500/60" style={{ width: `${totalDiasAvaliados > 0 ? (yellowDays / totalDiasAvaliados) * 100 : 0}%` }} />
+          <div className="h-full bg-red-500/60" style={{ width: `${totalDiasAvaliados > 0 ? (redDays / totalDiasAvaliados) * 100 : 0}%` }} />
         </div>
       </div>
 
@@ -935,9 +934,9 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, se
           ))}
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-2 text-[9px] text-neutral-600">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> Até a meta</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-cyan-500/40" /> Acima da meta</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neutral-800" /> Sem dados</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> Dia concluído</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-yellow-500/40" /> Não preenchido</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400/50" /> Fora da dieta</span>
         </div>
       </div>
     </div>

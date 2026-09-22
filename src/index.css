@@ -1451,6 +1451,11 @@ img, svg, video, canvas { max-width: 100%; }
 .diet-summary-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; }
 .diet-summary-top p { margin: 0.25rem 0 0; color: var(--text-secondary); font-size: 0.64rem; }
 .diet-summary-top > strong { border: 1px solid rgba(var(--brand-rgb),0.26); border-radius: 0.65rem; padding: 0.4rem 0.5rem; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.08); font-family: var(--font-mono); font-size: 0.76rem; }
+.diet-day-status { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; border: 1px solid var(--border-subtle); border-radius: 0.75rem; padding: 0.55rem 0.65rem; font-size: 0.67rem; font-weight: 750; }
+.diet-day-status small { color: var(--text-secondary); font-size: 0.56rem; font-weight: 500; text-align: right; }
+.diet-day-status-concluido { border-color: rgba(var(--brand-rgb),0.25); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.07); }
+.diet-day-status-fora_da_dieta { border-color: rgba(248,113,113,0.28); color: #fca5a5; background: rgba(248,113,113,0.08); }
+.diet-day-status-nao_preenchido { border-color: rgba(251,191,36,0.26); color: #fcd34d; background: rgba(251,191,36,0.07); }
 .diet-summary-body { display: grid; grid-template-columns: minmax(8.5rem, 0.85fr) minmax(0, 1.7fr); align-items: center; gap: 1rem; }
 .diet-kcal-ring { display: grid; width: min(9rem, 100%); aspect-ratio: 1; place-items: center; border-radius: 50%; background: conic-gradient(var(--accent-bright) var(--diet-kcal-pct), rgba(255,255,255,0.10) 0); transform: rotate(-22deg); }
 .diet-kcal-ring::before { width: calc(100% - 0.78rem); height: calc(100% - 0.78rem); border-radius: inherit; background: var(--surface-elevated, #111); content: ''; }
