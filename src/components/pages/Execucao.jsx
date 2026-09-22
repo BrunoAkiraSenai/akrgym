@@ -7,6 +7,7 @@ import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
 import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
+import DescansoTimer from '../DescansoTimer'
 import {
   Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
   ArrowLeftRight, Flame, Info, RefreshCw, Search, Zap, SkipForward, Dumbbell,
@@ -250,6 +251,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
           <div><p className="home-kicker">Sessão de hoje</p><h1 className="text-2xl font-bold tracking-tight text-white">Qual treino você vai fazer?</h1><p>Escolha uma divisão para começar a registrar.</p></div>
           <div className="treino-header-mark" aria-hidden="true"><Play size={18} fill="currentColor" /></div>
         </header>
+        <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} />
         {erro && (
           <div className="exec-feedback exec-feedback-error" role="alert">{erro}</div>
         )}
@@ -298,6 +300,8 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
         <div className="min-w-0"><p className="home-kicker">Treino em andamento</p><h1 className="truncate text-xl font-bold tracking-tight text-white">{rotina?.nome}</h1></div>
         <span className="treino-progress-badge">{exerciciosPreenchidos}/{topSetData.length}</span>
       </div>
+
+      <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} />
 
       {recuperado && (
         <div className="exec-feedback exec-feedback-info">
@@ -426,6 +430,8 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                   <span>{ex.nota}</span>
                 </div>
               )}
+
+              <DescansoTimer defaultSeconds={ex.descanso_segundos} label="Descanso" exerciseName={ex.nome} compact />
 
               <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
                 <div className="section-label mb-1.5">Protocolo</div>

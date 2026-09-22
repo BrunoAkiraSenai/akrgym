@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, Download } from 'lucide-react'
+import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, Download, Clock3 } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
@@ -179,7 +179,7 @@ export default function Configuracao({ abaInicial }) {
 
   const addExercise = async (key) => {
     const n = { ...config, treinos: { ...config.treinos } }
-    const exercicios = [...(n.treinos[key].exercicios || []), { nome: 'Novo', base_top: 20, meta_reps: '8-10' }]
+    const exercicios = [...(n.treinos[key].exercicios || []), { nome: 'Novo', base_top: 20, meta_reps: '8-10', descanso_segundos: 90 }]
     n.treinos[key] = { ...n.treinos[key], exercicios }
     pendingFocusRef.current = { type: 'exercise', key: `${key}:${exercicios.length - 1}` }
     setConfig(n)
@@ -454,7 +454,13 @@ export default function Configuracao({ abaInicial }) {
                       {(rotina.exercicios || []).map((ex, idx) => (
                         <div key={idx} ref={node => { const refKey = `${key}:${idx}`; if (node) exerciseRefs.current[refKey] = node; else delete exerciseRefs.current[refKey] }} className="settings-exercise">
                           <div className="settings-exercise-top"><span className="settings-exercise-number">{idx + 1}</span><label className="settings-field settings-field-grow"><span>Exercício</span><input type="text" value={ex.nome} onChange={e => updateExercise(key, idx, 'nome', e.target.value)} /></label><button type="button" onClick={() => deleteExercise(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome}`}><Trash size={15} /></button></div>
-                          <div className="mt-2 grid grid-cols-2 gap-2"><label className="settings-field"><span>Base Top (kg)</span><input type="number" value={ex.base_top} onChange={e => updateExercise(key, idx, 'base_top', Number(e.target.value))} inputMode="decimal" /></label><label className="settings-field"><span>Meta de reps</span><input type="text" value={ex.meta_reps} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label></div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            <label className="settings-field"><span>Base Top (kg)</span><input type="number" value={ex.base_top} onChange={e => updateExercise(key, idx, 'base_top', Number(e.target.value))} inputMode="decimal" /></label>
+                            <label className="settings-field"><span>Meta de reps</span><input type="text" value={ex.meta_reps} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label>
+                            <label className="settings-field"><span className="flex items-center gap-1"><Clock3 size={11} /> Descanso</span><select value={ex.descanso_segundos ?? 90} onChange={e => updateExercise(key, idx, 'descanso_segundos', Number(e.target.value))} aria-label={`Tempo de descanso de ${ex.nome}`}>
+                              {[30, 60, 90, 120, 180, 300].map(segundos => <option key={segundos} value={segundos}>{segundos < 60 ? `${segundos}s` : `${segundos / 60} min`}</option>)}
+                            </select></label>
+                          </div>
                         </div>
                       ))}
                       <div className="settings-routine-actions"><button type="button" onClick={() => addExercise(key)} className="settings-action settings-action-muted"><Plus size={14} /> Adicionar exercício</button><button type="button" onClick={() => deleteRoutine(key)} className="settings-action settings-action-danger"><Trash size={14} /> Excluir divisão</button></div>

@@ -23,7 +23,9 @@ export function prepararConfigParaSalvar(config) {
   const treinos = Object.fromEntries(Object.entries(config.treinos || {}).map(([id, rotina]) => [id, {
     ...rotina,
     exercicios: (rotina.exercicios || []).map(ex => ({
-      ...ex, base_top: validarNumeroConfig(ex.base_top, 0, 9999, `Base Top de "${ex.nome}"`),
+      ...ex,
+      base_top: validarNumeroConfig(ex.base_top, 0, 9999, `Base Top de "${ex.nome}"`),
+      descanso_segundos: validarNumeroConfig(ex.descanso_segundos ?? 90, 15, 600, `Descanso de "${ex.nome}"`),
     })),
   }]))
   return { ...config, metas, refeicoes, treinos }

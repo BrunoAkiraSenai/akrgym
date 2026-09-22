@@ -1629,3 +1629,64 @@ img, svg, video, canvas { max-width: 100%; }
   .evolution-page .grid.grid-cols-3 { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .evolution-page .grid.grid-cols-3 > :last-child { grid-column: 1 / -1; }
 }
+
+/* ============================================================
+   CRONÔMETRO DE DESCANSO — controle rápido durante o treino
+   ============================================================ */
+.rest-timer { position: relative; z-index: 18; width: 100%; }
+.rest-timer.is-open { z-index: 40; }
+.rest-timer-trigger { display: flex; width: 100%; min-height: 3.35rem; align-items: center; gap: 0.7rem; border: 1px solid rgba(var(--brand-rgb),0.24); border-radius: 1rem; padding: 0.65rem 0.75rem; color: var(--text-primary); background: linear-gradient(115deg, rgba(var(--brand-rgb),0.12), rgba(255,255,255,0.025)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06); text-align: left; cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
+.rest-timer-trigger:hover, .rest-timer.is-open .rest-timer-trigger { border-color: rgba(var(--brand-rgb),0.52); background: linear-gradient(115deg, rgba(var(--brand-rgb),0.19), rgba(255,255,255,0.04)); box-shadow: 0 10px 25px rgba(var(--brand-rgb),0.10), inset 0 1px 0 rgba(255,255,255,0.08); }
+.rest-timer-trigger:active { transform: scale(0.99); }
+.rest-timer-trigger:focus-visible, .rest-timer-panel button:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 3px; }
+.rest-timer-trigger-icon { display: grid; width: 2rem; height: 2rem; flex-shrink: 0; place-items: center; border: 1px solid rgba(var(--brand-rgb),0.30); border-radius: 0.7rem; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.14); box-shadow: 0 0 18px rgba(var(--brand-rgb),0.12); }
+.rest-timer-trigger-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 0.1rem; }
+.rest-timer-trigger-copy strong { overflow: hidden; color: var(--text-primary); font-size: 0.75rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.rest-timer-trigger-copy small { color: var(--text-secondary); font-size: 0.61rem; }
+.rest-timer-trigger-settings { flex-shrink: 0; color: var(--text-secondary); }
+.rest-timer-notification { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.4rem; border: 1px solid rgba(var(--accent-rgb),0.28); border-radius: 0.7rem; padding: 0.48rem 0.6rem; color: var(--accent-bright); background: rgba(var(--accent-rgb),0.08); font-size: 0.61rem; font-weight: 750; animation: restTimerNoticeIn 220ms ease-out; }
+.rest-timer-panel { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.45rem; border: 1px solid rgba(var(--brand-rgb),0.28); border-radius: 1.1rem; padding: 0.85rem; background: linear-gradient(145deg, rgba(17,14,25,0.98), rgba(var(--brand-rgb),0.09)); box-shadow: 0 18px 38px rgba(0,0,0,0.34), 0 0 30px rgba(var(--brand-rgb),0.08); animation: restTimerPanelIn 180ms ease-out; }
+.rest-timer-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.7rem; }
+.rest-timer-panel-head > div { display: flex; min-width: 0; flex-direction: column; gap: 0.16rem; }
+.rest-timer-panel-head strong { overflow: hidden; color: var(--text-primary); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+.rest-timer-panel-head button { display: grid; width: 1.8rem; height: 1.8rem; flex-shrink: 0; place-items: center; border-radius: 0.55rem; color: var(--text-secondary); cursor: pointer; }
+.rest-timer-panel-head button:hover, .rest-timer-icon-action:hover { color: var(--text-primary); background: rgba(255,255,255,0.08); }
+.rest-timer-eyebrow { color: var(--brand-bright); font-family: var(--font-mono); font-size: 0.56rem; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; }
+.rest-timer-display { display: flex; min-height: 12.25rem; flex-direction: column; align-items: center; justify-content: center; gap: 0.55rem; border: 1px solid rgba(var(--brand-rgb),0.12); border-radius: 0.95rem; padding: 0.7rem; background: radial-gradient(circle at center, rgba(var(--brand-rgb),0.15), rgba(0,0,0,0.18) 62%); }
+.rest-timer-ring { position: relative; display: grid; width: 9.2rem; height: 9.2rem; place-items: center; border-radius: 50%; box-shadow: 0 0 28px rgba(var(--brand-rgb),0.18); }
+.rest-timer-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transform: rotate(-90deg); }
+.rest-timer-ring-track, .rest-timer-ring-progress { fill: none; stroke-width: 5; }
+.rest-timer-ring-track { stroke: rgba(255,255,255,0.16); }
+.rest-timer-ring-progress { stroke: var(--brand-bright); stroke-dasharray: 100; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 5px rgba(var(--brand-rgb),0.5)); transition: stroke-dashoffset 1s linear, stroke 250ms ease; }
+.rest-timer-ring-inner { position: relative; z-index: 1; display: flex; width: calc(100% - 1.75rem); height: calc(100% - 1.75rem); flex-direction: column; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.08); border-radius: 50%; background: #100c18; }
+.rest-timer-ring-inner strong { color: var(--text-primary); font-family: var(--font-mono); font-size: 1.65rem; font-weight: 800; letter-spacing: 0.03em; line-height: 1; }
+.rest-timer-countdown { display: block; animation: restTimerDigitSlide 260ms cubic-bezier(0.22,0.8,0.25,1); }
+.rest-timer-ring-inner span { margin-top: 0.45rem; color: var(--text-secondary); font-size: 0.58rem; text-align: center; }
+.rest-timer-display.is-complete .rest-timer-ring { box-shadow: 0 0 34px rgba(var(--accent-rgb),0.24); }
+.rest-timer-display.is-complete .rest-timer-ring-progress { stroke: var(--accent-bright); filter: drop-shadow(0 0 5px rgba(var(--accent-rgb),0.55)); }
+.rest-timer-complete { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--accent-bright); font-size: 0.62rem; font-weight: 800; }
+.rest-timer-presets { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0.4rem; }
+.rest-timer-presets button { min-height: 2.15rem; border: 1px solid rgba(255,255,255,0.09); border-radius: 0.65rem; color: var(--text-secondary); background: rgba(255,255,255,0.035); font-family: var(--font-mono); font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); }
+.rest-timer-presets button:hover, .rest-timer-presets button.is-selected { border-color: rgba(var(--brand-rgb),0.48); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.13); }
+.rest-timer-adjust { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; color: var(--text-secondary); font-size: 0.58rem; }
+.rest-timer-adjust button { display: inline-flex; min-height: 1.9rem; align-items: center; gap: 0.25rem; border: 1px solid rgba(255,255,255,0.08); border-radius: 0.55rem; padding: 0 0.55rem; color: var(--text-secondary); background: rgba(255,255,255,0.035); font-family: var(--font-mono); font-size: 0.58rem; cursor: pointer; }
+.rest-timer-adjust button:hover:not(:disabled) { border-color: rgba(var(--brand-rgb),0.35); color: var(--brand-bright); }
+.rest-timer-adjust button:disabled { cursor: not-allowed; opacity: 0.35; }
+.rest-timer-actions { display: flex; gap: 0.45rem; }
+.rest-timer-main-action { display: inline-flex; min-height: 2.55rem; flex: 1; align-items: center; justify-content: center; gap: 0.4rem; border: 1px solid rgba(var(--brand-rgb),0.42); border-radius: 0.7rem; color: #fff; background: linear-gradient(110deg, var(--brand), var(--accent)); box-shadow: 0 8px 18px rgba(var(--brand-rgb),0.16); font-size: 0.67rem; font-weight: 800; cursor: pointer; }
+.rest-timer-main-action:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.rest-timer-icon-action { display: grid; width: 2.55rem; min-height: 2.55rem; flex-shrink: 0; place-items: center; border: 1px solid rgba(255,255,255,0.10); border-radius: 0.7rem; color: var(--text-secondary); background: rgba(255,255,255,0.035); cursor: pointer; }
+.rest-timer-compact .rest-timer-trigger { min-height: 2.75rem; border-radius: 0.78rem; padding: 0.5rem 0.6rem; }
+.rest-timer-compact .rest-timer-trigger-icon { width: 1.75rem; height: 1.75rem; border-radius: 0.58rem; }
+.rest-timer-compact .rest-timer-trigger-copy strong { font-size: 0.68rem; }
+.rest-timer-compact .rest-timer-trigger-copy small { font-size: 0.57rem; }
+@keyframes restTimerPanelIn { from { opacity: 0; transform: translateY(-0.25rem); } to { opacity: 1; transform: translateY(0); } }
+@keyframes restTimerDigitSlide { from { opacity: 0; transform: translateY(0.55rem); filter: blur(2px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+@keyframes restTimerNoticeIn { from { opacity: 0; transform: translateY(-0.3rem); } to { opacity: 1; transform: translateY(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rest-timer-countdown, .rest-timer-notification { animation: none; }
+}
+
+[data-theme="lava"] .rest-timer-panel { background: linear-gradient(145deg, rgba(43,26,20,0.98), rgba(var(--brand-rgb),0.08)); }
+[data-theme="lava"] .rest-timer-ring-inner { background: #211612; }

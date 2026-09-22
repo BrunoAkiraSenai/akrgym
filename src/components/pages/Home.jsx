@@ -7,6 +7,7 @@ import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
 import { calcularRitmoTreino, classificarSessaoTreino, dataTreinoParaDate } from '../../utils/fitness'
 import { Activity, ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Dumbbell, Flame, Minus, Play, Trophy } from 'lucide-react'
+import DescansoTimer from '../DescansoTimer'
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -229,6 +230,8 @@ export default function Home({ onStartWorkout }) {
         <span className="home-start-copy"><strong>Começar treino</strong><small>Escolha sua divisão e registre as séries</small></span>
         <span className="home-start-action">Treinar <ChevronRight size={17} aria-hidden="true" /></span>
       </button>
+
+      <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} />
 
       <section className="home-summary" aria-label="Resumo do seu ritmo">
         <article className="home-stat home-stat-feature home-rhythm-card">
