@@ -27,12 +27,15 @@ export async function notificarDescansoConcluido(exerciseName = '') {
   const NotificationApi = obterApiNotificacao()
   if (NotificationApi && NotificationApi.permission !== 'granted') return false
 
-  const title = 'Descanso concluído'
+  const title = 'AkrGym · Descanso concluído'
   const options = {
-    body: exerciseName ? `Hora da próxima série de ${exerciseName}.` : 'Hora da próxima série.',
+    body: exerciseName ? `${exerciseName} · hora da próxima série.` : 'Hora da próxima série.',
     tag: 'akrgym-descanso-concluido',
-    icon: '/pwa-192x192.png',
-    badge: '/pwa-192x192.png',
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    renotify: true,
+    silent: false,
+    vibrate: [120, 60, 120],
   }
 
   if (NotificationApi) {
