@@ -8,6 +8,12 @@ import {
   resolverDescansoSalvo,
   timerReducer,
 } from '../src/utils/restTimer.js'
+import {
+  notificacoesDisponiveis,
+  obterPermissaoNotificacao,
+  solicitarPermissaoNotificacao,
+  notificarDescansoConcluido,
+} from '../src/utils/restNotification.js'
 
 test('descanso normaliza valores para a faixa suportada', () => {
   assert.equal(normalizarDescansoSegundos(undefined), 90)
@@ -34,6 +40,50 @@ test('timer continua correto quando o próximo tick acontece após o prazo', () 
   assert.equal(concluido.restante, 0)
   assert.equal(concluido.rodando, false)
   assert.equal(concluido.concluido, true)
+})
+
+test('notificações não quebram fora do navegador', async () => {
+  assert.equal(notificacoesDisponiveis(), false)
+  assert.equal(obterPermissaoNotificacao(), 'unsupported')
+  assert.equal(await solicitarPermissaoNotificacao(), 'unsupported')
+  assert.equal(await notificarDescansoConcluido(), false)
+})
+
+test('notificação solicita permissão e informa o exercício concluído', async () => {
+  const janelaAnterior = globalThis.window
+  const avisos = []
+  class FakeNotification {
+    static permission = 'default'
+
+    static async requestPermission() {
+      FakeNotification.permission = 'granted'
+      return FakeNotification.permission
+    }
+
+    constructor(title, options) {
+      this.title = title
+      this.options = options
+      this.listeners = {}
+      avisos.push(this)
+    }
+
+    addEventListener(event, callback) {
+      this.listeners[event] = callback
+    }
+
+    close() {}
+  }
+
+  globalThis.window = { Notification: FakeNotification, focus() {} }
+  try {
+    assert.equal(await solicitarPermissaoNotificacao(), 'granted')
+    assert.equal(await notificarDescansoConcluido('Supino reto'), true)
+    assert.equal(avisos[0].title, 'Descanso concluído')
+    assert.match(avisos[0].options.body, /Supino reto/)
+  } finally {
+    if (janelaAnterior === undefined) delete globalThis.window
+    else globalThis.window = janelaAnterior
+  }
 })
 
 test('descanso formata minutos e segundos para o cronômetro', () => {

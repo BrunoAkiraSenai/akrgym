@@ -10,6 +10,7 @@ import {
   resolverDescansoSalvo,
   timerReducer,
 } from '../utils/restTimer'
+import { notificarDescansoConcluido, solicitarPermissaoNotificacao } from '../utils/restNotification'
 
 function lerPreferencia(storageKey, fallback) {
   if (!storageKey || typeof window === 'undefined') return normalizarDescansoSegundos(fallback)
@@ -59,13 +60,17 @@ export default function DescansoTimer({
   useEffect(() => {
     if (!concluido) return
     try { navigator.vibrate?.([100, 60, 100]) } catch { /* Vibração não existe em todos os dispositivos. */ }
-  }, [concluido])
+    void notificarDescansoConcluido(exerciseName)
+  }, [concluido, exerciseName])
 
   const selecionarTempo = valor => {
     dispatch({ type: 'select', seconds: valor })
   }
 
-  const iniciar = () => dispatch({ type: 'start', now: Date.now() })
+  const iniciar = () => {
+    void solicitarPermissaoNotificacao()
+    dispatch({ type: 'start', now: Date.now() })
+  }
 
   const pausar = () => dispatch({ type: 'pause', now: Date.now() })
 
