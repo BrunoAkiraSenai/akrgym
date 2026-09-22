@@ -5,7 +5,7 @@ import {
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
-import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
+import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 import DescansoTimer from '../DescansoTimer'
 import {
@@ -85,13 +85,14 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
       if (!raw) return
       const draft = JSON.parse(raw)
       if (!draft?.rotinaKey || !draft?.topSetData?.length) return
-      if (!treinosState[draft.rotinaKey] || !validDraft(draft, treinosState[draft.rotinaKey])) {
+      const rotinaRascunho = treinosState[draft.rotinaKey]
+      if (!rotinaRascunho || !validDraft(draft, rotinaRascunho)) {
         localStorage.removeItem(STORAGE_KEY)
         return
       }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRotinaKey(draft.rotinaKey)
-      setTopSetData(draft.topSetData)
+      setTopSetData(normalizarRascunho(draft, rotinaRascunho).topSetData)
       setStep('active')
       setRecuperado(true)
     } catch {

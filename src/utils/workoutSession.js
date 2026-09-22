@@ -1,7 +1,8 @@
+import { DEFAULT_DESCANSO_SEGUNDOS, normalizarDescansoSegundos } from './restTimer.js'
+
 const decimal = value => typeof value === 'number' ? value : /^\d+(?:[.,]\d+)?$/.test(String(value).trim()) ? Number(String(value).trim().replace(',', '.')) : NaN
 const descanso = value => {
-  const numero = Number(value)
-  return Number.isFinite(numero) ? Math.min(600, Math.max(15, Math.round(numero))) : 90
+  return normalizarDescansoSegundos(value, DEFAULT_DESCANSO_SEGUNDOS)
 }
 
 export function exercicioPreenchido(ex) {
@@ -11,7 +12,7 @@ export function exercicioPreenchido(ex) {
 
 // Legacy IDs include position to avoid mixing two exercises with the same name.
 export const exerciseId = (ex, index) => ex.id || `legacy:${index}:${ex.nome}`
-export const routineFingerprint = routine => JSON.stringify((routine?.exercicios || []).map((ex, index) => [exerciseId(ex, index), ex.nome, ex.meta_reps, ex.base_top, descanso(ex.descanso_segundos), ex.tem_aquecimento, ex.IsAgachamento, ex.nota]))
+export const routineFingerprint = routine => JSON.stringify((routine?.exercicios || []).map((ex, index) => [exerciseId(ex, index), ex.nome, ex.meta_reps, ex.base_top, ex.tem_aquecimento, ex.IsAgachamento, ex.nota]))
 
 export function validDraft(draft, routine) {
   if (!routine || !Array.isArray(draft?.topSetData) || !draft.topSetData.length) return false
@@ -28,6 +29,17 @@ export function validDraft(draft, routine) {
       }
       return ex.id === originalId && ex.nome === original.nome
     })
+}
+
+export function normalizarRascunho(draft, routine) {
+  if (!draft?.topSetData || !routine?.exercicios) return draft
+  return {
+    ...draft,
+    topSetData: draft.topSetData.map((ex, index) => ({
+      ...ex,
+      descanso_segundos: descanso(ex.descanso_segundos ?? routine.exercicios[index]?.descanso_segundos),
+    })),
+  }
 }
 
 export function prepareSession(routine, history = []) {
@@ -71,6 +83,7 @@ export function createReplacementExercise(ex, nome, token) {
     nome,
     substituidoDe: originalNome,
     substituidoDeId: originalId,
+    descanso_segundos: DEFAULT_DESCANSO_SEGUNDOS,
     carga: '',
     reps: '',
     ref: 0,

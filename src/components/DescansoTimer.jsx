@@ -7,43 +7,22 @@ import {
   DESCANSO_PRESETS,
   formatarDescanso,
   normalizarDescansoSegundos,
+  resolverDescansoSalvo,
+  timerReducer,
 } from '../utils/restTimer'
 
 function lerPreferencia(storageKey, fallback) {
   if (!storageKey || typeof window === 'undefined') return normalizarDescansoSegundos(fallback)
   try {
-    return normalizarDescansoSegundos(localStorage.getItem(storageKey), fallback)
+    return resolverDescansoSalvo(localStorage.getItem(storageKey), fallback)
   } catch {
-    return fallback
+    return normalizarDescansoSegundos(fallback)
   }
 }
 
 function criarEstadoInicial({ defaultSeconds, storageKey }) {
   const configurado = lerPreferencia(storageKey, defaultSeconds)
-  return { configurado, restante: configurado, rodando: false, concluido: false }
-}
-
-function timerReducer(state, action) {
-  switch (action.type) {
-    case 'select': {
-      const configurado = normalizarDescansoSegundos(action.seconds)
-      return { configurado, restante: configurado, rodando: false, concluido: false }
-    }
-    case 'start':
-      return { ...state, restante: state.restante <= 0 || state.concluido ? state.configurado : state.restante, rodando: true, concluido: false }
-    case 'pause':
-      return { ...state, rodando: false }
-    case 'tick':
-      if (!state.rodando) return state
-      if (state.restante <= 1) return { ...state, restante: 0, rodando: false, concluido: true }
-      return { ...state, restante: state.restante - 1 }
-    case 'reset':
-      return { ...state, restante: state.configurado, rodando: false, concluido: false }
-    case 'skip':
-      return { ...state, restante: 0, rodando: false, concluido: false }
-    default:
-      return state
-  }
+  return { configurado, restante: configurado, rodando: false, concluido: false, terminaEm: null }
 }
 
 export default function DescansoTimer({
@@ -64,10 +43,17 @@ export default function DescansoTimer({
 
   useEffect(() => {
     if (!rodando) return undefined
-    const interval = window.setInterval(() => {
-      dispatch({ type: 'tick' })
-    }, 1000)
-    return () => window.clearInterval(interval)
+    const atualizar = () => dispatch({ type: 'tick', now: Date.now() })
+    const interval = window.setInterval(atualizar, 1000)
+    window.addEventListener('visibilitychange', atualizar)
+    window.addEventListener('focus', atualizar)
+    window.addEventListener('pageshow', atualizar)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('visibilitychange', atualizar)
+      window.removeEventListener('focus', atualizar)
+      window.removeEventListener('pageshow', atualizar)
+    }
   }, [rodando])
 
   useEffect(() => {
@@ -79,7 +65,9 @@ export default function DescansoTimer({
     dispatch({ type: 'select', seconds: valor })
   }
 
-  const iniciar = () => dispatch({ type: 'start' })
+  const iniciar = () => dispatch({ type: 'start', now: Date.now() })
+
+  const pausar = () => dispatch({ type: 'pause', now: Date.now() })
 
   const reiniciar = () => dispatch({ type: 'reset' })
 
@@ -159,7 +147,7 @@ export default function DescansoTimer({
           </div>
 
           <div className="rest-timer-actions">
-            <button type="button" className="rest-timer-main-action" onClick={rodando ? () => dispatch({ type: 'pause' }) : iniciar}>
+            <button type="button" className="rest-timer-main-action" onClick={rodando ? pausar : iniciar}>
               {rodando ? <><Pause size={15} /> Pausar</> : <><Play size={15} fill="currentColor" /> {concluido ? 'Começar de novo' : 'Começar descanso'}</>}
             </button>
             <button type="button" className="rest-timer-icon-action" onClick={reiniciar} aria-label="Reiniciar descanso"><RotateCcw size={15} /></button>

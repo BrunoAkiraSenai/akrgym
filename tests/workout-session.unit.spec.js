@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise } from '../src/utils/workoutSession.js'
+import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho } from '../src/utils/workoutSession.js'
 
 test('sessão aceita peso corporal, decimais brasileiros e somente repetições inteiras', () => {
   assert.equal(exercicioPreenchido({ carga: '0', reps: '8' }), true)
@@ -27,11 +27,20 @@ test('rascunhos só são retomados se ainda correspondem ao plano', () => {
   assert.equal(validDraft({ topSetData: draft.topSetData }, routine), false)
 })
 
+test('rascunho antigo continua válido e recebe o descanso configurado', () => {
+  const routine = { exercicios: [{ id: 'supino-1', nome: 'Supino', meta_reps: '8', base_top: 60, descanso_segundos: 120 }] }
+  const oldFingerprint = JSON.stringify(routine.exercicios.map(ex => [ex.id, ex.nome, ex.meta_reps, ex.base_top, undefined, undefined, undefined]))
+  const draft = { fingerprint: oldFingerprint, topSetData: [{ id: 'supino-1', nome: 'Supino', meta_reps: '8', carga: '60', reps: '8' }] }
+
+  assert.equal(validDraft(draft, routine), true)
+  assert.equal(normalizarRascunho(draft, routine).topSetData[0].descanso_segundos, 120)
+})
+
 test('substituição não herda protocolo específico do exercício original', () => {
   const original = {
     id: 'agachamento-1', nome: 'Agachamento livre', meta_reps: '8',
     tem_aquecimento: true, IsAgachamento: true, nota: 'Usar barra olímpica',
-    carga: '100', reps: '5', ref: 90, repsAnterior: 5, pulado: false,
+    descanso_segundos: 180, carga: '100', reps: '5', ref: 90, repsAnterior: 5, pulado: false,
   }
   const replacement = createReplacementExercise(original, 'Supino reto', 'token')
 
@@ -45,4 +54,5 @@ test('substituição não herda protocolo específico do exercício original', (
   assert.equal(replacement.reps, '')
   assert.equal(replacement.ref, 0)
   assert.equal(replacement.repsAnterior, null)
+  assert.equal(replacement.descanso_segundos, 90)
 })
