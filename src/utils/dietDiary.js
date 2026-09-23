@@ -105,6 +105,16 @@ export function classificarDiaPorCalorias(day, plan = [], metaKcal = 0) {
   return { status, kcal, metaKcal: meta, minimoKcal, maximoKcal }
 }
 
+export function comentarioDiaPorCalorias({ status, kcal, metaKcal }, compacto = false) {
+  if (kcal <= 0) return compacto ? 'Sem dados' : 'Sem registro'
+  if (status === DIET_DAY_STATUS.EMPTY) return 'Sem meta'
+  if (status === DIET_DAY_STATUS.COMPLETE) return compacto ? 'No plano' : 'Dentro do plano'
+
+  // Não arredondar de volta à tolerância um valor que já ultrapassou o limite.
+  const diferenca = Math.ceil(Math.abs(kcal - metaKcal))
+  return `${diferenca.toLocaleString('pt-BR')} kcal ${kcal > metaKcal ? 'acima' : 'abaixo'}`
+}
+
 function cleanDiaryText(value) {
   const text = String(value ?? '').replaceAll('\n', ' ').replaceAll('\r', ' ').replaceAll('\t', ' ').replace(/\s+/g, ' ').trim()
   return Array.from(text).filter(character => character.codePointAt(0) >= 32 && character.codePointAt(0) !== 127).join('')

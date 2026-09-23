@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition, diaryText, classificarDiaPorCalorias, DIET_DAY_STATUS } from '../src/utils/dietDiary.js'
+import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition, diaryText, classificarDiaPorCalorias, comentarioDiaPorCalorias, DIET_DAY_STATUS } from '../src/utils/dietDiary.js'
 
 const date = '2026-09-09'
 const breakfast = { id: 'cafe', nome: 'Café', kcal: 460, proteinas: 30, carboidratos: 50, gorduras: 15, fibras: 5 }
@@ -155,4 +155,29 @@ test('classificação do dia usa a faixa calórica da meta', () => {
 test('dia sem meta calórica permanece não preenchido para não inventar aderência', () => {
   const day = { refeicoes: { cafe: { status: 'limpo', consumido: { ...breakfast, kcal: 500 } } } }
   assert.equal(classificarDiaPorCalorias(day).status, DIET_DAY_STATUS.EMPTY)
+})
+
+test('comentário do calendário respeita a tolerância e mede a diferença para a meta', () => {
+  const comentar = kcal => comentarioDiaPorCalorias(classificarDiaPorCalorias({ extras_globais: [{ kcal }] }, [], 2000))
+  assert.equal(comentar(1000), 'Dentro do plano')
+  assert.equal(comentar(2000), 'Dentro do plano')
+  assert.equal(comentar(2300), 'Dentro do plano')
+  assert.equal(comentar(2301), '301 kcal acima')
+  assert.equal(comentar(2300.1), '301 kcal acima')
+  assert.equal(comentar(999.9), '1.001 kcal abaixo')
+  assert.equal(comentar(2450), '450 kcal acima')
+  assert.equal(comentar(800), '1.200 kcal abaixo')
+  assert.equal(comentar(0), 'Sem registro')
+  assert.equal(comentarioDiaPorCalorias(classificarDiaPorCalorias({ extras_globais: [{ kcal: 2000 }] }, [], 2000), true), 'No plano')
+  assert.equal(comentarioDiaPorCalorias(classificarDiaPorCalorias(null, [], 2000), true), 'Sem dados')
+})
+
+test('comentário do calendário usa a meta histórica e soma refeições e extras', () => {
+  const day = {
+    metas_snapshot: { kcal: 1800 },
+    refeicoes: { cafe: { status: 'limpo', consumido: { kcal: 2000 }, extra: [{ kcal: 100 }] } },
+    extras_globais: [{ kcal: 200 }],
+  }
+  assert.equal(comentarioDiaPorCalorias(classificarDiaPorCalorias(day, [], 2500)), '500 kcal acima')
+  assert.equal(comentarioDiaPorCalorias(classificarDiaPorCalorias({ extras_globais: [{ kcal: 500 }] })), 'Sem meta')
 })

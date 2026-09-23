@@ -1547,6 +1547,38 @@ img, svg, video, canvas { max-width: 100%; }
 .diet-legend-warn { background: #fbbf24; }
 .diet-legend-danger { background: #f87171; }
 
+.diet-calendar-panel { padding: 1rem; }
+.diet-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; }
+.diet-calendar-weekday { padding: 0.35rem 0; color: var(--text-secondary); font-size: 0.65rem; font-weight: 600; text-align: center; }
+.diet-calendar-day { display: flex; min-width: 0; min-height: 5.5rem; flex-direction: column; align-items: center; gap: 0.45rem; padding: 0.55rem 0.125rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-secondary); background: var(--bg-card-solid); text-align: center; cursor: pointer; }
+.diet-calendar-day[data-status="concluido"] { color: #a7f3d0; border-color: rgb(52 211 153 / 0.28); background: rgb(34 197 94 / 0.13); }
+.diet-calendar-day[data-status="fora_da_dieta"] { color: #fecaca; border-color: rgb(248 113 113 / 0.3); background: rgb(248 113 113 / 0.13); }
+.diet-calendar-day[data-status="nao_preenchido"] { color: #fde68a; border-color: rgb(251 191 36 / 0.26); background: rgb(251 191 36 / 0.10); }
+.diet-calendar-day:enabled:hover { border-color: currentColor; }
+.diet-calendar-day:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.diet-calendar-day:disabled { cursor: default; }
+.diet-calendar-date { font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; line-height: 1.3; }
+.diet-calendar-day[aria-current="date"] .diet-calendar-date { text-decoration: underline; text-underline-offset: 0.2rem; }
+.diet-calendar-comment { width: 100%; font-size: 0.6875rem; font-weight: 500; line-height: 1.3; letter-spacing: 0; overflow-wrap: anywhere; }
+.diet-calendar-comment-compact { display: none; }
+.diet-calendar-note { margin: 0.75rem 0 0; color: var(--text-secondary); font-size: 0.65rem; line-height: 1.5; }
+[data-theme="lava"] .diet-calendar-day[data-status="concluido"] { color: #065f46; }
+[data-theme="lava"] .diet-calendar-day[data-status="fora_da_dieta"] { color: #991b1b; }
+[data-theme="lava"] .diet-calendar-day[data-status="nao_preenchido"] { color: #854d0e; }
+@media (max-width: 480px) {
+  .diet-calendar-panel { padding: 0.75rem; }
+  .diet-calendar-grid { gap: 0.1875rem; }
+  .diet-calendar-day { min-height: 5rem; padding-inline: 0.0625rem; }
+  .diet-calendar-comment { font-size: 0.625rem; }
+  .diet-calendar-comment-full { display: none; }
+  .diet-calendar-comment-compact { display: block; }
+}
+@media (max-width: 359px) {
+  .diet-calendar-panel { padding: 0.5rem; }
+  .diet-calendar-grid { gap: 0.125rem; }
+  .diet-calendar-day { padding-inline: 0; }
+}
+
 [data-theme="lava"] .diet-tabs,
 [data-theme="lava"] .diet-icon-button { background: rgba(106,61,43,0.045); }
 [data-theme="lava"] .diet-progress-head > strong { background: rgba(var(--brand-rgb),0.06); }

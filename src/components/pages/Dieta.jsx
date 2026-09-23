@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { doc, getDoc, runTransaction, onSnapshot, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, diaryProgress, classificarDiaPorCalorias, DIET_DAY_STATUS } from '../../utils/dietDiary'
+import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, diaryProgress, classificarDiaPorCalorias, comentarioDiaPorCalorias, DIET_DAY_STATUS } from '../../utils/dietDiary'
 import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
@@ -846,26 +846,23 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, se
     .replace(/^(\w)/, l => l.toUpperCase())
 
   const hoje = hojeId()
-  const diasArray = []
-  for (let d = 1; d <= totalDias; d++) {
-    diasArray.push({ dia: d, data: `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}` })
-  }
   const diasMap = {}
   mesDocs.forEach(d => { diasMap[d.data] = d })
-
-  function corDia(dataStr) {
-    if (dataStr > hoje) return { backgroundColor: 'rgb(38 38 38 / 0.4)' }
-    const doc = diasMap[dataStr]
-    const status = classificarDiaPorCalorias(doc, refs, metaKcal).status
-    if (status === DIET_DAY_STATUS.COMPLETE) return { backgroundColor: 'rgb(34 197 94 / 0.4)' }
-    if (status === DIET_DAY_STATUS.OUT_OF_PLAN) return { backgroundColor: 'rgb(248 113 113 / 0.5)' }
-    return { backgroundColor: 'rgb(251 191 36 / 0.45)' }
+  const diasArray = []
+  for (let d = 1; d <= totalDias; d++) {
+    const data = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const futuro = data > hoje
+    const classificacao = classificarDiaPorCalorias(diasMap[data], refs, metaKcal)
+    const comentario = futuro ? '' : comentarioDiaPorCalorias(classificacao)
+    const comentarioCompacto = futuro ? '' : comentarioDiaPorCalorias(classificacao, true)
+    const metaDescricao = classificacao.metaKcal > 0 ? `meta ${classificacao.metaKcal.toLocaleString('pt-BR')} kcal` : 'meta não definida'
+    const detalhe = futuro ? 'Dia futuro' : `${comentario}${classificacao.kcal > 0 ? `. ${Math.round(classificacao.kcal).toLocaleString('pt-BR')} kcal consumidas; ${metaDescricao}` : ''}`
+    diasArray.push({ dia: d, data, futuro, status: classificacao.status, comentario, comentarioCompacto, detalhe })
   }
 
   let greenDays = 0; let yellowDays = 0; let redDays = 0
-  diasArray.forEach(({ data }) => {
-    if (data > hoje) return
-    const status = classificarDiaPorCalorias(diasMap[data], refs, metaKcal).status
+  diasArray.forEach(({ futuro, status }) => {
+    if (futuro) return
     if (status === DIET_DAY_STATUS.COMPLETE) greenDays++
     else if (status === DIET_DAY_STATUS.OUT_OF_PLAN) redDays++
     else yellowDays++
@@ -910,29 +907,37 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, se
         </div>
       </div>
 
-      <div className="card-premium p-4">
+      <div className="card-premium diet-calendar-panel">
         <div className="flex items-center justify-between mb-2">
-          <button onClick={voltarMes}
+          <button type="button" onClick={voltarMes} aria-label="Mês anterior"
             className="border border-white/10 rounded-xl p-2 text-white/60 hover:text-white transition-all active:scale-90">
             <ChevronLeft size={16} />
           </button>
           <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">{nomeMes}</span>
-          <button onClick={avancarMes} disabled={!podeAvancar}
+          <button type="button" onClick={avancarMes} disabled={!podeAvancar} aria-label="Próximo mês"
             className={`border rounded-xl p-2 transition-all active:scale-90 ${podeAvancar ? 'border-white/10 text-white/60 hover:text-white' : 'border-transparent text-neutral-700 cursor-not-allowed'}`}>
             <ChevronRight size={16} />
           </button>
         </div>
-        <div className="grid grid-cols-7 gap-1">
-          {diasSemana.map(d => <div key={d} className="text-[8px] text-neutral-600 text-center font-medium py-1">{d}</div>)}
+        <div className="diet-calendar-grid">
+          {diasSemana.map(d => <div key={d} className="diet-calendar-weekday">{d}</div>)}
           {Array.from({ length: primeiroDia }).map((_, i) => <div key={`e-${i}`} />)}
-          {diasArray.map(({ dia, data }) => (
-            <button key={data} onClick={() => onDayClick?.(data)}
-              className={`aspect-square rounded-md flex items-center justify-center transition-all active:scale-90`}
-              style={corDia(data)}>
-              <span className="text-[9px] text-neutral-400 font-mono">{dia}</span>
+          {diasArray.map(({ dia, data, futuro, status, comentario, comentarioCompacto, detalhe }) => (
+            <button type="button" key={data} onClick={() => onDayClick?.(data)} disabled={futuro}
+              className="diet-calendar-day"
+              data-status={futuro ? 'futuro' : status}
+              aria-current={data === hoje ? 'date' : undefined}
+              aria-label={`${dia} de ${nomeMes}: ${detalhe}`}
+              title={detalhe}>
+              <span className="diet-calendar-date">{dia}</span>
+              {comentario && <>
+                <span className="diet-calendar-comment diet-calendar-comment-full" aria-hidden="true">{comentario}</span>
+                <span className="diet-calendar-comment diet-calendar-comment-compact" aria-hidden="true">{comentarioCompacto}</span>
+              </>}
             </button>
           ))}
         </div>
+        <p className="diet-calendar-note">Acima/abaixo indica a diferença para a meta do dia. A faixa do plano mantém a tolerância de −1.000 a +300 kcal.</p>
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-2 text-[9px] text-neutral-600">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/40" /> Dia concluído</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-yellow-500/40" /> Não preenchido</span>

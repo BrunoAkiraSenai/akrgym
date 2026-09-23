@@ -2,7 +2,7 @@
   "name": "akrgym-functions",
   "description": "Cloud Functions do AkrGym. Mantém a chave Gemini apenas no servidor e aplica rate limit + App Check.",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "scripts": {
     "serve": "firebase emulators:start --only functions",
