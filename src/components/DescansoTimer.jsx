@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react'
+import { memo, useEffect, useReducer, useState } from 'react'
 import {
   Check, Clock3, Minus, Pause, Play, Plus, RotateCcw, Settings2, SkipForward, X,
 } from 'lucide-react'
@@ -9,8 +9,10 @@ import {
   normalizarDescansoSegundos,
   resolverDescansoSalvo,
   timerReducer,
+  acompanharDescanso,
 } from '../utils/restTimer'
 import { notificarDescansoConcluido, solicitarPermissaoNotificacao } from '../utils/restNotification'
+import RestTimerRing from './RestTimerRing'
 
 function lerPreferencia(storageKey, fallback) {
   if (!storageKey || typeof window === 'undefined') return normalizarDescansoSegundos(fallback)
@@ -26,7 +28,7 @@ function criarEstadoInicial({ defaultSeconds, storageKey }) {
   return { configurado, restante: configurado, rodando: false, concluido: false, terminaEm: null }
 }
 
-export default function DescansoTimer({
+function DescansoTimer({
   defaultSeconds = DEFAULT_DESCANSO_SEGUNDOS,
   storageKey = null,
   label = 'Descanso rápido',
@@ -35,7 +37,7 @@ export default function DescansoTimer({
 }) {
   const [timer, dispatch] = useReducer(timerReducer, { defaultSeconds, storageKey }, criarEstadoInicial)
   const [aberto, setAberto] = useState(false)
-  const { configurado, restante, rodando, concluido } = timer
+  const { configurado, restante, rodando, concluido, terminaEm } = timer
 
   useEffect(() => {
     if (!storageKey) return
@@ -44,18 +46,8 @@ export default function DescansoTimer({
 
   useEffect(() => {
     if (!rodando) return undefined
-    const atualizar = () => dispatch({ type: 'tick', now: Date.now() })
-    const interval = window.setInterval(atualizar, 1000)
-    window.addEventListener('visibilitychange', atualizar)
-    window.addEventListener('focus', atualizar)
-    window.addEventListener('pageshow', atualizar)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('visibilitychange', atualizar)
-      window.removeEventListener('focus', atualizar)
-      window.removeEventListener('pageshow', atualizar)
-    }
-  }, [rodando])
+    return acompanharDescanso(terminaEm, now => dispatch({ type: 'tick', now }))
+  }, [rodando, terminaEm])
 
   useEffect(() => {
     if (!concluido) return
@@ -77,7 +69,6 @@ export default function DescansoTimer({
   const reiniciar = () => dispatch({ type: 'reset' })
 
   const ajustar = delta => dispatch({ type: 'select', seconds: configurado + delta })
-  const progresso = Math.max(0, Math.min(1, restante / configurado))
 
   return (
     <div className={`rest-timer${compact ? ' rest-timer-compact' : ''}${aberto ? ' is-open' : ''}`}>
@@ -113,19 +104,9 @@ export default function DescansoTimer({
 
           <div className={`rest-timer-display${concluido ? ' is-complete' : ''}`}>
             <div className="rest-timer-ring">
-              <svg viewBox="0 0 120 120" aria-hidden="true">
-                <circle className="rest-timer-ring-track" cx="60" cy="60" r="50" pathLength="100" />
-                <circle
-                  className="rest-timer-ring-progress"
-                  cx="60"
-                  cy="60"
-                  r="50"
-                  pathLength="100"
-                  style={{ strokeDashoffset: `${(1 - progresso) * 100}` }}
-                />
-              </svg>
+              <RestTimerRing configurado={configurado} terminaEm={terminaEm} restante={rodando ? null : restante} />
               <div className="rest-timer-ring-inner">
-                <strong key={restante} className="rest-timer-countdown" aria-live="polite">{formatarDescanso(restante)}</strong>
+                <strong key={restante} className="rest-timer-countdown" role="timer" aria-label="Tempo de descanso restante" aria-live="polite">{formatarDescanso(restante)}</strong>
                 <span>{concluido ? 'Concluído' : rodando ? 'Respire e recupere' : 'Pronto para começar'}</span>
               </div>
             </div>
@@ -163,3 +144,5 @@ export default function DescansoTimer({
     </div>
   )
 }
+
+export default memo(DescansoTimer)

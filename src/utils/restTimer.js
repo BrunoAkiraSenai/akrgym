@@ -35,6 +35,8 @@ export function timerReducer(state, action) {
     case 'tick': {
       if (!state.rodando) return state
       const restante = calcularRestante(state.terminaEm, action.now)
+      // Focus/visibility events can arrive in the same second. Keep React idle.
+      if (restante === state.restante) return state
       return restante === 0
         ? { ...state, restante: 0, rodando: false, concluido: true, terminaEm: null }
         : { ...state, restante }
@@ -45,6 +47,35 @@ export function timerReducer(state, action) {
       return { ...state, restante: 0, rodando: false, concluido: false, terminaEm: null }
     default:
       return state
+  }
+}
+
+// Only the visible page needs second-by-second text updates. In the background,
+// keep one deadline alarm; resync with the wall clock when the page returns.
+export function acompanharDescanso(terminaEm, atualizar, ambiente = { window, document, now: Date.now }) {
+  const { window: janela, document: documento, now } = ambiente
+  let timeout
+  let encerrado = false
+  const sincronizar = () => {
+    if (encerrado) return
+    janela.clearTimeout(timeout)
+    const agora = now()
+    atualizar(agora)
+    const faltamMs = terminaEm - agora
+    if (faltamMs <= 0) return
+    const atraso = documento.hidden ? faltamMs : (faltamMs % 1000 || 1000)
+    timeout = janela.setTimeout(sincronizar, atraso)
+  }
+  documento.addEventListener('visibilitychange', sincronizar)
+  janela.addEventListener('focus', sincronizar)
+  janela.addEventListener('pageshow', sincronizar)
+  sincronizar()
+  return () => {
+    encerrado = true
+    janela.clearTimeout(timeout)
+    documento.removeEventListener('visibilitychange', sincronizar)
+    janela.removeEventListener('focus', sincronizar)
+    janela.removeEventListener('pageshow', sincronizar)
   }
 }
 
