@@ -10,6 +10,93 @@ export function exercicioPreenchido(ex) {
   return Number.isFinite(carga) && carga >= 0 && carga <= 1000 && Number.isInteger(reps) && reps > 0 && reps <= 1000
 }
 
+const palavrasDeLigacaoExercicio = new Set(['com', 'da', 'das', 'de', 'do', 'dos', 'na', 'nas', 'no', 'nos'])
+
+function normalizarNomeExercicio(nome) {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\bc\s*\//g, ' com ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(palavra => palavra && !palavrasDeLigacaoExercicio.has(palavra))
+}
+
+function nomesIguais(primeiroNome, segundoNome) {
+  const primeiro = normalizarNomeExercicio(primeiroNome)
+  const segundo = normalizarNomeExercicio(segundoNome)
+  return primeiro.length === segundo.length && primeiro.every((palavra, index) => palavra === segundo[index])
+}
+
+function errosDeDigitação(primeiraPalavra, segundaPalavra) {
+  if (primeiraPalavra === segundaPalavra) return 0
+  if (Math.min(primeiraPalavra.length, segundaPalavra.length) < 5
+    || Math.abs(primeiraPalavra.length - segundaPalavra.length) > 1) return Infinity
+
+  let primeiro = 0
+  let segundo = 0
+  let erros = 0
+  while (primeiro < primeiraPalavra.length && segundo < segundaPalavra.length) {
+    if (primeiraPalavra[primeiro] === segundaPalavra[segundo]) {
+      primeiro++
+      segundo++
+      continue
+    }
+    erros++
+    if (erros > 1) return Infinity
+    if (primeiraPalavra.length > segundaPalavra.length) primeiro++
+    else if (segundaPalavra.length > primeiraPalavra.length) segundo++
+    else { primeiro++; segundo++ }
+  }
+
+  return erros + (primeiro < primeiraPalavra.length || segundo < segundaPalavra.length ? 1 : 0)
+}
+
+export function nomesDeExerciciosCompativeis(primeiroNome, segundoNome) {
+  const primeiro = normalizarNomeExercicio(primeiroNome)
+  const segundo = normalizarNomeExercicio(segundoNome)
+  const menor = primeiro.length <= segundo.length ? primeiro : segundo
+  const maior = primeiro.length <= segundo.length ? segundo : primeiro
+
+  if (menor.length === 0) return false
+  if (menor.length === 1) {
+    return maior.length === 1 && menor[0] === maior[0]
+  }
+  return menor.every((palavra, index) => errosDeDigitação(palavra, maior[index]) < Infinity)
+    && menor.reduce((total, palavra, index) => total + errosDeDigitação(palavra, maior[index]), 0) <= 1
+}
+
+export function encontrarNomeExercicioExistente(nome, nomesExistentes = []) {
+  const catalogo = new Map()
+  for (const nomeExistente of nomesExistentes) {
+    const nomeLimpo = String(nomeExistente || '').trim()
+    const chave = normalizarNomeExercicio(nomeLimpo).join(' ')
+    if (chave && !catalogo.has(chave)) catalogo.set(chave, nomeLimpo)
+  }
+
+  const nomes = [...catalogo.values()]
+  const exato = nomes.find(nomeExistente => nomesIguais(nomeExistente, nome))
+  if (exato) return exato
+
+  const compativeis = nomes.filter(nomeExistente => nomesDeExerciciosCompativeis(nomeExistente, nome))
+  return compativeis.length === 1 ? compativeis[0] : null
+}
+
+export function encontrarExercicioAnterior(historico, nome) {
+  for (const sessao of historico || []) {
+    const candidatos = (sessao.exercicios || []).filter(ex =>
+      nomesDeExerciciosCompativeis(nome, ex.nome)
+      && exercicioPreenchido({ carga: ex.carga_top, reps: ex.reps_top }),
+    )
+    const exato = candidatos.find(ex => nomesIguais(ex.nome, nome))
+    if (exato) return exato
+    if (candidatos.length === 1) return candidatos[0]
+  }
+  return null
+}
+
 // Legacy IDs include position to avoid mixing two exercises with the same name.
 export const exerciseId = (ex, index) => ex.id || `legacy:${index}:${ex.nome}`
 export const routineFingerprint = routine => JSON.stringify((routine?.exercicios || []).map((ex, index) => [exerciseId(ex, index), ex.nome, ex.meta_reps, ex.base_top, ex.tem_aquecimento, ex.IsAgachamento, ex.nota]))
@@ -50,9 +137,13 @@ export function prepareSession(routine, history = []) {
       const exercises = session.exercicios || []
       const exact = exercises.find(item => item.id === id)
       // Match by name only for unambiguous legacy entries.
-      const candidates = exercises.filter(item => !item.id && item.nome === ex.nome)
-      const uniqueName = routine.exercicios.filter(item => item.nome === ex.nome).length === 1
-      const candidate = exact || (uniqueName && candidates.length === 1 ? candidates[0] : null)
+      const candidates = exercises.filter(item => nomesDeExerciciosCompativeis(item.nome, ex.nome))
+      const uniqueName = routine.exercicios.filter(item => nomesDeExerciciosCompativeis(item.nome, ex.nome)).length === 1
+      const associadoPorId = exercises.find(item => item.exercicio_associado_id === id)
+      const associado = uniqueName
+        ? exercises.find(item => item.exercicio_associado_nome && nomesIguais(item.exercicio_associado_nome, ex.nome))
+        : null
+      const candidate = exact || associadoPorId || associado || (uniqueName && candidates.length === 1 ? candidates[0] : null)
       if (candidate && exercicioPreenchido({ carga: candidate.carga_top, reps: candidate.reps_top })) { previous = candidate; break }
     }
     return {
@@ -70,24 +161,35 @@ export function recordedExercise(ex) {
   if (ex.substituidoDe) {
     recorded.substituido_de = ex.substituidoDe
     recorded.substituido_de_id = ex.substituidoDeId
+    recorded.exercicio_associado_nome = ex.exercicioAssociadoNome || ex.nome
+    if (exercicioAssociadoIdValido(ex.exercicioAssociadoId)) {
+      recorded.exercicio_associado_id = ex.exercicioAssociadoId
+    }
   }
   return recorded
 }
 
-export function createReplacementExercise(ex, nome, token) {
+function exercicioAssociadoIdValido(id) {
+  return typeof id === 'string' && id.length > 0
+}
+
+export function createReplacementExercise(ex, nome, token, referenciaAnterior = null, reutilizarIdAssociado = true) {
   const originalNome = ex.substituidoDe || ex.nome
   const originalId = ex.substituidoDeId || ex.id
+  const exercicioAssociadoId = exercicioAssociadoIdValido(referenciaAnterior?.id) ? referenciaAnterior.id : null
   return {
     ...ex,
-    id: `substituicao:${originalId}:${token}`,
-    nome,
+    id: reutilizarIdAssociado && exercicioAssociadoId ? exercicioAssociadoId : `substituicao:${originalId}:${token}`,
+    nome: referenciaAnterior?.nome || nome,
+    exercicioAssociadoNome: referenciaAnterior?.nome || nome,
+    exercicioAssociadoId,
     substituidoDe: originalNome,
     substituidoDeId: originalId,
     descanso_segundos: DEFAULT_DESCANSO_SEGUNDOS,
     carga: '',
     reps: '',
-    ref: 0,
-    repsAnterior: null,
+    ref: referenciaAnterior?.carga_top ?? 0,
+    repsAnterior: referenciaAnterior?.reps_top ?? null,
     pulado: false,
     // A replacement has no catalog metadata yet; never reuse the old protocol.
     tem_aquecimento: false,

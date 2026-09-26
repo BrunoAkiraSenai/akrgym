@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  collection, getDocs, query, where, orderBy, runTransaction, doc, getDoc, setDoc, serverTimestamp,
+  collection, getDocs, query, where, orderBy, limit, runTransaction, doc, getDoc, setDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
-import { exercicioPreenchido, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho } from '../../utils/workoutSession'
+import { exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 import DescansoTimer from '../DescansoTimer'
 import {
@@ -19,6 +19,9 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
   const [step, setStep] = useState('select')
   const [rotinaKey, setRotinaKey] = useState(null)
   const [topSetData, setTopSetData] = useState([])
+  const [historicoTreino, setHistoricoTreino] = useState([])
+  const [historicoGlobal, setHistoricoGlobal] = useState([])
+  const [historicoGlobalCarregado, setHistoricoGlobalCarregado] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loadingHistorico, setLoadingHistorico] = useState(false)
   const [erro, setErro] = useState(null)
@@ -28,12 +31,16 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
   const [filtroBusca, setFiltroBusca] = useState('')
   const [trocaAberta, setTrocaAberta] = useState(null)
   const [buscaTroca, setBuscaTroca] = useState('')
+  const [exercicioSelecionado, setExercicioSelecionado] = useState('')
+  const [moduloCatalogo, setModuloCatalogo] = useState(null)
+  const [carregandoCatalogo, setCarregandoCatalogo] = useState(false)
   const [erroTroca, setErroTroca] = useState(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const sessionId = useRef(null)
   const saveLock = useRef(false)
   const historyRequest = useRef(0)
-  useEffect(() => () => { ++historyRequest.current }, [])
+  const catalogRequest = useRef(0)
+  useEffect(() => () => { ++historyRequest.current; ++catalogRequest.current }, [])
   const isPrimeiroRender = useRef(true)
 
   const carregarTreinos = useCallback(async () => {
@@ -101,6 +108,14 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
   }, [treinosState, STORAGE_KEY])
 
   const keys = treinosState ? Object.keys(treinosState) : []
+  const exerciciosSalvos = [
+    ...Object.values(treinosState || {}).flatMap(treino => treino.exercicios || []).map(ex => ex.nome),
+    ...historicoTreino.flatMap(sessao => (sessao.exercicios || []).map(ex => ex.nome)),
+    ...historicoGlobal.flatMap(sessao => (sessao.exercicios || []).map(ex => ex.nome)),
+  ]
+  const resultadosTroca = moduloCatalogo && buscaTroca.trim()
+    ? moduloCatalogo.buscarExercicios(buscaTroca, exerciciosSalvos)
+    : []
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -122,6 +137,9 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     const request = ++historyRequest.current
     sessionId.current = crypto.randomUUID()
     setTopSetData([])
+    setHistoricoTreino([])
+    setHistoricoGlobal([])
+    setHistoricoGlobalCarregado(false)
     setRotinaKey(key)
     setStep('active')
     setTrocaAberta(null)
@@ -135,9 +153,12 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
         query(collection(db, 'users', user.uid, 'historico_treinos'), where('rotina_id', '==', key), orderBy('data', 'desc'))
       )
       if (request !== historyRequest.current) return
-      setTopSetData(prepareSession(protocolo, snap.docs.map(item => item.data())))
+      const historico = snap.docs.map(item => item.data())
+      setHistoricoTreino(historico)
+      setTopSetData(prepareSession(protocolo, historico))
     } catch {
       if (request !== historyRequest.current) return
+      setHistoricoTreino([])
       setErro('Histórico indisponível. As referências abaixo são as cargas do plano, não da última sessão.')
       setTopSetData(prepareSession(protocolo))
     }
@@ -152,16 +173,56 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, pulado: !ex.pulado } : { ...ex }))
   }
 
-  const abrirTroca = (exIdx) => {
+  const abrirTroca = async (exIdx) => {
     setTrocaAberta(exIdx)
     setBuscaTroca('')
+    setExercicioSelecionado('')
     setErroTroca(null)
     setErro(null)
+    const request = ++catalogRequest.current
+    setCarregandoCatalogo(true)
+    try {
+      const tarefas = []
+      if (!moduloCatalogo) {
+        tarefas.push(import('../../config/catalogoExercicios.js')
+          .then(modulo => ({ tipo: 'catalogo', valor: modulo }))
+          .catch(erro => ({ tipo: 'catalogo', erro })))
+      }
+      if (!historicoGlobalCarregado) {
+        tarefas.push(getDocs(query(
+          collection(db, 'users', user.uid, 'historico_treinos'),
+          orderBy('data', 'desc'),
+          limit(100),
+        ))
+          .then(snap => ({ tipo: 'historico', valor: snap.docs.map(item => item.data()) }))
+          .catch(erro => ({ tipo: 'historico', erro })))
+      }
+      const resultados = await Promise.all(tarefas)
+      if (request !== catalogRequest.current) return
+      for (const resultado of resultados) {
+        if (resultado.erro) {
+          if (resultado.tipo === 'catalogo') setErroTroca('Não foi possível carregar a lista de exercícios. Tente novamente.')
+          continue
+        }
+        if (resultado.tipo === 'catalogo') setModuloCatalogo(resultado.valor)
+        if (resultado.tipo === 'historico') {
+          setHistoricoGlobal(resultado.valor)
+          setHistoricoGlobalCarregado(true)
+        }
+      }
+    } catch {
+      if (request === catalogRequest.current) setErroTroca('Não foi possível carregar a lista de exercícios. Tente novamente.')
+    } finally {
+      if (request === catalogRequest.current) setCarregandoCatalogo(false)
+    }
   }
 
   const fecharTroca = () => {
+    ++catalogRequest.current
     setTrocaAberta(null)
     setBuscaTroca('')
+    setExercicioSelecionado('')
+    setCarregandoCatalogo(false)
     setErroTroca(null)
   }
 
@@ -178,11 +239,22 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
       setErroTroca('Escolha um exercício diferente do atual.')
       return
     }
+    const exerciciosExistentes = [
+      ...(moduloCatalogo?.CATALOGO_EXERCICIOS || []).map(ex => ex.nome),
+      ...exerciciosSalvos,
+    ]
+    const nomeReconhecido = encontrarNomeExercicioExistente(nome, exerciciosExistentes)
+    if (!nomeReconhecido) {
+      setErroTroca('Esse exercício não está nos seus treinos salvos. Confira o nome ou adicione-o em Configurar.')
+      return
+    }
     const token = crypto.randomUUID()
-    const substituto = createReplacementExercise(atual, nome, token)
+    const anterior = encontrarExercicioAnterior([...historicoGlobal, ...historicoTreino], nomeReconhecido)
+    const associacaoJaUsada = anterior?.id && topSetData.some((ex, index) => index !== exIdx && ex.id === anterior.id)
+    const substituto = createReplacementExercise(atual, nomeReconhecido, token, anterior, !associacaoJaUsada)
     setTopSetData(prev => prev.map((ex, i) => i === exIdx ? substituto : ex))
     fecharTroca()
-    setSucesso(`${nome} entrou no lugar de ${substituto.substituidoDe} nesta sessão.`)
+    setSucesso(`${substituto.nome} entrou no lugar de ${substituto.substituidoDe} nesta sessão.`)
   }
 
   const finalizarTreino = async () => {
@@ -371,7 +443,9 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
               )}
 
               <div className="exec-exercise-actions">
-                <button type="button" onClick={() => trocaAberta === originalIndex ? fecharTroca() : abrirTroca(originalIndex)}
+                <button type="button"
+                  // eslint-disable-next-line react-hooks/refs
+                  onClick={() => trocaAberta === originalIndex ? fecharTroca() : abrirTroca(originalIndex)}
                   className={`exec-replace-button${trocaAberta === originalIndex ? ' is-open' : ''}`} aria-expanded={trocaAberta === originalIndex}>
                   <ArrowLeftRight size={14} /> Trocar exercício
                 </button>
@@ -387,24 +461,49 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                     <button type="button" onClick={fecharTroca} aria-label="Fechar troca de exercício"><X size={14} /></button>
                   </div>
                   <label className="exec-replace-field">
-                    <span>Nome do novo exercício</span>
-                    <input autoFocus type="text" placeholder="Ex.: Agachamento livre" value={buscaTroca}
+                    <span>Pesquise e selecione um exercício</span>
+                    <input autoFocus type="text" placeholder="Ex.: Supino inclinado" value={buscaTroca}
                       aria-invalid={Boolean(erroTroca)}
                       onChange={e => {
                         const value = e.target.value
                         if (!value || /^[A-Za-zÀ-ÖØ-öø-ÿ]/.test(value)) {
                           setBuscaTroca(value)
+                          setExercicioSelecionado('')
                           setErroTroca(null)
                         } else {
                           setErroTroca('O nome não pode começar com números ou caracteres especiais.')
                         }
                       }}
-                      onKeyDown={e => { if (e.key === 'Enter') substituirExercicio(originalIndex, buscaTroca) }} />
+                      onKeyDown={e => {
+                        if (e.key !== 'Enter') return
+                        e.preventDefault()
+                        // eslint-disable-next-line react-hooks/refs
+                        if (exercicioSelecionado) substituirExercicio(originalIndex, exercicioSelecionado)
+                        else if (resultadosTroca[0]) setExercicioSelecionado(resultadosTroca[0].nome)
+                      }} />
                     {erroTroca && <small className="exec-replace-error" role="alert">{erroTroca}</small>}
                   </label>
+                  <div className="exec-replace-results" role="listbox" aria-label="Exercícios encontrados">
+                    {carregandoCatalogo ? (
+                      <p className="exec-replace-empty" role="status">Carregando exercícios…</p>
+                    ) : !buscaTroca.trim() ? (
+                      <p className="exec-replace-empty">Digite o nome para ver exercícios e variações.</p>
+                    ) : resultadosTroca.length === 0 ? (
+                      <p className="exec-replace-empty">Nenhum exercício encontrado. Tente outro nome.</p>
+                    ) : resultadosTroca.map(opcao => (
+                      <button key={`${opcao.grupo}:${opcao.nome}`} type="button" role="option"
+                        aria-selected={exercicioSelecionado === opcao.nome}
+                        className={`exec-replace-option${exercicioSelecionado === opcao.nome ? ' is-selected' : ''}`}
+                        onClick={() => { setExercicioSelecionado(opcao.nome); setErroTroca(null) }}>
+                        <span><strong>{opcao.nome}</strong><small>{opcao.grupo}</small></span>
+                        {exercicioSelecionado === opcao.nome && <CheckCircle size={16} aria-hidden="true" />}
+                      </button>
+                    ))}
+                  </div>
+                  {exercicioSelecionado && <p className="exec-replace-selection">Selecionado: <strong>{exercicioSelecionado}</strong></p>}
                   <div className="exec-replace-actions">
                     <button type="button" className="exec-replace-cancel" onClick={fecharTroca}>Cancelar</button>
-                    <button type="button" className="exec-replace-custom" disabled={!buscaTroca.trim() || Boolean(erroTroca)} onClick={() => substituirExercicio(originalIndex, buscaTroca)}>
+                    <button type="button" className="exec-replace-custom" disabled={!exercicioSelecionado || Boolean(erroTroca)} onClick={() => substituirExercicio(originalIndex, exercicioSelecionado)}>
                       Trocar exercício
                     </button>
                   </div>

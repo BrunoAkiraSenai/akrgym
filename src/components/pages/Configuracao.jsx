@@ -42,6 +42,10 @@ export default function Configuracao({ abaInicial }) {
   const [config, setConfig] = useState({ treinos: {}, refeicoes: [], metas: METAS_PADRAO })
   const [loading, setLoading] = useState(true)
   const [configCarregada, setConfigCarregada] = useState(false)
+  const [moduloCatalogoExercicios, setModuloCatalogoExercicios] = useState(null)
+  const [catalogoExerciciosCarregando, setCatalogoExerciciosCarregando] = useState(false)
+  const [campoBuscaExercicio, setCampoBuscaExercicio] = useState(null)
+  const [erroCatalogoExercicios, setErroCatalogoExercicios] = useState(null)
   const [nutricaoAlterada, setNutricaoAlterada] = useState(false)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState(null)
@@ -195,6 +199,21 @@ export default function Configuracao({ abaInicial }) {
     try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
+  const abrirCatalogoExercicio = async (campo) => {
+    setCampoBuscaExercicio(campo)
+    setErroCatalogoExercicios(null)
+    if (moduloCatalogoExercicios || catalogoExerciciosCarregando) return
+    setCatalogoExerciciosCarregando(true)
+    try {
+      const modulo = await import('../../config/catalogoExercicios.js')
+      setModuloCatalogoExercicios(modulo)
+    } catch {
+      setErroCatalogoExercicios('Não foi possível carregar o catálogo. Você ainda pode usar o nome personalizado.')
+    } finally {
+      setCatalogoExerciciosCarregando(false)
+    }
+  }
+
   const deleteExercise = async (key, idx) => {
     const n = { ...config, treinos: { ...config.treinos } }
     n.treinos[key] = { ...n.treinos[key], exercicios: n.treinos[key].exercicios.filter((_, i) => i !== idx) }
@@ -337,6 +356,8 @@ export default function Configuracao({ abaInicial }) {
 
   const totalTreinos = Object.keys(config.treinos || {}).length
   const totalRefeicoes = (config.refeicoes || []).length
+  const nomesExerciciosConfig = Object.values(config.treinos || {})
+    .flatMap(treino => (treino?.exercicios || []).map(exercicio => exercicio?.nome).filter(Boolean))
 
   return (
     <div className="settings-page flex flex-col gap-4 pt-2 pb-6">
@@ -452,8 +473,59 @@ export default function Configuracao({ abaInicial }) {
                     </button>
                     {isOpen && <div className="settings-routine-body">
                       {(rotina.exercicios || []).map((ex, idx) => (
+                        (() => {
+                          const campoId = `${key}:${idx}`
+                          const listId = `catalogo-exercicio-${encodeURIComponent(key)}-${idx}`
+                          const buscaAtiva = campoBuscaExercicio === campoId
+                          const textoBusca = String(ex.nome || '').trim()
+                          const queryUtil = textoBusca && textoBusca.toLocaleLowerCase('pt-BR') !== 'novo'
+                          const opcoes = buscaAtiva && queryUtil && moduloCatalogoExercicios
+                            ? moduloCatalogoExercicios.buscarExercicios(textoBusca, nomesExerciciosConfig)
+                            : []
+
+                          return (
                         <div key={idx} ref={node => { const refKey = `${key}:${idx}`; if (node) exerciseRefs.current[refKey] = node; else delete exerciseRefs.current[refKey] }} className="settings-exercise">
-                          <div className="settings-exercise-top"><span className="settings-exercise-number">{idx + 1}</span><label className="settings-field settings-field-grow"><span>Exercício</span><input type="text" value={ex.nome} onChange={e => updateExercise(key, idx, 'nome', e.target.value)} /></label><button type="button" onClick={() => deleteExercise(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome}`}><Trash size={15} /></button></div>
+                          <div className="settings-exercise-top">
+                            <span className="settings-exercise-number">{idx + 1}</span>
+                            <div className="settings-exercise-name">
+                              <label className="settings-field settings-field-grow">
+                                <span>Exercício</span>
+                                <input type="text" value={ex.nome} role="combobox" aria-autocomplete="list"
+                                  aria-expanded={buscaAtiva} aria-controls={listId}
+                                  onFocus={() => { void abrirCatalogoExercicio(campoId) }}
+                                  onBlur={() => window.setTimeout(() => {
+                                    setCampoBuscaExercicio(atual => atual === campoId ? null : atual)
+                                  }, 150)}
+                                  onChange={e => { void updateExercise(key, idx, 'nome', e.target.value) }} />
+                              </label>
+                              {buscaAtiva && (
+                                <div id={listId} className="settings-exercise-catalog" role="listbox" aria-label={`Variações de ${textoBusca || 'exercício'}`}>
+                                  {catalogoExerciciosCarregando && !moduloCatalogoExercicios ? (
+                                    <p className="settings-exercise-catalog-empty" role="status">Carregando exercícios…</p>
+                                  ) : erroCatalogoExercicios ? (
+                                    <button type="button" className="settings-exercise-catalog-empty" onMouseDown={e => e.preventDefault()} onClick={() => { void abrirCatalogoExercicio(campoId) }}>{erroCatalogoExercicios} Toque para tentar novamente.</button>
+                                  ) : !queryUtil ? (
+                                    <p className="settings-exercise-catalog-empty">Digite um exercício para ver opções parecidas.</p>
+                                  ) : opcoes.length === 0 ? (
+                                    <p className="settings-exercise-catalog-empty">Sem correspondências. Nomes personalizados continuam permitidos.</p>
+                                  ) : opcoes.map(opcao => (
+                                    <button key={`${opcao.grupo}:${opcao.nome}`} type="button" role="option"
+                                      aria-selected={opcao.nome === textoBusca}
+                                      className="settings-exercise-catalog-option"
+                                      onMouseDown={e => e.preventDefault()}
+                                      onClick={() => {
+                                        setCampoBuscaExercicio(null)
+                                        void updateExercise(key, idx, 'nome', opcao.nome)
+                                      }}>
+                                      <span><strong>{opcao.nome}</strong><small>{opcao.grupo}</small></span>
+                                      {opcao.nome === textoBusca && <CheckCircle2 size={15} aria-hidden="true" />}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <button type="button" onClick={() => deleteExercise(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome}`}><Trash size={15} /></button>
+                          </div>
                           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                             <label className="settings-field"><span>Base Top (kg)</span><input type="number" value={ex.base_top} onChange={e => updateExercise(key, idx, 'base_top', Number(e.target.value))} inputMode="decimal" /></label>
                             <label className="settings-field"><span>Meta de reps</span><input type="text" value={ex.meta_reps} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label>
@@ -462,6 +534,8 @@ export default function Configuracao({ abaInicial }) {
                             </select></label>
                           </div>
                         </div>
+                          )
+                        })()
                       ))}
                       <div className="settings-routine-actions"><button type="button" onClick={() => addExercise(key)} className="settings-action settings-action-muted"><Plus size={14} /> Adicionar exercício</button><button type="button" onClick={() => deleteRoutine(key)} className="settings-action settings-action-danger"><Trash size={14} /> Excluir divisão</button></div>
                     </div>}
