@@ -7,6 +7,19 @@ test('catálogo local oferece mais de 250 variações sem descrições ou imagen
   assert.ok(Buffer.byteLength(JSON.stringify(CATALOGO_EXERCICIOS)) < 20_000)
 })
 
+test('cada exercício tem apenas um grupo canônico no catálogo', () => {
+  const nomes = CATALOGO_EXERCICIOS.map(({ nome }) => nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
+  assert.equal(new Set(nomes).size, nomes.length)
+
+  for (const [nome, grupo] of [
+    ['Levantamento terra sumô', 'Posterior de coxa e glúteos'],
+    ['Good morning', 'Posterior de coxa e glúteos'],
+    ['Extensão lombar no banco', 'Costas'],
+  ]) {
+    assert.ok(CATALOGO_EXERCICIOS.some(exercicio => exercicio.nome === nome && exercicio.grupo === grupo))
+  }
+})
+
 test('busca por exercício mostra variações relacionadas para escolha', () => {
   const resultados = buscarExercicios('supino inclinado')
   const nomes = resultados.map(exercicio => exercicio.nome)
@@ -48,6 +61,18 @@ test('busca tolera acentos e erro de digitação sem escolher automaticamente', 
   const digitacaoErrada = buscarExercicios('supinoo')
   assert.ok(digitacaoErrada.length > 1)
   assert.ok(digitacaoErrada.every(exercicio => exercicio.nome.toLowerCase().includes('supino')))
+})
+
+test('busca ignora preposições e entende a abreviação c/ sem perder especificidade', () => {
+  assert.ok(buscarExercicios('rosca para bíceps').some(exercicio => exercicio.nome === 'Rosca 45 graus para bíceps'))
+  assert.ok(buscarExercicios('supino inclinado c/ halteres').some(exercicio => exercicio.nome === 'Supino inclinado com halteres'))
+})
+
+test('busca trata limites inválidos e lista opcional sem retornar resultados inesperados', () => {
+  assert.deepEqual(buscarExercicios('supino inclinado', [], -1), [])
+  assert.deepEqual(buscarExercicios('supino inclinado', [], 0), [])
+  assert.equal(buscarExercicios('supino inclinado', [], 1).length, 1)
+  assert.doesNotThrow(() => buscarExercicios('remada articulada personalizada', null))
 })
 
 test('busca inclui exercícios particulares salvos nas rotinas do usuário', () => {

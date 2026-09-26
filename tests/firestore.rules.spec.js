@@ -121,6 +121,25 @@ describe('AkrGym Firestore Rules', () => {
       }))
     })
 
+    it('create com substituição e associação de exercício passa', async () => {
+      const db = authedDb(ALICE)
+      await assertSucceeds(db.collection(`users/${ALICE}/historico_treinos`).add({
+        rotina_id: 'upper_a',
+        data: new Date(),
+        exercicios: [{
+          id: 'substituicao:voador:token',
+          nome: 'Supino inclinado com halteres',
+          carga_top: 32.5,
+          reps_top: 8,
+          substituido_de: 'Voador',
+          substituido_de_id: 'voador',
+          exercicio_associado_nome: 'Supino inclinado com halteres',
+          exercicio_associado_id: 'supino-inclinado',
+        }],
+        exercicios_substituidos: [{ original: 'Voador', substituto: 'Supino inclinado com halteres' }],
+      }))
+    })
+
     it('create sem campo obrigatório falha', async () => {
       const db = authedDb(ALICE)
       await assertFails(db.collection(`users/${ALICE}/historico_treinos`).add({

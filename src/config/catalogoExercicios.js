@@ -24,8 +24,8 @@ const exerciciosPorGrupo = {
     'Remada baixa com pegada semi-pronada', 'Remada baixa neutra', 'Remada baixa unilateral',
     'Remada cavalinho', 'Remada cavalinho com apoio', 'Remada cavalinho com pegada semi-pronada',
     'Remada T-bar', 'Remada na máquina',
-    'Remada articulada', 'Remada no Smith', 'Remada invertida', 'Levantamento terra', 'Levantamento terra sumô',
-    'Levantamento terra romeno', 'Rack pull', 'Good morning', 'Extensão lombar no banco', 'Hiperextensão lombar',
+    'Remada articulada', 'Remada no Smith', 'Remada invertida', 'Levantamento terra',
+    'Levantamento terra romeno', 'Rack pull', 'Extensão lombar no banco', 'Hiperextensão lombar',
     'Encolhimento com barra', 'Encolhimento com halteres', 'Encolhimento na máquina',
   ],
   Ombros: [
@@ -95,7 +95,7 @@ const exerciciosPorGrupo = {
     'Abdominal canivete', 'Elevação de pernas na barra', 'Elevação de joelhos na paralela',
     'Prancha', 'Prancha lateral', 'Prancha com elevação de perna', 'Dead bug', 'Hollow hold',
     'Russian twist', 'Wood chop na polia', 'Pallof press', 'Mountain climber',
-    'Extensão lombar no banco', 'Bird dog', 'Abdominal reverso', 'Toque nos calcanhares',
+    'Bird dog', 'Abdominal reverso', 'Toque nos calcanhares',
   ],
   Funcional: [
     'Burpee', 'Kettlebell swing', 'Kettlebell goblet squat', 'Kettlebell deadlift',
@@ -113,16 +113,22 @@ const exerciciosPorGrupo = {
 export const CATALOGO_EXERCICIOS = Object.entries(exerciciosPorGrupo)
   .flatMap(([grupo, nomes]) => nomes.map(nome => ({ nome, grupo })))
 
+const PALAVRAS_DE_LIGACAO = new Set([
+  'a', 'ao', 'aos', 'as', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em',
+  'na', 'nas', 'no', 'nos', 'para', 'por', 'pra', 'pro',
+])
+
 function normalizar(texto) {
   return String(texto || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/\bc\s*\//g, ' com ')
     .replace(/\bsemi[\s-]*pronada\b/g, 'semipronada')
     .replace(/[^a-z0-9\s]/g, ' ')
     .trim()
     .split(/\s+/)
-    .filter(Boolean)
+    .filter(palavra => palavra && !PALAVRAS_DE_LIGACAO.has(palavra))
 }
 
 function palavrasParecidas(consulta, palavra) {
@@ -146,14 +152,15 @@ function palavrasParecidas(consulta, palavra) {
 
 export function buscarExercicios(consulta, nomesSalvos = [], limite = 12) {
   const palavrasConsulta = normalizar(consulta)
-  if (!palavrasConsulta.length) return []
+  const quantidade = Number.isFinite(limite) ? Math.max(0, Math.floor(limite)) : 12
+  if (!palavrasConsulta.length || quantidade === 0) return []
 
   const opcoes = new Map()
   for (const exercicio of CATALOGO_EXERCICIOS) {
     const chave = normalizar(exercicio.nome).join(' ')
     if (!opcoes.has(chave)) opcoes.set(chave, exercicio)
   }
-  for (const nome of nomesSalvos) {
+  for (const nome of Array.isArray(nomesSalvos) ? nomesSalvos : []) {
     const nomeLimpo = String(nome || '').trim()
     const chave = normalizar(nomeLimpo).join(' ')
     if (chave && !opcoes.has(chave)) opcoes.set(chave, { nome: nomeLimpo, grupo: 'Seus treinos' })
@@ -174,6 +181,6 @@ export function buscarExercicios(consulta, nomesSalvos = [], limite = 12) {
     })
     .filter(Boolean)
     .sort((a, b) => a.pontuacao - b.pontuacao || a.nome.localeCompare(b.nome, 'pt-BR'))
-    .slice(0, limite)
+    .slice(0, quantidade)
     .map(({ nome, grupo }) => ({ nome, grupo }))
 }
