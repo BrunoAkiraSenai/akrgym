@@ -155,7 +155,7 @@ export default function OnboardingWizard({ onComplete }) {
           ...treino,
           exercicios: treino.exercicios.map(ex => ({
             ...ex,
-            base_top: '',
+            base_top: 0,
             meta_reps: ex.meta_reps || '',
             tem_aquecimento: ex.tem_aquecimento || false,
           })),

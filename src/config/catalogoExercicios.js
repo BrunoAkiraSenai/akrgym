@@ -171,9 +171,11 @@ export function buscarExercicios(consulta, nomesSalvos = [], limite = 12) {
       const palavrasNome = normalizar(exercicio.nome)
       let pontuacao = Math.max(0, palavrasNome.length - palavrasConsulta.length) * 0.04
       for (const palavra of palavrasConsulta) {
-        const melhor = Math.min(...palavrasNome.map(palavraNome => palavrasParecidas(palavra, palavraNome)))
+        const distancias = palavrasNome.map(palavraNome => palavrasParecidas(palavra, palavraNome))
+        const melhor = Math.min(...distancias)
         if (!Number.isFinite(melhor)) return null
-        pontuacao += melhor
+        // "Sup" deve trazer "Supino…" antes de "Abdominal supra".
+        pontuacao += melhor + distancias.indexOf(melhor) * 0.3
       }
       const nomeNormalizado = palavrasNome.join(' ')
       if (nomeNormalizado.includes(palavrasConsulta.join(' '))) pontuacao -= 0.5

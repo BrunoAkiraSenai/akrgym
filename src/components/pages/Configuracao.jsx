@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, Download, Clock3 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, Download, Clock3 } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
 import { buildUserDataExport, formatExportFilename } from '../../utils/exportData'
 import { prepararConfigParaSalvar } from '../../utils/configValidation'
+import { exerciseId, garantirIdsExercicios, novoIdExercicio, reordenarExercicios } from '../../utils/workoutSession'
+import ConfirmModal from '../ConfirmModal'
 
 function gerarIdRefeicao() {
   return `refeicao_${Date.now()}`
@@ -25,9 +27,22 @@ function numeroNutricional(valor, fallback = 0) {
   return Number.isFinite(numero) && numero >= 0 ? numero : fallback
 }
 
+// Cada exercício passa a ter identidade própria: a posição vira só a ordem.
+function normalizarTreinos(treinos) {
+  return Object.fromEntries(Object.entries(treinos || {}).map(([key, rotina]) => [key, {
+    ...rotina,
+    exercicios: garantirIdsExercicios(rotina?.exercicios),
+  }]))
+}
+
+function exercicioSemNome(config) {
+  return Object.values(config.treinos || {}).flatMap(rotina => rotina?.exercicios || []).find(ex => !String(ex?.nome || '').trim())
+}
+
 function normalizarConfigNutricional(data) {
   return {
     ...data,
+    treinos: normalizarTreinos(data.treinos),
     metas: { ...METAS_PADRAO, ...(data.metas || {}), fibras: numeroNutricional(data.metas?.fibras, METAS_PADRAO.fibras) },
     refeicoes: (Array.isArray(data.refeicoes) ? data.refeicoes : []).map(ref => ({
       ...ref,
@@ -46,7 +61,7 @@ export default function Configuracao({ abaInicial }) {
   const [catalogoExerciciosCarregando, setCatalogoExerciciosCarregando] = useState(false)
   const [campoBuscaExercicio, setCampoBuscaExercicio] = useState(null)
   const [erroCatalogoExercicios, setErroCatalogoExercicios] = useState(null)
-  const [nutricaoAlterada, setNutricaoAlterada] = useState(false)
+  const [alteracaoPendente, setAlteracaoPendente] = useState(false)
   const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState(null)
   const [sucesso, setSucesso] = useState(null)
@@ -61,6 +76,7 @@ export default function Configuracao({ abaInicial }) {
   const textoAlimentosRef = useRef(textoAlimentos)
   useEffect(() => { textoAlimentosRef.current = textoAlimentos }, [textoAlimentos])
   const [aiLoadingIdx, setAiLoadingIdx] = useState(null)
+  const [confirmacao, setConfirmacao] = useState(null)
   const sucessoTimerRef = useRef(null)
   const pendingFocusRef = useRef(null)
   const routineRefs = useRef({})
@@ -102,7 +118,7 @@ export default function Configuracao({ abaInicial }) {
     pendingFocusRef.current = null
     node.scrollIntoView({ behavior: 'smooth', block: 'center' })
     const timer = setTimeout(() => {
-      const target = node.querySelector(pending.type === 'routine' ? 'button' : 'input')
+      const target = node.querySelector(pending.selector || (pending.type === 'routine' ? 'button' : 'input'))
       target?.focus({ preventScroll: true })
     }, 350)
     return () => clearTimeout(timer)
@@ -123,7 +139,7 @@ export default function Configuracao({ abaInicial }) {
         const init = {}
         refs.forEach(r => { init[r.id] = (r.alimentos || []).join(', ') })
         setTextoAlimentos(init)
-        setNutricaoAlterada(false)
+        setAlteracaoPendente(false)
         loadedUidRef.current = user.uid
         setConfigCarregada(true)
       }
@@ -140,10 +156,12 @@ export default function Configuracao({ abaInicial }) {
 
   const salvar = async (novo) => {
     if (loading || loadedUidRef.current !== user.uid) return
+    if (exercicioSemNome(novo)) { setErro('Há um exercício sem nome. Escolha um nome ou exclua o exercício antes de salvar.'); return }
     setSaving(true); setErro(null); setSucesso(null)
     try {
       const sanitizado = prepararConfigParaSalvar(novo)
       await setDoc(CONFIG_REF(user.uid), sanitizado)
+      if (configRef.current === novo) setAlteracaoPendente(false)
       mostrarSucesso('Alterações salvas com sucesso.')
     } catch (err) { setErro(err.message); setSaving(false); return }
     setSaving(false)
@@ -173,6 +191,25 @@ export default function Configuracao({ abaInicial }) {
     setExpandedKey(key)
   }
 
+  const pedirExclusaoRotina = (key) => {
+    const rotina = config.treinos?.[key]
+    const total = rotina?.exercicios?.length || 0
+    setConfirmacao({
+      title: 'Excluir divisão?',
+      message: `"${rotina?.nome || key}" e ${total === 1 ? 'seu exercício' : `seus ${total} exercícios`} saem do plano. Os treinos já registrados continuam no histórico.`,
+      onConfirm: () => deleteRoutine(key),
+    })
+  }
+
+  const pedirExclusaoExercicio = (key, idx) => {
+    const nome = config.treinos?.[key]?.exercicios?.[idx]?.nome
+    setConfirmacao({
+      title: 'Excluir exercício?',
+      message: `"${nome || 'Este exercício'}" sai desta divisão. Os treinos já registrados continuam no histórico.`,
+      onConfirm: () => deleteExercise(key, idx),
+    })
+  }
+
   const deleteRoutine = async (key) => {
     const n = { ...config, treinos: { ...config.treinos } }
     delete n.treinos[key]
@@ -183,20 +220,42 @@ export default function Configuracao({ abaInicial }) {
 
   const addExercise = async (key) => {
     const n = { ...config, treinos: { ...config.treinos } }
-    const exercicios = [...(n.treinos[key].exercicios || []), { nome: 'Novo', base_top: 20, meta_reps: '8-10', descanso_segundos: 90 }]
+    const exercicios = [...(n.treinos[key].exercicios || []), { id: novoIdExercicio(), nome: 'Novo', base_top: 20, meta_reps: '8-10', descanso_segundos: 90, tem_aquecimento: false }]
     n.treinos[key] = { ...n.treinos[key], exercicios }
     pendingFocusRef.current = { type: 'exercise', key: `${key}:${exercicios.length - 1}` }
     setConfig(n)
     try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso('Exercício adicionado.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
   }
 
-  const updateExercise = async (key, idx, campo, valor) => {
+  // Edição de campo salva pelo autosave (600 ms depois da última tecla), não a cada tecla.
+  const updateExercise = (key, idx, campo, valor) => {
     const n = { ...config, treinos: { ...config.treinos } }
     const exs = [...(n.treinos[key].exercicios || [])]
     exs[idx] = { ...exs[idx], [campo]: valor }
     n.treinos[key] = { ...n.treinos[key], exercicios: exs }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    setAlteracaoPendente(true)
+  }
+
+  const moveExercise = async (key, idx, delta) => {
+    const atuais = config.treinos[key]?.exercicios || []
+    const destino = idx + delta
+    if (destino < 0 || destino >= atuais.length) return
+    const exercicios = reordenarExercicios(atuais, idx, destino)
+    const n = { ...config, treinos: { ...config.treinos, [key]: { ...config.treinos[key], exercicios } } }
+    // O foco acompanha o exercício; na ponta da lista, o botão usado fica desativado.
+    const direcao = delta < 0 ? (destino === 0 ? 'down' : 'up') : (destino === exercicios.length - 1 ? 'up' : 'down')
+    pendingFocusRef.current = { type: 'exercise', key: `${key}:${destino}`, selector: `[data-move="${direcao}"]` }
+    setCampoBuscaExercicio(null)
+    setConfig(n)
+    try {
+      await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n))
+      mostrarSucesso(`"${atuais[idx].nome || 'Exercício'}" agora é o ${destino + 1}º exercício.`)
+    } catch (err) {
+      pendingFocusRef.current = null
+      setConfig(config)
+      setErro('Erro ao salvar a nova ordem: ' + err.message)
+    }
   }
 
   const abrirCatalogoExercicio = async (campo) => {
@@ -224,31 +283,47 @@ export default function Configuracao({ abaInicial }) {
   const updateMeta = (campo, valor) => {
     const n = { ...config, metas: { ...(config.metas || {}), [campo]: valor } }
     setConfig(n)
-    setNutricaoAlterada(true)
+    setAlteracaoPendente(true)
   }
 
   const updateRefeicao = (idx, campo, valor) => {
     const n = { ...config, refeicoes: (config.refeicoes || []).map((r, i) => i === idx ? { ...r, [campo]: valor } : r) }
     setConfig(n)
-    setNutricaoAlterada(true)
+    setAlteracaoPendente(true)
   }
 
-  // Debounced save for metas and refeicoes (600ms after last change)
+  // Debounced save for treinos, metas and refeicoes (600ms after last change)
   const configRef = useRef(config)
   useEffect(() => { configRef.current = config }, [config])
+  const pendenteRef = useRef(false)
+  useEffect(() => { pendenteRef.current = alteracaoPendente }, [alteracaoPendente])
   useEffect(() => {
-    if (loading || !nutricaoAlterada || loadedUidRef.current !== user.uid) return
+    if (loading || !alteracaoPendente || loadedUidRef.current !== user.uid) return
     const timer = setTimeout(async () => {
       try {
         const atual = configRef.current
+        // Nome em branco é digitação em andamento: espera o nome antes de gravar.
+        if (exercicioSemNome(atual)) return
         await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(atual))
-        if (mountedRef.current && configRef.current === atual) setNutricaoAlterada(false)
+        if (mountedRef.current && configRef.current === atual) setAlteracaoPendente(false)
       } catch (err) {
         if (mountedRef.current) setErro('Erro ao salvar: ' + err.message)
       }
     }, 600)
     return () => clearTimeout(timer)
-  }, [config.metas, config.refeicoes, user.uid, loading, nutricaoAlterada])
+  }, [config.treinos, config.metas, config.refeicoes, user.uid, loading, alteracaoPendente])
+
+  // Sair da tela antes dos 600 ms não pode descartar a última edição.
+  useEffect(() => {
+    const uid = user.uid
+    return () => {
+      if (!pendenteRef.current) return
+      pendenteRef.current = false
+      const atual = configRef.current
+      if (exercicioSemNome(atual)) return
+      try { setDoc(CONFIG_REF(uid), prepararConfigParaSalvar(atual)).catch(() => {}) } catch { /* Valor inválido não é gravado. */ }
+    }
+  }, [user.uid])
 
   const addRefeicao = async () => {
     const id = gerarIdRefeicao()
@@ -315,7 +390,7 @@ export default function Configuracao({ abaInicial }) {
     } else {
       const n = { ...atual, refeicoes: (atual.refeicoes || []).map((r, i) => i === targetIdx ? { ...r, kcal: macros.kcal, proteinas: macros.proteinas, carboidratos: macros.carboidratos, gorduras: macros.gorduras, fibras: macros.fibras } : r) }
       setConfig(n)
-      setNutricaoAlterada(true)
+      setAlteracaoPendente(true)
       mostrarSucesso(`Macros de "${n.refeicoes[targetIdx].nome}" preenchidos. Salvamento automático em andamento.`)
     }
     setAiLoadingIdx(null)
@@ -356,8 +431,9 @@ export default function Configuracao({ abaInicial }) {
 
   const totalTreinos = Object.keys(config.treinos || {}).length
   const totalRefeicoes = (config.refeicoes || []).length
-  const nomesExerciciosConfig = Object.values(config.treinos || {})
-    .flatMap(treino => (treino?.exercicios || []).map(exercicio => exercicio?.nome).filter(Boolean))
+  // O campo em edição fica de fora: o texto que a pessoa está digitando não é uma sugestão.
+  const nomesExerciciosConfig = (campoIgnorado) => Object.entries(config.treinos || {})
+    .flatMap(([key, treino]) => (treino?.exercicios || []).map((exercicio, idx) => `${key}:${idx}` === campoIgnorado ? null : exercicio?.nome).filter(Boolean))
 
   return (
     <div className="settings-page flex flex-col gap-4 pt-2 pb-6">
@@ -480,11 +556,11 @@ export default function Configuracao({ abaInicial }) {
                           const textoBusca = String(ex.nome || '').trim()
                           const queryUtil = textoBusca && textoBusca.toLocaleLowerCase('pt-BR') !== 'novo'
                           const opcoes = buscaAtiva && queryUtil && moduloCatalogoExercicios
-                            ? moduloCatalogoExercicios.buscarExercicios(textoBusca, nomesExerciciosConfig)
+                            ? moduloCatalogoExercicios.buscarExercicios(textoBusca, nomesExerciciosConfig(campoId))
                             : []
 
                           return (
-                        <div key={idx} ref={node => { const refKey = `${key}:${idx}`; if (node) exerciseRefs.current[refKey] = node; else delete exerciseRefs.current[refKey] }} className="settings-exercise">
+                        <div key={exerciseId(ex, idx)} ref={node => { const refKey = `${key}:${idx}`; if (node) exerciseRefs.current[refKey] = node; else delete exerciseRefs.current[refKey] }} className="settings-exercise">
                           <div className="settings-exercise-top">
                             <span className="settings-exercise-number">{idx + 1}</span>
                             <div className="settings-exercise-name">
@@ -524,7 +600,11 @@ export default function Configuracao({ abaInicial }) {
                                 </div>
                               )}
                             </div>
-                            <button type="button" onClick={() => deleteExercise(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome}`}><Trash size={15} /></button>
+                            <div className="settings-exercise-order" role="group" aria-label={`Ordem de ${ex.nome || 'exercício'}`}>
+                              <button type="button" data-move="up" onClick={() => moveExercise(key, idx, -1)} disabled={idx === 0} className="settings-icon-button" aria-label={`Mover ${ex.nome || 'exercício'} para cima`} title="Mover para cima"><ArrowUp size={15} /></button>
+                              <button type="button" data-move="down" onClick={() => moveExercise(key, idx, 1)} disabled={idx === exerciseCount - 1} className="settings-icon-button" aria-label={`Mover ${ex.nome || 'exercício'} para baixo`} title="Mover para baixo"><ArrowDown size={15} /></button>
+                            </div>
+                            <button type="button" onClick={() => pedirExclusaoExercicio(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome || 'exercício'}`}><Trash size={15} /></button>
                           </div>
                           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                             <label className="settings-field"><span>Base Top (kg)</span><input type="number" value={ex.base_top} onChange={e => updateExercise(key, idx, 'base_top', Number(e.target.value))} inputMode="decimal" /></label>
@@ -533,11 +613,15 @@ export default function Configuracao({ abaInicial }) {
                               {[30, 60, 90, 120, 180, 300].map(segundos => <option key={segundos} value={segundos}>{segundos < 60 ? `${segundos}s` : `${segundos / 60} min`}</option>)}
                             </select></label>
                           </div>
+                          <label className="settings-check">
+                            <input type="checkbox" checked={Boolean(ex.tem_aquecimento)} onChange={e => updateExercise(key, idx, 'tem_aquecimento', e.target.checked)} />
+                            <span>Série de aquecimento antes da preparatória</span>
+                          </label>
                         </div>
                           )
                         })()
                       ))}
-                      <div className="settings-routine-actions"><button type="button" onClick={() => addExercise(key)} className="settings-action settings-action-muted"><Plus size={14} /> Adicionar exercício</button><button type="button" onClick={() => deleteRoutine(key)} className="settings-action settings-action-danger"><Trash size={14} /> Excluir divisão</button></div>
+                      <div className="settings-routine-actions"><button type="button" onClick={() => addExercise(key)} className="settings-action settings-action-muted"><Plus size={14} /> Adicionar exercício</button><button type="button" onClick={() => pedirExclusaoRotina(key)} className="settings-action settings-action-danger"><Trash size={14} /> Excluir divisão</button></div>
                     </div>}
                   </article>
                 )
@@ -584,6 +668,14 @@ export default function Configuracao({ abaInicial }) {
           <button type="button" onClick={() => salvar(config)} disabled={saving} className="settings-save-button settings-save-button-diet"><span>{saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}</span>{saving ? 'Salvando alterações...' : 'Salvar alterações da dieta'}</button>
         </section>
       )}
+
+      <ConfirmModal
+        isOpen={confirmacao !== null}
+        title={confirmacao?.title}
+        message={confirmacao?.message}
+        onConfirm={() => { const acao = confirmacao?.onConfirm; setConfirmacao(null); acao?.() }}
+        onCancel={() => setConfirmacao(null)}
+      />
 
       <div className="settings-footer"><button type="button" onClick={() => signOut(auth)} className="settings-logout"><LogOut size={15} /> Sair da conta</button><span>AkrGym v{import.meta.env.VITE_APP_VERSION || '3.2'} · {new Date().getFullYear()}</span></div>
     </div>

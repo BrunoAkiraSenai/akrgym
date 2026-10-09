@@ -57,15 +57,17 @@ function errosDeDigitação(primeiraPalavra, segundaPalavra) {
 export function nomesDeExerciciosCompativeis(primeiroNome, segundoNome) {
   const primeiro = normalizarNomeExercicio(primeiroNome)
   const segundo = normalizarNomeExercicio(segundoNome)
-  const menor = primeiro.length <= segundo.length ? primeiro : segundo
-  const maior = primeiro.length <= segundo.length ? segundo : primeiro
 
-  if (menor.length === 0) return false
-  if (menor.length === 1) {
-    return maior.length === 1 && menor[0] === maior[0]
+  // Variações ("Supino reto" x "Supino reto na máquina") são exercícios
+  // diferentes, com cargas diferentes: um nome nunca responde pelo outro.
+  if (primeiro.length === 0 || primeiro.length !== segundo.length) return false
+  if (primeiro.length === 1) return primeiro[0] === segundo[0]
+  let erros = 0
+  for (let index = 0; index < primeiro.length; index++) {
+    erros += errosDeDigitação(primeiro[index], segundo[index])
+    if (erros > 1) return false
   }
-  return menor.every((palavra, index) => errosDeDigitação(palavra, maior[index]) < Infinity)
-    && menor.reduce((total, palavra, index) => total + errosDeDigitação(palavra, maior[index]), 0) <= 1
+  return true
 }
 
 export function encontrarNomeExercicioExistente(nome, nomesExistentes = []) {
@@ -99,7 +101,32 @@ export function encontrarExercicioAnterior(historico, nome) {
 
 // Legacy IDs include position to avoid mixing two exercises with the same name.
 export const exerciseId = (ex, index) => ex.id || `legacy:${index}:${ex.nome}`
+export const novoIdExercicio = () => `ex:${crypto.randomUUID()}`
+
+// Fixa o ID que o exercício já usava no histórico. Depois disso ele pode
+// mudar de posição sem perder a identidade.
+export function garantirIdsExercicios(exercicios) {
+  const usados = new Set()
+  return (Array.isArray(exercicios) ? exercicios : []).map((ex, index) => {
+    let id = exerciseId(ex, index)
+    if (usados.has(id)) id = novoIdExercicio()
+    usados.add(id)
+    return ex.id === id ? ex : { ...ex, id }
+  })
+}
+
+export const exercicioUsaRegraAgachamento = ex => !ex?.substituidoDe && normalizarNomeExercicio(ex?.nome).includes('agachamento')
 export const routineFingerprint = routine => JSON.stringify((routine?.exercicios || []).map((ex, index) => [exerciseId(ex, index), ex.nome, ex.meta_reps, ex.base_top, ex.tem_aquecimento, ex.IsAgachamento, ex.nota]))
+
+// Moves the whole exercise (name, load, reps, rest) so nothing is retyped.
+export function reordenarExercicios(exercicios, de, para) {
+  const lista = Array.isArray(exercicios) ? [...exercicios] : []
+  if (!Number.isInteger(de) || !Number.isInteger(para)) return lista
+  if (de === para || de < 0 || para < 0 || de >= lista.length || para >= lista.length) return lista
+  const [movido] = lista.splice(de, 1)
+  lista.splice(para, 0, movido)
+  return lista
+}
 
 export function validDraft(draft, routine) {
   if (!routine || !Array.isArray(draft?.topSetData) || !draft.topSetData.length) return false
@@ -135,7 +162,9 @@ export function prepareSession(routine, history = []) {
     let previous
     for (const session of history) {
       const exercises = session.exercicios || []
-      const exact = exercises.find(item => item.id === id)
+      // O ID só vale enquanto o nome continua sendo o mesmo exercício: renomear
+      // "Puxada" para "Supino" em Configurações não herda a carga da puxada.
+      const exact = exercises.find(item => item.id === id && nomesDeExerciciosCompativeis(item.nome, ex.nome))
       // Match by name only for unambiguous legacy entries.
       const candidates = exercises.filter(item => nomesDeExerciciosCompativeis(item.nome, ex.nome))
       const uniqueName = routine.exercicios.filter(item => nomesDeExerciciosCompativeis(item.nome, ex.nome)).length === 1
@@ -180,8 +209,9 @@ export function createReplacementExercise(ex, nome, token, referenciaAnterior = 
   return {
     ...ex,
     id: reutilizarIdAssociado && exercicioAssociadoId ? exercicioAssociadoId : `substituicao:${originalId}:${token}`,
-    nome: referenciaAnterior?.nome || nome,
-    exercicioAssociadoNome: referenciaAnterior?.nome || nome,
+    // O nome escolhido pela pessoa é o que aparece e o que vai para o histórico.
+    nome,
+    exercicioAssociadoNome: nome,
     exercicioAssociadoId,
     substituidoDe: originalNome,
     substituidoDeId: originalId,

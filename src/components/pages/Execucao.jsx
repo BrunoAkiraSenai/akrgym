@@ -5,7 +5,7 @@ import {
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
-import { exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho } from '../../utils/workoutSession'
+import { exercicioUsaRegraAgachamento, exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 import DescansoTimer from '../DescansoTimer'
 import {
@@ -97,6 +97,8 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
         localStorage.removeItem(STORAGE_KEY)
         return
       }
+      // Mantém o ID da sessão para que finalizar depois de recarregar não duplique o treino.
+      if (typeof draft.sessionId === 'string' && draft.sessionId) sessionId.current = draft.sessionId
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRotinaKey(draft.rotinaKey)
       setTopSetData(normalizarRascunho(draft, rotinaRascunho).topSetData)
@@ -380,6 +382,8 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
         <div className="exec-feedback exec-feedback-info">
           <span><CheckCircle size={14} /> Rascunho recuperado</span>
           <button type="button" onClick={() => {
+            try { localStorage.removeItem(STORAGE_KEY) } catch { /* Sem armazenamento, não há rascunho para apagar. */ }
+            sessionId.current = null
             setRecuperado(false)
             setStep('select')
             setRotinaKey(null)
@@ -419,10 +423,11 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
           {filtroBusca && <button type="button" onClick={() => setFiltroBusca('')} aria-label="Limpar busca"><X size={14} /></button>}
         </div>)
         const cards = exercicios.map(({ ex, originalIndex }) => {
-          // Custom replacements do not have catalog metadata, so keep the generic protocol.
-          const isAgachamento = !ex.substituidoDe && (ex.IsAgachamento || ex.nome?.toLowerCase().includes('agachamento'))
-          const aqPeso = ex.tem_aquecimento && !isAgachamento ? Math.round(ex.ref * 0.6) : null
-          const prepPeso = Math.round(ex.ref * 0.85)
+          // A regra acompanha o nome do exercício, não a posição em que ele foi criado.
+          const isAgachamento = exercicioUsaRegraAgachamento(ex)
+          const refKg = Number(ex.ref) > 0 ? Number(ex.ref) : null
+          const aqPeso = refKg && ex.tem_aquecimento && !isAgachamento ? Math.round(refKg * 0.6) : null
+          const prepPeso = refKg ? Math.round(refKg * 0.85) : null
           const cargaHoje = Number(ex.carga)
           const backoffPeso = cargaHoje > 0
             ? (isAgachamento ? Math.round(cargaHoje * 0.9) : Math.round(cargaHoje * 0.85))
@@ -519,9 +524,11 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
 
               <div className="flex items-center gap-2 text-emerald-400/80 text-[11px] font-mono bg-emerald-500/5 rounded-xl px-3 py-2 border border-emerald-500/10">
                 <Flame size={12} className="shrink-0" />
-                <span>Referência: <strong className="text-emerald-300">{ex.ref}kg</strong>
-                  {ex.repsAnterior ? ` · últ. ${ex.repsAnterior} reps` : ''}
-                </span>
+                {refKg ? (
+                  <span>Referência: <strong className="text-emerald-300">{refKg}kg</strong>
+                    {ex.repsAnterior ? ` · últ. ${ex.repsAnterior} reps` : ''}
+                  </span>
+                ) : <span>Sem referência ainda. A carga de hoje vira a referência do próximo treino.</span>}
               </div>
 
               {ex.nota && (
@@ -542,7 +549,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                       <RefreshCw size={11} className="text-blue-400/70" /> Aquec.
                     </span>
                     <span className="text-neutral-400 font-mono">
-                      {isAgachamento ? 'Barra Olímpica × 10' : `${aqPeso}kg × 10`}
+                      {isAgachamento ? 'Barra Olímpica × 10' : aqPeso ? `${aqPeso}kg × 10` : 'Carga leve × 10'}
                     </span>
                   </div>
                 )}
@@ -551,7 +558,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                   <span className="text-neutral-500 font-mono flex items-center gap-1.5">
                     <Zap size={11} className="text-yellow-400/70" /> Preparatória
                   </span>
-                  <span className="text-neutral-400 font-mono">{prepPeso}kg × 6</span>
+                  <span className="text-neutral-400 font-mono">{prepPeso ? `${prepPeso}kg × 6` : 'Carga moderada × 6'}</span>
                 </div>
 
                 <div className="border-t border-white/5 pt-2 mt-2">
@@ -559,7 +566,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                     <span className="text-emerald-400 font-semibold flex items-center gap-1.5 tracking-tight">
                       <Flame size={13} /> TOP SET
                     </span>
-                    <span className="text-neutral-500 text-[11px] font-mono">superar {ex.ref}kg</span>
+                    {refKg && <span className="text-neutral-500 text-[11px] font-mono">superar {refKg}kg</span>}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="exec-field">

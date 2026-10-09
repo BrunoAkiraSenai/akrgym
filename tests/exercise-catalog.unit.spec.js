@@ -83,3 +83,9 @@ test('busca inclui exercícios particulares salvos nas rotinas do usuário', () 
 test('busca vazia não exibe sugestões antes de a pessoa pesquisar', () => {
   assert.deepEqual(buscarExercicios('   '), [])
 })
+
+test('busca prioriza o exercício cujo nome começa com o termo digitado', () => {
+  const resultados = buscarExercicios('Sup').map(({ nome }) => nome)
+  assert.ok(resultados[0].startsWith('Supino'))
+  assert.ok(!resultados.slice(0, 5).includes('Abdominal supra'))
+})

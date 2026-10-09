@@ -20,3 +20,11 @@ test('salvamento valida sem alterar estado em edição ou perder campos', () => 
   assert.equal(original.refeicoes[0].fibras, '1,5')
   assert.throws(()=>prepararConfigParaSalvar({...original,metas:{...macros,fibras:NaN}}))
 })
+
+test('carga inicial em branco não bloqueia o salvamento do plano', () => {
+  const metas = { kcal: 100, proteinas: 10, carboidratos: 12, gorduras: 1, fibras: 5 }
+  const exercicios = [{ nome: 'Supino', base_top: '' }, { nome: 'Remada', base_top: null }, { nome: 'Rosca' }, { nome: 'Stiff', base_top: '12,5' }]
+  const saved = prepararConfigParaSalvar({ metas, refeicoes: [], treinos: { a: { nome: 'A', exercicios } } })
+  assert.deepEqual(saved.treinos.a.exercicios.map(ex => ex.base_top), [0, 0, 0, 12.5])
+  assert.throws(() => prepararConfigParaSalvar({ metas, refeicoes: [], treinos: { a: { nome: 'A', exercicios: [{ nome: 'Supino', base_top: 'abc' }] } } }))
+})
