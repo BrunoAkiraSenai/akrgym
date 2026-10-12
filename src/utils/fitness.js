@@ -59,6 +59,25 @@ function diasAtivos(lista, agora, inicio, fim) {
   return dias.size
 }
 
+export function calcularSequenciaTreinos(lista = [], agora = new Date(), limiteDias = 90) {
+  const dias = new Set()
+  lista.forEach(treino => {
+    const data = dataTreinoParaDate(treino?.data)
+    if (data) dias.add(inicioDoDia(data).getTime())
+  })
+
+  const hoje = inicioDoDia(agora)
+  if (!dias.has(hoje.getTime())) hoje.setDate(hoje.getDate() - 1)
+  if (!dias.has(hoje.getTime())) return 0
+
+  let sequencia = 0
+  while (sequencia < limiteDias && dias.has(hoje.getTime())) {
+    sequencia++
+    hoje.setDate(hoje.getDate() - 1)
+  }
+  return sequencia
+}
+
 export function calcularRitmoTreino(lista = [], agora = new Date()) {
   // Four active days in a rolling week = 100. Each point uses the same rule.
   // This is an activity indicator, not a training prescription.

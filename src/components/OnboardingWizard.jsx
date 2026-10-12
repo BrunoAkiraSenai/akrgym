@@ -243,7 +243,7 @@ export default function OnboardingWizard({ onComplete }) {
         {erro && <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs" role="alert">{erro}</div>}
 
         <button type="button" onClick={() => setEtapa('perfil')} disabled={salvando}
-          className="card-premium p-5 text-left hover:border-emerald-500/30 transition-all active:scale-[0.97] disabled:opacity-40">
+          className="card-premium p-5 text-left hover:border-emerald-500/30 transition active:scale-[0.97] disabled:opacity-40">
           <div className="flex items-start gap-3">
             <Sparkles size={22} className="text-emerald-400 shrink-0 mt-0.5" />
             <div>
@@ -254,7 +254,7 @@ export default function OnboardingWizard({ onComplete }) {
         </button>
 
         <button type="button" onClick={salvarOpcaoB} disabled={salvando}
-          className="card-premium p-5 text-left hover:border-emerald-500/30 transition-all active:scale-[0.97] disabled:opacity-40">
+          className="card-premium p-5 text-left hover:border-emerald-500/30 transition active:scale-[0.97] disabled:opacity-40">
           <div className="flex items-start gap-3">
             <Zap size={22} className="text-neutral-400 shrink-0 mt-0.5" />
             <div>
@@ -265,7 +265,7 @@ export default function OnboardingWizard({ onComplete }) {
         </button>
 
         <button type="button" onClick={salvarOpcaoC} disabled={salvando}
-          className="card-premium p-5 text-left hover:border-emerald-500/30 transition-all active:scale-[0.97] disabled:opacity-40">
+          className="card-premium p-5 text-left hover:border-emerald-500/30 transition active:scale-[0.97] disabled:opacity-40">
           <div className="flex items-start gap-3">
             <Apple size={22} className="text-cyan-400 shrink-0 mt-0.5" />
             <div>
@@ -292,7 +292,7 @@ export default function OnboardingWizard({ onComplete }) {
         <p className="text-neutral-400 text-xs mb-1">Usamos esta resposta apenas para escolher uma sugestão inicial de treino e dieta.</p>
         {perfis.map(perfil => (
           <button type="button" key={perfil.key} onClick={() => { setPerfilGenero(perfil.key); setEtapa('experiencia') }} aria-pressed={perfilGenero === perfil.key}
-            className={`card-premium p-4 text-left transition-all active:scale-[0.97] ${perfilGenero === perfil.key ? 'border-emerald-500/40' : ''}`}>
+            className={`card-premium p-4 text-left transition active:scale-[0.97] ${perfilGenero === perfil.key ? 'border-emerald-500/40' : ''}`}>
             <span className="text-white font-semibold text-sm">{perfil.label}</span>
             <p className="text-neutral-500 text-xs mt-0.5">{perfil.desc}</p>
           </button>
@@ -310,7 +310,7 @@ export default function OnboardingWizard({ onComplete }) {
         <p className="text-neutral-400 text-xs mb-1">Isso define a quantidade e complexidade dos exercícios</p>
         {['iniciante', 'intermediario', 'avancado'].map(nivel => (
           <button type="button" key={nivel} onClick={() => { setExperience(nivel); setEtapa('objetivo') }}
-            className={`card-premium p-4 text-left transition-all active:scale-[0.97] ${experience === nivel ? 'border-emerald-500/40' : ''}`}>
+            className={`card-premium p-4 text-left transition active:scale-[0.97] ${experience === nivel ? 'border-emerald-500/40' : ''}`}>
             <span className="text-white font-semibold text-sm capitalize">{nivel}</span>
             <p className="text-neutral-500 text-xs mt-0.5">
               {nivel === 'iniciante' ? '3 exercícios por treino' : nivel === 'intermediario' ? '4 exercícios por treino' : '4 exercícios avançados por treino'}
@@ -333,7 +333,7 @@ export default function OnboardingWizard({ onComplete }) {
           { key: 'manter_saude', label: 'Manter Saúde', desc: 'Equilíbrio entre treino e alimentação' },
         ].map(obj => (
           <button type="button" key={obj.key} onClick={() => { setObjetivo(obj.key); setEtapa('revisao') }}
-            className={`card-premium p-4 text-left transition-all active:scale-[0.97] ${objetivo === obj.key ? 'border-emerald-500/40' : ''}`}>
+            className={`card-premium p-4 text-left transition active:scale-[0.97] ${objetivo === obj.key ? 'border-emerald-500/40' : ''}`}>
             <span className="text-white font-semibold text-sm">{obj.label}</span>
             <p className="text-neutral-500 text-xs mt-0.5">{obj.desc}</p>
           </button>

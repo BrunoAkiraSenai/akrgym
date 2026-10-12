@@ -9,53 +9,6 @@ const tabs = [
   { key: 'configurar', label: 'Configurar', icon: Settings },
 ]
 
-/* Partículas flutuantes Aether (≤30) — CSS puro, sem dependências.
-   Geradas após a montagem para manter o render puro. */
-function AetherParticles() {
-  const [particles, setParticles] = useState([])
-
-  useEffect(() => {
-    const colors = ['', 'gold', 'cyan', 'purple']
-    const count = 26
-    // As partículas são geradas após a montagem para não introduzir aleatoriedade no render.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setParticles(
-      Array.from({ length: count }).map((_, i) => ({
-        id: i,
-        left: Math.random() * 100,
-        top: Math.random() * 100,
-        size: 2 + Math.random() * 3,
-        color: colors[i % colors.length],
-        duration: 14 + Math.random() * 14,
-        delay: Math.random() * 12,
-        x: `${(Math.random() - 0.5) * 60}px`,
-        y: `${-40 - Math.random() * 80}px`,
-      }))
-    )
-  }, [])
-
-  return (
-    <div className="aether-particles" aria-hidden="true">
-      {particles.map((p) => (
-        <span
-          key={p.id}
-          className={`aether-particle ${p.color}`}
-          style={{
-            left: `${p.left}%`,
-            top: `${p.top}%`,
-            width: `${p.size}px`,
-            height: `${p.size}px`,
-            '--p-duration': `${p.duration}s`,
-            '--p-delay': `${p.delay}s`,
-            '--p-x': p.x,
-            '--p-y': p.y,
-          }}
-        />
-      ))}
-    </div>
-  )
-}
-
 export default function Layout({ activeTab, onTabChange, children }) {
   const navRef = useRef(null)
   const tabRefs = useRef({})
@@ -92,8 +45,6 @@ export default function Layout({ activeTab, onTabChange, children }) {
 
   return (
     <div className="flex flex-col h-full max-w-full md:max-w-2xl lg:max-w-4xl mx-auto md:my-4 md:h-[calc(100vh-2rem)] relative">
-      <AetherParticles />
-
       <main className="flex-1 overflow-y-auto px-4 sm:px-6 pt-6 pb-28 scrollbar-thin"
         style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))', paddingBottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}>
         {children}
@@ -121,7 +72,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
               aria-current={active ? 'page' : undefined}
               ref={(el) => { tabRefs.current[key] = el }}
               onClick={() => onTabChange(key)}
-              className={`aether-tab flex flex-col items-center justify-center gap-1.5 h-full flex-1 rounded-2xl transition-all active:scale-90 relative z-10 ${
+              className={`aether-tab flex flex-col items-center justify-center gap-1.5 h-full flex-1 rounded-2xl transition active:scale-[0.97] relative z-10 ${
                 active ? 'text-emerald-300' : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
@@ -131,7 +82,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
                 )}
                 <Icon
                   size={active ? 22 : 20}
-                  className={`relative ${active ? 'drop-shadow-[0_0_8px_rgba(244,114,182,0.5)]' : ''}`}
+                  className={`relative ${active ? 'aether-tab-icon-active' : ''}`}
                 />
               </span>
               <span className="aether-tab-label">{label}</span>

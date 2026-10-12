@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcularRitmoTreino, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
+import { calcularRitmoTreino, calcularSequenciaTreinos, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
 import { LIMITS, normalizarNomeAlimentoExtra, parseNumero, sanitizarTexto, truncar } from '../src/utils/validation.js'
 
 test('parseMetaTeto interpreta meta simples e intervalo', () => {
@@ -69,6 +69,21 @@ test('ritmo cai sem sessões, ignora duplicatas e datas futuras, e se recupera',
   assert.deepEqual(calcularRitmoTreino([...past, session(4), session(10), { data: 'invalid' }], now), down)
   assert.equal(calcularRitmoTreino([...past, session(8), session(9)], now).score, 100)
   assert.equal(calcularRitmoTreino([], now).score, 0)
+})
+
+test('sequência de treinos considera hoje ou ontem e respeita o limite do histórico consultado', () => {
+  const agora = new Date(2026, 8, 9, 12)
+  const data = diasAtras => {
+    const dia = new Date(agora)
+    dia.setDate(dia.getDate() - diasAtras)
+    return { data: dia }
+  }
+
+  assert.equal(calcularSequenciaTreinos([data(1), data(2), data(3)], agora), 3)
+  assert.equal(calcularSequenciaTreinos([data(0), data(1), data(3)], agora), 2)
+  assert.equal(calcularSequenciaTreinos([data(2)], agora), 0)
+  assert.equal(calcularSequenciaTreinos(Array.from({ length: 95 }, (_, i) => data(i)), agora), 90)
+  assert.equal(calcularSequenciaTreinos(Array.from({ length: 90 }, (_, i) => data(i + 1)), agora), 90)
 })
 
 test('classificarSessaoTreino prioriza o contexto explícito e reconhece exercícios', () => {

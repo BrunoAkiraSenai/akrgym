@@ -201,7 +201,8 @@ test('notificação solicita permissão e informa o exercício concluído', asyn
     assert.equal(await notificarDescansoConcluido('Supino reto'), true)
     assert.equal(avisos[0].title, 'AkrGym · Descanso concluído')
     assert.match(avisos[0].options.body, /Supino reto/)
-    assert.equal(avisos[0].options.icon, '/favicon.svg')
+    assert.equal(avisos[0].options.icon, '/pwa-192x192.png')
+    assert.equal(avisos[0].options.badge, '/pwa-192x192.png')
     assert.deepEqual(avisos[0].options.vibrate, [120, 60, 120])
   } finally {
     if (janelaAnterior === undefined) delete globalThis.window

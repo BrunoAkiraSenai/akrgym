@@ -416,7 +416,7 @@ export default function Evolucao() {
           role="tab"
           aria-selected={aba === 'treino'}
           onClick={() => setAba('treino')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${
             aba === 'treino' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'
           }`}
         >
@@ -427,7 +427,7 @@ export default function Evolucao() {
           role="tab"
           aria-selected={aba === 'corporal'}
           onClick={() => { setAba('corporal'); if (medidas.length === 0) carregarMedidas() }}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${
             aba === 'corporal' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'
           }`}
         >
@@ -567,7 +567,7 @@ export default function Evolucao() {
               {rotinasDisponiveis.length > 1 && (
                 <div className="relative">
                   <select value={rotinaFiltro} onChange={e => { setRotinaFiltro(e.target.value); setTooltip(null) }}
-                    className="w-full color-scheme-dark bg-neutral-900/70 backdrop-blur-md border border-white/10 text-white p-3 rounded-2xl text-sm appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all">
+                    className="w-full color-scheme-dark bg-neutral-900/70 backdrop-blur-md border border-white/10 text-white p-3 rounded-2xl text-sm appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition">
                     <option value="todas">Todas as rotinas</option>
                     {rotinasDisponiveis.map(id => <option key={id} value={id}>{nomeRotina(id)}</option>)}
                   </select>
@@ -681,7 +681,7 @@ export default function Evolucao() {
                     ))}
                     {chartDims.points.map((p, i) => (
                       <circle key={i} cx={p.x} cy={p.y} r={tooltip === i ? 7 : 5} fill="var(--chart-fill)" stroke={graficoMetrica === 'carga' ? brandColor : accentColor}
-                        strokeWidth="2.5" className="cursor-pointer transition-all"
+                        strokeWidth="2.5" className="cursor-pointer transition"
                         style={{ filter: `drop-shadow(0 0 4px ${brandColor}66)`, transition: 'r 150ms ease-out' }} />
                     ))}
                   </svg>
@@ -762,7 +762,7 @@ export default function Evolucao() {
               <div className="flex items-center gap-2">
                 {editandoId && (
                   <button type="button" onClick={cancelarEdicao}
-                    className="text-neutral-500 hover:text-white flex items-center gap-1 text-xs transition-all active:scale-90">
+                    className="text-neutral-500 hover:text-white flex items-center gap-1 text-xs transition active:scale-[0.97]">
                     <X size={14} /> Cancelar
                   </button>
                 )}
@@ -798,7 +798,7 @@ export default function Evolucao() {
             <div className="mb-2">
               <label htmlFor="medida-data" className="text-[9px] text-neutral-500 uppercase tracking-wider block mb-0.5">Data</label>
               <input id="medida-data" type="date" value={medidaData} onChange={e => setMedidaData(e.target.value)}
-                className="w-full bg-neutral-800 text-white p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all" />
+                className="w-full bg-neutral-800 text-white p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30 transition" />
             </div>
             <div className="grid grid-cols-3 gap-2">
               {CAMPOS_MEDIDA.map(c => (
@@ -807,7 +807,7 @@ export default function Evolucao() {
                   <input id={`medida-${c.key}`} type="text" inputMode="decimal" placeholder="0"
                     value={novaMedida[c.key]}
                     onChange={e => setNovaMedida(p => ({ ...p, [c.key]: e.target.value }))}
-                    className="w-full bg-neutral-800 text-white placeholder-neutral-700 p-3 rounded-xl text-sm text-center outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                    className="w-full bg-neutral-800 text-white placeholder-neutral-700 p-3 rounded-xl text-sm text-center outline-none focus:ring-2 focus:ring-cyan-400/30 transition [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
                 </div>
               ))}
             </div>
@@ -825,7 +825,7 @@ export default function Evolucao() {
               { key: 'tudo', label: 'Tudo' },
             ].map(p => (
               <button type="button" key={p.key} onClick={() => setFiltroPeriodo(p.key)}
-                className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${filtroPeriodo === p.key ? 'tab-active bg-emerald-500/10' : 'text-neutral-500 hover:text-neutral-300'}`}>
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold transition ${filtroPeriodo === p.key ? 'tab-active bg-emerald-500/10' : 'text-neutral-500 hover:text-neutral-300'}`}>
                 {p.label}
               </button>
             ))}
@@ -894,7 +894,7 @@ export default function Evolucao() {
               </span>
               <div className="relative mb-2">
                 <select value={medidaGrafico} onChange={e => setMedidaGrafico(e.target.value)}
-                  className="w-full bg-neutral-800 text-white p-3 rounded-xl text-xs appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition-all">
+                  className="w-full bg-neutral-800 text-white p-3 rounded-xl text-xs appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition">
                   {CAMPOS_MEDIDA.map(c => <option key={c.key} value={c.key}>{c.label} ({c.unidade})</option>)}
                 </select>
               </div>
@@ -999,7 +999,7 @@ export default function Evolucao() {
                         ))}
                         <td className="text-right py-2 pl-2 whitespace-nowrap">
                           <button type="button" onClick={() => editarMedida(m)} aria-label={`Editar medida de ${m.data.toLocaleDateString('pt-BR')}`}
-                            className="text-amber-400/70 hover:text-amber-400 p-1.5 transition-all active:scale-90">
+                            className="text-amber-400/70 hover:text-amber-400 p-1.5 transition active:scale-[0.97]">
                             <Pencil size={14} />
                           </button>
                           <button type="button" onClick={() => deletarMedida(
@@ -1024,7 +1024,7 @@ export default function Evolucao() {
                       </span>
                       <div className="flex items-center gap-1">
                         <button type="button" onClick={() => editarMedida(m)} aria-label={`Editar medida de ${m.data.toLocaleDateString('pt-BR')}`}
-                          className="text-amber-400/70 hover:text-amber-400 p-1.5 transition-all active:scale-90">
+                          className="text-amber-400/70 hover:text-amber-400 p-1.5 transition active:scale-[0.97]">
                           <Pencil size={14} />
                         </button>
                         <button type="button" onClick={() => deletarMedida(

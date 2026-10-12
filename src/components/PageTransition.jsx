@@ -1,52 +1,23 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 
+const ORDEM_TABS = ['home', 'dieta', 'treinar', 'evolucao', 'configurar']
+
+// A tela nova entra na hora, com um deslize curto no sentido da navegação.
+// Esperar a tela antiga sair deixava cada toque na barra com tempo morto.
 export default function PageTransition({ activeTab, children }) {
-  const [exibindo, setExibindo] = useState(children)
-  const [classe, setClasse] = useState('fade-enter-active')
-  const [direcao, setDirecao] = useState(1)
-  const prevTab = useRef(activeTab)
-  const childrenRef = useRef(children)
-  const ordemTabs = useRef(['home', 'dieta', 'treinar', 'evolucao', 'configurar'])
-
-  useEffect(() => {
-    childrenRef.current = children
-  }, [children])
-
-  useEffect(() => {
-    if (prevTab.current === activeTab) return
-    const prevIdx = ordemTabs.current.indexOf(prevTab.current)
-    const nextIdx = ordemTabs.current.indexOf(activeTab)
-    setDirecao(nextIdx >= prevIdx ? 1 : -1)
-    prevTab.current = activeTab
-    setClasse('fade-exit-active')
-    const timer = setTimeout(() => {
-      setExibindo(childrenRef.current)
-      setClasse('fade-enter')
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setClasse('fade-enter-active')
-        })
-      })
-    }, 220)
-    return () => clearTimeout(timer)
-  }, [activeTab])
-
-  // Aplica direção do slide dinamicamente via estilo inline
-  const slide = direcao >= 0 ? '28px' : '-28px'
-  const slideOut = direcao >= 0 ? '-28px' : '28px'
+  const [estado, setEstado] = useState({ tab: activeTab, direcao: 0 })
+  if (estado.tab !== activeTab) {
+    const direcao = ORDEM_TABS.indexOf(activeTab) >= ORDEM_TABS.indexOf(estado.tab) ? 1 : -1
+    setEstado({ tab: activeTab, direcao })
+  }
 
   return (
     <div
-      className={`transition-page ${classe}`}
-      style={
-        classe === 'fade-enter'
-          ? { transform: `translateX(${slide}) scale(0.97)`, opacity: 0 }
-          : classe === 'fade-exit-active'
-            ? { transform: `translateX(${slideOut}) scale(0.97)`, opacity: 0 }
-            : undefined
-      }
+      key={estado.tab}
+      className={`transition-page${estado.direcao ? ' page-enter' : ''}`}
+      style={{ '--page-shift': `${estado.direcao * 12}px` }}
     >
-      {exibindo}
+      {children}
     </div>
   )
 }

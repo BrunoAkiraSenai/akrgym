@@ -31,8 +31,8 @@ export async function notificarDescansoConcluido(exerciseName = '') {
   const options = {
     body: exerciseName ? `${exerciseName} · hora da próxima série.` : 'Hora da próxima série.',
     tag: 'akrgym-descanso-concluido',
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
     renotify: true,
     silent: false,
     vibrate: [120, 60, 120],

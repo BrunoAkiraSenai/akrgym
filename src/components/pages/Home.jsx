@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  collection, doc, getDoc, getDocs, query, orderBy, limit, where,
+  collection, doc, getCountFromServer, getDoc, getDocs, query, orderBy, limit, where,
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
-import { calcularRitmoTreino, classificarSessaoTreino, dataTreinoParaDate } from '../../utils/fitness'
+import { calcularRitmoTreino, calcularSequenciaTreinos, classificarSessaoTreino, dataTreinoParaDate } from '../../utils/fitness'
 import { Activity, ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Dumbbell, Flame, Minus, Play, Trophy } from 'lucide-react'
 import DescansoTimer from '../DescansoTimer'
 
@@ -144,26 +144,26 @@ export default function Home({ onStartWorkout }) {
   const [treinos, setTreinos] = useState([])
   const [treinosConfig, setTreinosConfig] = useState({})
 
-  const hoje = useMemo(() => new Date(), [])
+  const [hoje, setHoje] = useState(() => new Date())
 
-  const calcularStreak = (listaTreinos) => {
-    if (!listaTreinos || listaTreinos.length === 0) return 0
-    const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0)
-    const datas = new Set()
-    for (const treino of listaTreinos) {
-      const data = dataTreinoParaDate(treino.data)
-      if (!data) continue
-      data.setHours(0, 0, 0, 0)
-      datas.add(data.getTime())
+  useEffect(() => {
+    const atualizarDia = () => {
+      const agora = new Date()
+      setHoje(atual => (
+        atual.getFullYear() === agora.getFullYear()
+        && atual.getMonth() === agora.getMonth()
+        && atual.getDate() === agora.getDate()
+          ? atual
+          : agora
+      ))
     }
-    let streak = 0
-    let dia = inicioHoje.getTime()
-    while (datas.has(dia)) {
-      streak++
-      dia -= 86400000
+    const intervalo = window.setInterval(atualizarDia, 60_000)
+    document.addEventListener('visibilitychange', atualizarDia)
+    return () => {
+      window.clearInterval(intervalo)
+      document.removeEventListener('visibilitychange', atualizarDia)
     }
-    return streak
-  }
+  }, [])
 
   const carregarDados = useCallback(async () => {
     setLoading(true)
@@ -171,10 +171,15 @@ export default function Home({ onStartWorkout }) {
     try {
       if (!db) { setErro('Firestore não inicializado.'); setLoading(false); return }
       const ref = collection(db, 'users', user.uid, 'historico_treinos')
-      const [ultimoSnap, totalSnap, semanalSnap] = await Promise.all([
-        getDocs(query(ref, orderBy('data', 'desc'), limit(1))),
-        getDocs(ref),
-        getDocs(query(ref, where('data', '>=', inicioSemana(hoje)), where('data', '<=', fimSemana(hoje)))),
+      const inicioHistorico = new Date(hoje)
+      inicioHistorico.setHours(0, 0, 0, 0)
+      inicioHistorico.setDate(inicioHistorico.getDate() - 90)
+      const fimHistorico = new Date(hoje)
+      fimHistorico.setHours(23, 59, 59, 999)
+      const [ultimoSnap, totalSnap, recentesSnap] = await Promise.all([
+        getDocs(query(ref, where('data', '<=', fimHistorico), orderBy('data', 'desc'), limit(1))),
+        getCountFromServer(ref),
+        getDocs(query(ref, where('data', '>=', inicioHistorico), where('data', '<=', fimHistorico), orderBy('data', 'desc'))),
       ])
       let configTreinos = {}
       try {
@@ -185,14 +190,17 @@ export default function Home({ onStartWorkout }) {
       }
       if (!ultimoSnap.empty) setUltimoTreino({ id: ultimoSnap.docs[0].id, ...ultimoSnap.docs[0].data() })
       else setUltimoTreino(null)
-      setTotalTreinos(totalSnap.size)
+      setTotalTreinos(totalSnap.data().count)
+      const treinosRecentes = recentesSnap.docs.map(d => d.data())
       const dias = new Set()
-      semanalSnap.docs.forEach(d => {
-        const data = dataTreinoParaDate(d.data().data)
-        if (data) dias.add(data.getDay())
+      const inicioDaSemana = inicioSemana(hoje).getTime()
+      const fimDaSemana = Math.min(fimSemana(hoje).getTime(), new Date(hoje).setHours(23, 59, 59, 999))
+      treinosRecentes.forEach(treino => {
+        const data = dataTreinoParaDate(treino.data)
+        if (data && data.getTime() >= inicioDaSemana && data.getTime() <= fimDaSemana) dias.add(data.getDay())
       })
       setDiasComTreino([...dias])
-      setTreinos(totalSnap.docs.map(d => d.data()))
+      setTreinos(treinosRecentes)
       setTreinosConfig(configTreinos)
     } catch (err) { setErro(err.message) }
     setLoading(false)
@@ -203,7 +211,7 @@ export default function Home({ onStartWorkout }) {
   useEffect(() => { carregarDados() }, [carregarDados])
 
   const dataTreino = dataTreinoParaDate(ultimoTreino?.data)
-  const streak = calcularStreak(treinos)
+  const streak = calcularSequenciaTreinos(treinos, hoje)
   const ritmo = useMemo(() => calcularRitmoTreino(treinos, hoje), [treinos, hoje])
   const sessoesNaSemana = diasComTreino.length
   const sessao = useMemo(() => routineData(ultimoTreino, treinosConfig), [ultimoTreino, treinosConfig])
@@ -238,12 +246,12 @@ export default function Home({ onStartWorkout }) {
           <div className="home-stat-label"><Flame size={14} /> Ritmo atual</div>
           <div className="home-rhythm-content">
             <div>
-              <strong>{loading ? <LoadingValue /> : streak}</strong>
+              <strong>{loading ? <LoadingValue /> : streak === 90 ? '90+' : streak}</strong>
               <span>{streak === 1 ? 'dia seguido' : 'dias seguidos'}</span>
             </div>
             <RhythmChart points={ritmo.pontos} loading={loading} score={ritmo.score} variacao={ritmo.variacao} />
           </div>
-          <span className="home-rhythm-note" title="Cada ponto mede dias ativos nos 7 dias anteriores; 4 dias ativos = 100%. A tendência compara hoje com 7 dias atrás.">Ritmo semanal · histórico de 14 dias</span>
+          <span className="home-rhythm-note" title="Cada ponto mede dias ativos nos 7 dias anteriores; 4 dias ativos = 100%. A tendência compara a semana atual com a anterior.">Ritmo: últimos 14 dias</span>
         </article>
 
         <article className="home-stat home-history-card">

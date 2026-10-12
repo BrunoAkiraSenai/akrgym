@@ -8,6 +8,7 @@ import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
 import { buildUserDataExport, formatExportFilename } from '../../utils/exportData'
 import { prepararConfigParaSalvar } from '../../utils/configValidation'
+import { focusTabWithArrowKey } from '../../utils/rovingTabs'
 import { exerciseId, garantirIdsExercicios, novoIdExercicio, reordenarExercicios } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 
@@ -258,6 +259,12 @@ export default function Configuracao({ abaInicial }) {
     }
   }
 
+  const limparNomeExercicio = (key, idx, campoId) => {
+    setCampoBuscaExercicio(campoId)
+    void updateExercise(key, idx, 'nome', '')
+    exerciseRefs.current[`${key}:${idx}`]?.querySelector('.settings-exercise-name input')?.focus()
+  }
+
   const abrirCatalogoExercicio = async (campo) => {
     setCampoBuscaExercicio(campo)
     setErroCatalogoExercicios(null)
@@ -446,64 +453,11 @@ export default function Configuracao({ abaInicial }) {
         <div className="settings-header-mark" aria-hidden="true"><ShieldCheck size={19} /></div>
       </header>
 
-      <div className="settings-account card-premium p-4">
-        <div className="settings-account-avatar"><UserCircle size={24} /></div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-white">{user.isAnonymous ? 'Visitante' : user.email}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
-            <span className={`settings-status ${user.isAnonymous ? 'settings-status-warning' : 'settings-status-success'}`}>
-              <span className="settings-status-dot" /> {user.isAnonymous ? 'Conta anônima' : 'Conta sincronizada'}
-            </span>
-            <span className="font-mono text-white/30">UID {user.uid.slice(0, 8)}...</span>
-          </div>
-        </div>
-        <button type="button" onClick={() => signOut(auth)} className="settings-account-action" title="Sair da conta">
-          <LogOut size={15} /> <span className="hidden sm:inline">Sair</span>
-        </button>
-      </div>
-
-      <section className="card-premium flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="exportar-dados-heading">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="settings-account-avatar"><Download size={18} /></div>
-          <div className="min-w-0">
-            <h2 id="exportar-dados-heading" className="text-sm font-semibold text-white">Seus dados</h2>
-            <p className="mt-1 text-xs leading-relaxed text-neutral-500">Baixe uma cópia local da sua configuração, treinos, diário alimentar e medidas.</p>
-          </div>
-        </div>
-        <button type="button" onClick={exportarDados} disabled={exportando} className="settings-action settings-action-outline shrink-0 self-stretch sm:self-auto">
-          {exportando ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
-          {exportando ? 'Preparando...' : 'Exportar JSON'}
-        </button>
-      </section>
-
-      <div className="card-premium space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <Palette size={16} className="text-emerald-400" />
-          <span className="section-label">Aparência</span>
-        </div>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-          {THEMES.map((t) => (
-            <button type="button" key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name} aria-pressed={themeId === t.id}>
-              <div className="theme-swatch-preview" style={{ background: t.previewBg || t.bgDeep, color: t.mode === 'light' ? '#2b1a15' : '#ffffff', boxShadow: `inset 0 0 0 1px ${t.brand[500]}44` }}>
-                <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
-                <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
-              </div>
-              <div className="theme-swatch-dots justify-center">
-                <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
-                <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
-                <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
-              </div>
-              <span className="text-[10px] font-semibold text-neutral-300 block leading-tight">{t.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="settings-tabs" role="tablist" aria-label="Seções de configuração">
-        <button type="button" role="tab" aria-selected={aba === 'treinos'} onClick={() => setAba('treinos')} className={`settings-tab ${aba === 'treinos' ? 'settings-tab-active' : ''}`}>
+        <button id="settings-tab-treinos" type="button" role="tab" aria-controls="settings-panel-treinos" aria-selected={aba === 'treinos'} tabIndex={aba === 'treinos' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba('treinos')} className={`settings-tab ${aba === 'treinos' ? 'settings-tab-active' : ''}`}>
           <Dumbbell size={15} /> <span>Treinos</span><small>{totalTreinos}</small>
         </button>
-        <button type="button" role="tab" aria-selected={aba === 'dieta'} onClick={() => setAba('dieta')} className={`settings-tab ${aba === 'dieta' ? 'settings-tab-active' : ''}`}>
+        <button id="settings-tab-dieta" type="button" role="tab" aria-controls="settings-panel-dieta" aria-selected={aba === 'dieta'} tabIndex={aba === 'dieta' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba('dieta')} className={`settings-tab ${aba === 'dieta' ? 'settings-tab-active' : ''}`}>
           <Apple size={15} /> <span>Dieta</span><small>{totalRefeicoes}</small>
         </button>
       </div>
@@ -511,6 +465,7 @@ export default function Configuracao({ abaInicial }) {
       {erro && <div className="settings-feedback settings-feedback-error" role="alert"><AlertTriangle size={16} /><span>{erro}</span><button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso"><X size={14} /></button></div>}
       {sucesso && <div className="settings-feedback settings-feedback-success" role="status" aria-live="polite"><CheckCircle2 size={16} /><span>{sucesso}</span></div>}
 
+      <div role="tabpanel" id={aba === 'treinos' ? 'settings-panel-treinos' : 'settings-panel-dieta'} aria-labelledby={aba === 'treinos' ? 'settings-tab-treinos' : 'settings-tab-dieta'} tabIndex={0}>
       {loading ? (
         <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
       ) : !configCarregada ? (
@@ -552,6 +507,7 @@ export default function Configuracao({ abaInicial }) {
                         (() => {
                           const campoId = `${key}:${idx}`
                           const listId = `catalogo-exercicio-${encodeURIComponent(key)}-${idx}`
+                          const inputId = `nome-exercicio-${encodeURIComponent(key)}-${idx}`
                           const buscaAtiva = campoBuscaExercicio === campoId
                           const textoBusca = String(ex.nome || '').trim()
                           const queryUtil = textoBusca && textoBusca.toLocaleLowerCase('pt-BR') !== 'novo'
@@ -564,16 +520,26 @@ export default function Configuracao({ abaInicial }) {
                           <div className="settings-exercise-top">
                             <span className="settings-exercise-number">{idx + 1}</span>
                             <div className="settings-exercise-name">
-                              <label className="settings-field settings-field-grow">
-                                <span>Exercício</span>
-                                <input type="text" value={ex.nome} role="combobox" aria-autocomplete="list"
-                                  aria-expanded={buscaAtiva} aria-controls={listId}
-                                  onFocus={() => { void abrirCatalogoExercicio(campoId) }}
-                                  onBlur={() => window.setTimeout(() => {
-                                    setCampoBuscaExercicio(atual => atual === campoId ? null : atual)
-                                  }, 150)}
-                                  onChange={e => { void updateExercise(key, idx, 'nome', e.target.value) }} />
-                              </label>
+                              <div className="settings-field settings-field-grow">
+                                <label className="settings-exercise-field-label" htmlFor={inputId}>Exercício</label>
+                                <div className="settings-exercise-input-wrap">
+                                  <input id={inputId} type="text" value={ex.nome} role="combobox" aria-autocomplete="list"
+                                    aria-expanded={buscaAtiva} aria-controls={listId}
+                                    onFocus={() => { void abrirCatalogoExercicio(campoId) }}
+                                    onBlur={() => window.setTimeout(() => {
+                                      const nomeField = exerciseRefs.current[`${key}:${idx}`]?.querySelector('.settings-exercise-name')
+                                      if (nomeField?.contains(document.activeElement)) return
+                                      setCampoBuscaExercicio(atual => atual === campoId ? null : atual)
+                                    }, 150)}
+                                    onChange={e => { void updateExercise(key, idx, 'nome', e.target.value) }} />
+                                  {ex.nome && <button type="button" className="settings-exercise-clear"
+                                    aria-label={`Limpar nome do exercício ${ex.nome}`} title="Limpar campo"
+                                    onMouseDown={e => e.preventDefault()}
+                                    onClick={() => limparNomeExercicio(key, idx, campoId)}>
+                                    <X size={13} aria-hidden="true" />
+                                  </button>}
+                                </div>
+                              </div>
                               {buscaAtiva && (
                                 <div id={listId} className="settings-exercise-catalog" role="listbox" aria-label={`Variações de ${textoBusca || 'exercício'}`}>
                                   {catalogoExerciciosCarregando && !moduloCatalogoExercicios ? (
@@ -668,6 +634,63 @@ export default function Configuracao({ abaInicial }) {
           <button type="button" onClick={() => salvar(config)} disabled={saving} className="settings-save-button settings-save-button-diet"><span>{saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}</span>{saving ? 'Salvando alterações...' : 'Salvar alterações da dieta'}</button>
         </section>
       )}
+      </div>
+
+      <details className="settings-utilities card-premium">
+        <summary>Conta, dados e aparência <ChevronDown size={17} aria-hidden="true" /></summary>
+        <div className="settings-utilities-content">
+          <div className="settings-account">
+            <div className="settings-account-avatar"><UserCircle size={24} /></div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-white">{user.isAnonymous ? 'Visitante' : user.email}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span className={`settings-status ${user.isAnonymous ? 'settings-status-warning' : 'settings-status-success'}`}>
+                  <span className="settings-status-dot" /> {user.isAnonymous ? 'Conta anônima' : 'Conta sincronizada'}
+                </span>
+                <span className="font-mono text-white/50">UID {user.uid.slice(0, 8)}...</span>
+              </div>
+            </div>
+            <button type="button" onClick={() => signOut(auth)} className="settings-account-action" title="Sair da conta">
+              <LogOut size={15} /> <span className="hidden sm:inline">Sair</span>
+            </button>
+          </div>
+
+          <section className="settings-export card-premium" aria-labelledby="exportar-dados-heading">
+            <div className="settings-account-avatar"><Download size={18} /></div>
+            <div className="min-w-0 flex-1">
+              <h2 id="exportar-dados-heading" className="text-sm font-semibold text-white">Seus dados</h2>
+              <p className="mt-1 text-xs leading-relaxed text-neutral-500">Baixe uma cópia local da sua configuração, treinos, diário alimentar e medidas.</p>
+            </div>
+            <button type="button" onClick={exportarDados} disabled={exportando} className="settings-action settings-action-outline shrink-0">
+              {exportando ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+              {exportando ? 'Preparando...' : 'Exportar JSON'}
+            </button>
+          </section>
+
+          <div className="settings-appearance">
+            <div className="flex items-center gap-2">
+              <Palette size={16} className="text-emerald-400" />
+              <span className="section-label">Aparência</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {THEMES.map((t) => (
+                <button type="button" key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name} aria-pressed={themeId === t.id}>
+                  <div className="theme-swatch-preview" style={{ background: t.previewBg || t.bgDeep, color: t.mode === 'light' ? '#2b1a15' : '#ffffff', boxShadow: `inset 0 0 0 1px ${t.brand[500]}44` }}>
+                    <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
+                    <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
+                  </div>
+                  <div className="theme-swatch-dots justify-center">
+                    <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
+                    <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
+                    <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
+                  </div>
+                  <span className="text-xs font-semibold text-neutral-300 block leading-tight">{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </details>
 
       <ConfirmModal
         isOpen={confirmacao !== null}

@@ -8,6 +8,7 @@ import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
 import { LIMITS, normalizarNomeAlimentoExtra, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
+import { focusTabWithArrowKey } from '../../utils/rovingTabs'
 import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Copy, Droplets, Dumbbell, Flame, Leaf, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
 import { diaryText } from '../../utils/dietDiary'
 
@@ -455,7 +456,6 @@ export default function Dieta({ onIrParaConfig }) {
 
   const hojeData = new Date()
   const podeAvancar = mesAtual.ano < hojeData.getFullYear() || (mesAtual.ano === hojeData.getFullYear() && mesAtual.mes < hojeData.getMonth() + 1)
-
   // Valores animados para a tabela "Progresso Hoje" — contam suavemente de
   // "o que está sendo exibido" até o novo total quando o usuário confirma
   // uma refeição (ou adiciona um extra). A barra (width) já anima via CSS.
@@ -489,7 +489,7 @@ export default function Dieta({ onIrParaConfig }) {
             <span>{toast.msg}</span>
             {toast.acao && (
               <button onClick={() => { toast.acao(); setToast(null) }}
-                className="bg-white/10 hover:bg-white/20 text-white font-bold px-3 py-1 rounded-lg text-[10px] transition-all active:scale-90">
+                className="bg-white/10 hover:bg-white/20 text-white font-bold px-3 py-1 rounded-lg text-[10px] transition active:scale-[0.97]">
                 Desfazer
               </button>
             )}
@@ -511,10 +511,10 @@ export default function Dieta({ onIrParaConfig }) {
       </header>
 
       <div className="diet-tabs" role="tablist" aria-label="Visões da dieta">
-        <button type="button" role="tab" aria-selected={aba === 'diario'} onClick={() => setAba('diario')}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'diario' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Diário</button>
-        <button type="button" role="tab" aria-selected={aba === 'estatisticas'} onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes) }}
-          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'estatisticas' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
+        <button id="diet-tab-diario" type="button" role="tab" aria-controls="diet-panel-diario" aria-selected={aba === 'diario'} tabIndex={aba === 'diario' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba('diario')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${aba === 'diario' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Diário</button>
+        <button id="diet-tab-estatisticas" type="button" role="tab" aria-controls="diet-panel-estatisticas" aria-selected={aba === 'estatisticas'} tabIndex={aba === 'estatisticas' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes) }}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${aba === 'estatisticas' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
       </div>
 
       {erro && (
@@ -522,7 +522,7 @@ export default function Dieta({ onIrParaConfig }) {
           <span className="text-red-400 text-xs">{erro}</span>
           <button
             onClick={() => setErro(null)}
-            className="text-red-400 hover:text-red-300 transition-all ml-2 shrink-0"
+            className="text-red-400 hover:text-red-300 transition ml-2 shrink-0"
             aria-label="Fechar erro"
           >
             ✕
@@ -531,15 +531,16 @@ export default function Dieta({ onIrParaConfig }) {
       )}
 
       {aba === 'diario' ? (
-        loading ? (
-          <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
-        ) : !hoje || !baseReady ? <p role="status">Não foi possível preparar o diário. Reabra esta aba para tentar novamente.</p> : (
-          <>
+        <section className="diet-tab-panel" role="tabpanel" id="diet-panel-diario" aria-labelledby="diet-tab-diario" tabIndex={0}>
+          {loading ? (
+            <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
+          ) : !hoje || !baseReady ? <p role="status">Não foi possível preparar o diário. Reabra esta aba para tentar novamente.</p> : (
+            <>
             {dataAtiva !== hojeId() && (
               <div className="diet-history-banner">
                 <span><CalendarDays size={14} /> Editando o histórico de {new Date(dataAtiva + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                 <button type="button" onClick={() => setDataAtiva(hojeId())}
-                  className="text-cyan-400/70 hover:text-cyan-400 text-[11px] font-semibold bg-cyan-500/10 px-3 py-1.5 rounded-lg transition-all active:scale-90">
+                  className="text-cyan-400/70 hover:text-cyan-400 text-[11px] font-semibold bg-cyan-500/10 px-3 py-1.5 rounded-lg transition active:scale-[0.97]">
                   Voltar para Hoje
                 </button>
               </div>
@@ -589,7 +590,7 @@ export default function Dieta({ onIrParaConfig }) {
               const MealIcon = iconeRefeicao(tipoRefeicao(ref.nome))
 
               return (
-                <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`diet-meal-card card-premium p-4 space-y-2 transition-all ${
+                <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`diet-meal-card card-premium p-4 space-y-2 transition ${
                   eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'opacity-40' : ''
                 }`}>
                   <div className="diet-meal-head">
@@ -621,14 +622,14 @@ export default function Dieta({ onIrParaConfig }) {
                   <div className="flex items-center gap-2 pt-1">
                     <button type="button" onClick={() => confirmar(ref.id)}
                       aria-label={eLimpo ? 'Desfazer conclusão' : 'Confirmar refeição'}
-                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
+                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition active:scale-[0.97] ${
                         eLimpo ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-emerald-500/30'
                       }`}>
                       {eLimpo ? <><Check size={14} /> Concluído</> : <><CircleCheck size={14} /> Confirmar</>}
                     </button>
                     <button type="button" onClick={() => pular(ref.id)}
                       aria-label={ePulado ? 'Desfazer pulo' : 'Pular refeição'}
-                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all active:scale-95 ${
+                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition active:scale-[0.97] ${
                         ePulado ? 'bg-red-500/20 text-red-400 border border-red-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-red-500/30'
                       }`}>
                       {ePulado ? <><CircleX size={13} /> Pulado</> : <><SkipForward size={13} /> Pular</>}
@@ -741,13 +742,13 @@ export default function Dieta({ onIrParaConfig }) {
                   <rect x="0.75" y="0.75" width="calc(100% - 1.5px)" height="calc(100% - 1.5px)" rx="15" pathLength="100" />
                 </svg>
               )}
-              <div className="diet-ai-head"><span className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Analisar alimento com IA</span><span className={`diet-ai-helper ${aiLoading ? 'diet-ai-helper-loading' : ''}`} aria-live="polite">{aiLoading ? 'Processando sua descrição...' : 'Revise antes de adicionar'}</span></div>
-              <textarea rows={2} maxLength={LIMITS.textoIA}
+              <div className="diet-ai-head"><span id="diet-ai-title" className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Analisar alimento com IA</span><span className={`diet-ai-helper ${aiLoading ? 'diet-ai-helper-loading' : ''}`} aria-live="polite">{aiLoading ? 'Processando sua descrição...' : 'Revise antes de adicionar'}</span></div>
+              <textarea aria-label="Descreva o alimento ou refeição que consumiu" rows={2} maxLength={LIMITS.textoIA}
                 placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
                 value={aiInput} onChange={e => { ++formVersion.current; setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA)) }}
                 className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30 resize-none" />
               <button onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading}
-                className="diet-ai-submit w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-xs transition-all active:scale-95 disabled:opacity-30">
+                className="diet-ai-submit w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-xs transition active:scale-[0.97] disabled:opacity-30">
                 {aiLoading ? 'Analisando...' : <><Sparkles size={14} /> Analisar alimento</>}
               </button>
               {erroIA && (
@@ -804,19 +805,22 @@ export default function Dieta({ onIrParaConfig }) {
                 )}
               </div>
             </div>
-          </>
-        )
+            </>
+          )}
+        </section>
       ) : (
-        <PainelEstatisticas
-          mesDocs={mesDocs}
-          carregarMes={carregarMes}
-          refs={refs}
-          metaKcal={userMetas.kcal}
-          mesAtual={mesAtual}
-          setMesAtual={setMesAtual}
-          podeAvancar={podeAvancar}
-          onDayClick={(data) => { setDataAtiva(data); setAba('diario') }}
-        />
+        <section className="diet-tab-panel" role="tabpanel" id="diet-panel-estatisticas" aria-labelledby="diet-tab-estatisticas" tabIndex={0}>
+          <PainelEstatisticas
+            mesDocs={mesDocs}
+            carregarMes={carregarMes}
+            refs={refs}
+            metaKcal={userMetas.kcal}
+            mesAtual={mesAtual}
+            setMesAtual={setMesAtual}
+            podeAvancar={podeAvancar}
+            onDayClick={(data) => { setDataAtiva(data); setAba('diario') }}
+          />
+        </section>
       )}
       <ConfirmModal
         isOpen={pularConfirmId !== null}
@@ -910,12 +914,12 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, se
       <div className="card-premium diet-calendar-panel">
         <div className="flex items-center justify-between mb-2">
           <button type="button" onClick={voltarMes} aria-label="Mês anterior"
-            className="border border-white/10 rounded-xl p-2 text-white/60 hover:text-white transition-all active:scale-90">
+            className="border border-white/10 rounded-xl p-2 text-white/60 hover:text-white transition active:scale-[0.97]">
             <ChevronLeft size={16} />
           </button>
           <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">{nomeMes}</span>
           <button type="button" onClick={avancarMes} disabled={!podeAvancar} aria-label="Próximo mês"
-            className={`border rounded-xl p-2 transition-all active:scale-90 ${podeAvancar ? 'border-white/10 text-white/60 hover:text-white' : 'border-transparent text-neutral-700 cursor-not-allowed'}`}>
+            className={`border rounded-xl p-2 transition active:scale-[0.97] ${podeAvancar ? 'border-white/10 text-white/60 hover:text-white' : 'border-transparent text-neutral-700 cursor-not-allowed'}`}>
             <ChevronRight size={16} />
           </button>
         </div>

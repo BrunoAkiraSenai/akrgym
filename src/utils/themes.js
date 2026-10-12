@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
 const STORAGE_KEY = 'akrgym-theme'
+const DEFAULT_THEME_ID = 'esmeralda'
 
 const purple = {
   50: '#faf5ff', 100: '#f3e8ff', 200: '#e9d5ff', 300: '#d8b4fe', 400: '#c084fc',
@@ -95,6 +96,7 @@ export const THEMES = [
     highlightHex: desaturate('#d946ef'),
     bgDeep: '#07050c',
     bgCard: 'rgba(16, 12, 26, 0.55)',
+    bgCardSolid: '#100c1a',
     previewBg: '#07050c',
     textSecondary: '#a89db5',
   },
@@ -108,6 +110,7 @@ export const THEMES = [
     highlightHex: desaturate('#f0c75e'),
     bgDeep: '#050807',
     bgCard: 'rgba(10, 18, 14, 0.55)',
+    bgCardSolid: '#0a120e',
     previewBg: '#050807',
     textSecondary: '#9ca3af',
   },
@@ -121,6 +124,7 @@ export const THEMES = [
     highlightHex: desaturate('#2dd4bf'),
     bgDeep: '#050709',
     bgCard: 'rgba(10, 14, 20, 0.55)',
+    bgCardSolid: '#0a0e14',
     previewBg: '#050709',
     textSecondary: '#9ca3af',
   },
@@ -153,6 +157,7 @@ export const THEMES = [
     highlightHex: '#f59e0b',
     bgDeep: '#050505',
     bgCard: 'rgba(23, 23, 23, 0.5)',
+    bgCardSolid: '#171717',
     previewBg: '#050505',
     textSecondary: '#a3a3a3',
   },
@@ -196,7 +201,7 @@ function themeToVars(theme) {
 }
 
 export function applyTheme(themeId) {
-  const theme = THEMES.find((t) => t.id === themeId) || THEMES[0]
+  const theme = THEMES.find((t) => t.id === themeId) || THEMES.find((t) => t.id === DEFAULT_THEME_ID)
   const vars = themeToVars(theme)
   const root = document.documentElement
   Object.entries(vars).forEach(([key, value]) => {
@@ -204,13 +209,16 @@ export function applyTheme(themeId) {
   })
   root.setAttribute('data-theme', theme.id)
   root.style.colorScheme = theme.mode === 'light' ? 'light' : 'dark'
-  localStorage.setItem(STORAGE_KEY, themeId)
-  window.dispatchEvent(new CustomEvent('themechange', { detail: themeId }))
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.bgDeep || '#050807')
+  localStorage.setItem(STORAGE_KEY, theme.id)
+  window.dispatchEvent(new CustomEvent('themechange', { detail: theme.id }))
 }
 
 export function getStoredTheme() {
-  try { return localStorage.getItem(STORAGE_KEY) || THEMES[0].id }
-  catch { return THEMES[0].id }
+  try {
+    const storedTheme = localStorage.getItem(STORAGE_KEY)
+    return THEMES.some(theme => theme.id === storedTheme) ? storedTheme : DEFAULT_THEME_ID
+  } catch { return DEFAULT_THEME_ID }
 }
 
 export function applyStoredTheme() {
@@ -229,12 +237,14 @@ export function useTheme() {
 
 export function useThemeColor(varName = '--brand') {
   const [color, setColor] = useState(() => {
-    if (typeof window === 'undefined') return THEMES[0].brand[500]
-    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || THEMES[0].brand[500]
+    const defaultTheme = THEMES.find(theme => theme.id === DEFAULT_THEME_ID)
+    if (typeof window === 'undefined') return defaultTheme.brand[500]
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || defaultTheme.brand[500]
   })
   useEffect(() => {
     const handler = () => {
-      setColor(getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || THEMES[0].brand[500])
+      const defaultTheme = THEMES.find(theme => theme.id === DEFAULT_THEME_ID)
+      setColor(getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || defaultTheme.brand[500])
     }
     window.addEventListener('themechange', handler)
     return () => window.removeEventListener('themechange', handler)
