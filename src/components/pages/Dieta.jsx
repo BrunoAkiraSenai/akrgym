@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { doc, getDoc, runTransaction, onSnapshot, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, diaryProgress, classificarDiaPorCalorias, comentarioDiaPorCalorias, DIET_DAY_STATUS } from '../../utils/dietDiary'
@@ -10,6 +10,9 @@ import { LIMITS, normalizarNomeAlimentoExtra, sanitizarTexto } from '../../utils
 import ConfirmModal from '../ConfirmModal'
 import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Copy, Droplets, Dumbbell, Flame, Leaf, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
 import { diaryText } from '../../utils/dietDiary'
+import { sincronizarResumoDieta } from '../../utils/socialStore'
+
+const AmigosDieta = lazy(() => import('../social/AmigosDieta'))
 
 const NUTRIENTE_DEFINICOES = [
   { key: 'proteinas', label: 'Proteína', icon: Beef },
@@ -242,6 +245,18 @@ export default function Dieta({ onIrParaConfig }) {
     carregarMes(mesAtual.ano, mesAtual.mes)
   }, [mesAtual, carregarMes])
 
+  // Quem ativou o perfil de amigos tem o resumo de dias na meta atualizado
+  // depois de registrar; para os demais isso não faz nada.
+  const syncSocialTimer = useRef(null)
+  useEffect(() => () => clearTimeout(syncSocialTimer.current), [])
+  const agendarSyncSocial = useCallback(() => {
+    if (user.isAnonymous) return
+    clearTimeout(syncSocialTimer.current)
+    syncSocialTimer.current = setTimeout(() => {
+      sincronizarResumoDieta(user.uid, refsRef.current, userMetas.kcal).catch(() => {})
+    }, 1500)
+  }, [user.uid, user.isAnonymous, userMetas.kcal])
+
   const salvarHoje = useCallback(async (date, action, success) => {
     const generation = context.current
     try {
@@ -255,6 +270,7 @@ export default function Dieta({ onIrParaConfig }) {
       if (success) setToast(success)
       else showToast('✓ Salvo', 'sucesso')
       recarregarMes()
+      agendarSyncSocial()
       return true
     } catch (err) {
       if (generation !== context.current) return false
@@ -262,7 +278,7 @@ export default function Dieta({ onIrParaConfig }) {
       setErro(message); showToast(message, 'erro')
       return false
     }
-  }, [recarregarMes, user.uid, userMetas])
+  }, [agendarSyncSocial, recarregarMes, user.uid, userMetas])
 
   const confirmar = (id) => {
     if (!hoje || !baseReady) return
@@ -515,6 +531,8 @@ export default function Dieta({ onIrParaConfig }) {
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'diario' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Diário</button>
         <button type="button" role="tab" aria-selected={aba === 'estatisticas'} onClick={() => { setAba('estatisticas'); if (mesDocs.length === 0) carregarMes(mesAtual.ano, mesAtual.mes) }}
           className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'estatisticas' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Estatísticas</button>
+        <button type="button" role="tab" aria-selected={aba === 'amigos'} onClick={() => setAba('amigos')}
+          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${aba === 'amigos' ? 'tab-active' : 'text-neutral-500 hover:text-neutral-300'}`}>Amigos</button>
       </div>
 
       {erro && (
@@ -806,6 +824,10 @@ export default function Dieta({ onIrParaConfig }) {
             </div>
           </>
         )
+      ) : aba === 'amigos' ? (
+        <Suspense fallback={<div className="skeleton skeleton-card" />}>
+          <AmigosDieta refs={refs} metaKcal={userMetas.kcal} baseReady={baseReady} />
+        </Suspense>
       ) : (
         <PainelEstatisticas
           mesDocs={mesDocs}
