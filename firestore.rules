@@ -97,5 +97,100 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
+    // ================= AMIGOS (dias de dieta) =================
+    // Só quem tem conta real participa; visitante anônimo fica de fora.
+    function contaReal() {
+      return request.auth != null
+             && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+    // Mesmo ID para o par, independentemente de quem pediu (ver idAmizade no cliente).
+    function parId(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+    function saoAmigos(a, b) {
+      return exists(/databases/$(database)/documents/amizades/$(parId(a, b)))
+             && get(/databases/$(database)/documents/amizades/$(parId(a, b))).data.status == 'aceita';
+    }
+    function codigoValido(codigo) {
+      return codigo is string && codigo.matches('^[A-HJKMNP-Z2-9]{8}$');
+    }
+
+    // CODIGO -> UID. Só leitura direta: sem listagem, ninguém enumera usuários.
+    match /codigos_amizade/{codigo} {
+      allow get: if contaReal();
+      allow create: if contaReal()
+                    && codigoValido(codigo)
+                    && request.resource.data.keys().hasOnly(['uid'])
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+    // PERFIL: nome, foto e código. Quem tem o UID (via código ou amizade) lê;
+    // listar perfis é proibido.
+    match /perfis/{userId} {
+      function perfilValido() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['nome', 'foto', 'codigo', 'atualizadoEm'])
+               && d.keys().hasAll(['nome', 'foto', 'codigo'])
+               && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 40
+               && d.foto is string && d.foto.size() <= 60000
+               && (d.foto == '' || d.foto.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$'))
+               && codigoValido(d.codigo);
+      }
+      allow get: if contaReal();
+      allow create: if contaReal()
+                    && request.auth.uid == userId
+                    && perfilValido()
+                    // O código do perfil precisa ser o que a própria pessoa registrou.
+                    && getAfter(/databases/$(database)/documents/codigos_amizade/$(request.resource.data.codigo)).data.uid == request.auth.uid;
+      allow update: if contaReal()
+                    && request.auth.uid == userId
+                    && perfilValido()
+                    && request.resource.data.codigo == resource.data.codigo;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+
+      // RESUMO DA DIETA: o dono escreve; só amigos aceitos leem.
+      match /compartilhado/dieta {
+        function resumoValido() {
+          let d = request.resource.data;
+          return d.keys().hasOnly(['sequencia', 'acertos30', 'ultimos7', 'ate', 'atualizadoEm'])
+                 && d.keys().hasAll(['sequencia', 'acertos30', 'ultimos7', 'ate'])
+                 && d.sequencia is int && d.sequencia >= 0 && d.sequencia <= 30
+                 && d.acertos30 is int && d.acertos30 >= 0 && d.acertos30 <= 30
+                 && d.ultimos7 is list && d.ultimos7.size() == 7
+                 && d.ultimos7.hasOnly(['ok', 'fora', 'vazio'])
+                 && d.ate is string && d.ate.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+        }
+        allow get: if request.auth != null
+                   && (request.auth.uid == userId || saoAmigos(request.auth.uid, userId));
+        allow create, update: if contaReal() && request.auth.uid == userId && resumoValido();
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // AMIZADE: um documento por par. Quem pede cria como 'pendente'; só a
+    // outra pessoa aceita; qualquer um dos dois pode apagar.
+    match /amizades/{amizadeId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.membros;
+      allow create: if contaReal()
+                    && request.resource.data.keys().hasOnly(['membros', 'solicitante', 'status', 'criadoEm', 'atualizadoEm'])
+                    && request.resource.data.membros is list
+                    && request.resource.data.membros.size() == 2
+                    && request.resource.data.membros[0] is string
+                    && request.resource.data.membros[1] is string
+                    && request.resource.data.membros[0] < request.resource.data.membros[1]
+                    && amizadeId == request.resource.data.membros[0] + '_' + request.resource.data.membros[1]
+                    && request.auth.uid in request.resource.data.membros
+                    && request.resource.data.solicitante == request.auth.uid
+                    && request.resource.data.status == 'pendente';
+      allow update: if request.auth != null
+                    && request.auth.uid in resource.data.membros
+                    && request.auth.uid != resource.data.solicitante
+                    && resource.data.status == 'pendente'
+                    && request.resource.data.status == 'aceita'
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm']);
+      allow delete: if request.auth != null && request.auth.uid in resource.data.membros;
+    }
+
   }
 }

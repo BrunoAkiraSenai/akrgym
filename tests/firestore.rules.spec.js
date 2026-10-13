@@ -339,3 +339,129 @@ describe('AkrGym Firestore Rules', () => {
     })
   })
 })
+
+describe('AkrGym Firestore Rules — amigos', () => {
+  const CAROL = 'user-carol'
+  const COD_ALICE = 'AAAA2345'
+  const COD_BOB = 'BBBB2345'
+  const real = uid => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'password' } }).firestore()
+  const visitante = uid => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'anonymous' } }).firestore()
+  const perfil = (codigo, extra = {}) => ({ nome: 'Pessoa', foto: '', codigo, ...extra })
+  const resumo = (extra = {}) => ({ sequencia: 3, acertos30: 12, ultimos7: ['ok', 'ok', 'fora', 'vazio', 'ok', 'ok', 'ok'], ate: '2026-10-12', ...extra })
+  const pedido = (a, b, solicitante, extra = {}) => ({ membros: [a, b], solicitante, status: 'pendente', ...extra })
+  const PAR = `${ALICE}_${BOB}`
+
+  async function ativar(uid, codigo) {
+    const db = real(uid)
+    const batch = db.batch()
+    batch.set(db.doc(`codigos_amizade/${codigo}`), { uid })
+    batch.set(db.doc(`perfis/${uid}`), perfil(codigo))
+    return batch.commit()
+  }
+
+  before(async () => {
+    await env.clearFirestore()
+    await assertSucceeds(ativar(ALICE, COD_ALICE))
+    await assertSucceeds(ativar(BOB, COD_BOB))
+  })
+
+  it('perfil só é criado com conta real e com o próprio código', async () => {
+    const anon = visitante('user-anon')
+    const lote = anon.batch()
+    lote.set(anon.doc('codigos_amizade/ANNN2345'), { uid: 'user-anon' })
+    lote.set(anon.doc('perfis/user-anon'), perfil('ANNN2345'))
+    await assertFails(lote.commit())
+    // Carol tenta usar o código que já é da Alice.
+    await assertFails(real(CAROL).doc(`perfis/${CAROL}`).set(perfil(COD_ALICE)))
+    await assertFails(real(CAROL).doc(`codigos_amizade/${COD_ALICE}`).set({ uid: CAROL }))
+    await assertFails(real(CAROL).doc('codigos_amizade/abc').set({ uid: CAROL }))
+    await assertFails(real(CAROL).doc('codigos_amizade/CRRR2345').set({ uid: ALICE }))
+  })
+
+  it('código e perfil só são lidos diretamente; listar é proibido', async () => {
+    await assertSucceeds(real(CAROL).doc(`codigos_amizade/${COD_ALICE}`).get())
+    await assertSucceeds(real(CAROL).doc(`perfis/${ALICE}`).get())
+    await assertFails(real(CAROL).collection('codigos_amizade').get())
+    await assertFails(real(CAROL).collection('perfis').get())
+    await assertFails(visitante('user-anon').doc(`perfis/${ALICE}`).get())
+    await assertFails(anonDb().doc(`perfis/${ALICE}`).get())
+  })
+
+  it('perfil valida nome, foto e não deixa trocar o código nem editar o de outra pessoa', async () => {
+    const alice = real(ALICE).doc(`perfis/${ALICE}`)
+    await assertSucceeds(alice.update({ nome: 'Alice', foto: 'data:image/jpeg;base64,AAAA' }))
+    await assertFails(alice.update({ nome: '' }))
+    await assertFails(alice.update({ nome: 'x'.repeat(41) }))
+    await assertFails(alice.update({ foto: 'https://exemplo.com/foto.jpg' }))
+    await assertFails(alice.update({ foto: `data:image/jpeg;base64,${'A'.repeat(60001)}` }))
+    await assertFails(alice.update({ codigo: COD_BOB }))
+    await assertFails(alice.update({ admin: true }))
+    await assertFails(real(BOB).doc(`perfis/${ALICE}`).update({ nome: 'Invadido' }))
+    await assertFails(real(BOB).doc(`perfis/${ALICE}`).delete())
+  })
+
+  it('pedido de amizade exige o próprio usuário, par ordenado e status pendente', async () => {
+    const alice = real(ALICE)
+    await assertFails(alice.doc(`amizades/${BOB}_${CAROL}`).set(pedido(BOB, CAROL, BOB)))
+    await assertFails(alice.doc(`amizades/${PAR}`).set(pedido(ALICE, BOB, BOB)))
+    await assertFails(alice.doc(`amizades/${PAR}`).set(pedido(BOB, ALICE, ALICE)))
+    await assertFails(alice.doc('amizades/outro-id').set(pedido(ALICE, BOB, ALICE)))
+    await assertFails(alice.doc(`amizades/${PAR}`).set(pedido(ALICE, BOB, ALICE, { status: 'aceita' })))
+    await assertFails(alice.doc(`amizades/${ALICE}_${ALICE}`).set(pedido(ALICE, ALICE, ALICE)))
+    await assertFails(visitante(ALICE).doc(`amizades/${PAR}`).set(pedido(ALICE, BOB, ALICE)))
+    await assertSucceeds(alice.doc(`amizades/${PAR}`).set(pedido(ALICE, BOB, ALICE)))
+  })
+
+  it('resumo da dieta fica fechado enquanto o pedido está pendente', async () => {
+    await assertSucceeds(real(ALICE).doc(`perfis/${ALICE}/compartilhado/dieta`).set(resumo()))
+    await assertSucceeds(real(ALICE).doc(`perfis/${ALICE}/compartilhado/dieta`).get())
+    await assertFails(real(BOB).doc(`perfis/${ALICE}/compartilhado/dieta`).get())
+    await assertFails(real(CAROL).doc(`perfis/${ALICE}/compartilhado/dieta`).get())
+  })
+
+  it('só quem recebeu o pedido aceita, e sem alterar outros campos', async () => {
+    await assertFails(real(ALICE).doc(`amizades/${PAR}`).update({ status: 'aceita' }))
+    await assertFails(real(CAROL).doc(`amizades/${PAR}`).update({ status: 'aceita' }))
+    await assertFails(real(BOB).doc(`amizades/${PAR}`).update({ status: 'aceita', solicitante: BOB }))
+    await assertFails(real(BOB).doc(`amizades/${PAR}`).set(pedido(ALICE, BOB, BOB)))
+    await assertSucceeds(real(BOB).doc(`amizades/${PAR}`).update({ status: 'aceita' }))
+    await assertFails(real(BOB).doc(`amizades/${PAR}`).update({ status: 'pendente' }))
+  })
+
+  it('amigo aceito lê o resumo; os outros não', async () => {
+    await assertSucceeds(real(BOB).doc(`perfis/${ALICE}/compartilhado/dieta`).get())
+    await assertFails(real(CAROL).doc(`perfis/${ALICE}/compartilhado/dieta`).get())
+    await assertFails(real(BOB).doc(`perfis/${ALICE}/compartilhado/dieta`).set(resumo()))
+    await assertFails(real(BOB).collection(`perfis/${ALICE}/compartilhado`).get())
+  })
+
+  it('resumo rejeita valores fora do contrato', async () => {
+    const ref = real(ALICE).doc(`perfis/${ALICE}/compartilhado/dieta`)
+    await assertFails(ref.set(resumo({ sequencia: 31 })))
+    await assertFails(ref.set(resumo({ acertos30: -1 })))
+    await assertFails(ref.set(resumo({ sequencia: 1.5 })))
+    await assertFails(ref.set(resumo({ ultimos7: ['ok'] })))
+    await assertFails(ref.set(resumo({ ultimos7: ['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'talvez'] })))
+    await assertFails(ref.set(resumo({ ate: '12/10/2026' })))
+    await assertFails(ref.set(resumo({ kcal: 1800 })))
+    await assertFails(real(ALICE).doc(`perfis/${ALICE}/compartilhado/refeicoes`).set(resumo()))
+  })
+
+  it('amizades são listadas só pelos membros e qualquer um dos dois desfaz', async () => {
+    await assertSucceeds(real(ALICE).collection('amizades').where('membros', 'array-contains', ALICE).get())
+    await assertFails(real(CAROL).collection('amizades').where('membros', 'array-contains', ALICE).get())
+    await assertFails(real(CAROL).collection('amizades').get())
+    await assertFails(real(CAROL).doc(`amizades/${PAR}`).get())
+    await assertFails(real(CAROL).doc(`amizades/${PAR}`).delete())
+    await assertSucceeds(real(BOB).doc(`amizades/${PAR}`).delete())
+    await assertFails(real(BOB).doc(`perfis/${ALICE}/compartilhado/dieta`).get())
+  })
+
+  it('dono apaga resumo, perfil e código; os dados privados continuam isolados', async () => {
+    await assertFails(real(BOB).doc(`codigos_amizade/${COD_ALICE}`).delete())
+    await assertSucceeds(real(ALICE).doc(`perfis/${ALICE}/compartilhado/dieta`).delete())
+    await assertSucceeds(real(ALICE).doc(`perfis/${ALICE}`).delete())
+    await assertSucceeds(real(ALICE).doc(`codigos_amizade/${COD_ALICE}`).delete())
+    await assertFails(real(BOB).doc(`users/${ALICE}/diario_dieta/2026-10-12`).get())
+  })
+})
