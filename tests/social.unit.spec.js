@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   CODIGO_ALFABETO, codigoAmizadeValido, deslocarDia, formatarCodigoAmizade, gerarCodigoAmizade, idAmizade,
   iniciaisPerfil, limparNomePerfil, normalizarCodigoAmizade, ordenarRanking, resumoDieta, resumoValido, sequenciaVigente,
+  calendarioMes, calendarioValido, deslocarMes, diasDoCalendario, mesId,
 } from '../src/utils/social.js'
 
 const HOJE = '2026-10-12'
@@ -95,4 +96,40 @@ test('ranking ordena por sequência vigente, depois acertos e nome', () => {
     { nome: 'Lider', resumo: { ...base, sequencia: 7, acertos30: 8 } },
   ], HOJE)
   assert.deepEqual(ordenado.map(pessoa => pessoa.nome), ['Lider', 'Ana', 'Zeca', 'Parado', 'Sem resumo'])
+})
+
+test('calendário compartilhado guarda só "ok" ou a diferença em kcal, nunca totais ou refeições', () => {
+  const diasMes = {
+    '2026-10-01': dia(1900), '2026-10-02': dia(2301), '2026-10-03': dia(999.2), '2026-10-05': dia(2300),
+    '2026-10-12': dia(2650), '2026-10-13': dia(1900), '2026-09-30': dia(1900),
+  }
+  const calendario = calendarioMes(diasMes, [], 0, 2026, 10, HOJE)
+  // 13/10 é futuro em relação a HOJE (12/10) e 04/10 não tem registro: nenhum dos dois é gravado.
+  assert.deepEqual(calendario, { '01': 'ok', '02': 301, '03': -1001, '05': 'ok', '12': 650 })
+  assert.equal(calendarioValido(calendario), true)
+  assert.deepEqual(calendarioMes(diasMes, [], 0, 2026, 9, HOJE), { '30': 'ok' })
+  assert.deepEqual(calendarioMes({}, [], 0, 2026, 10, HOJE), {})
+  for (const invalido of [null, [], { '32': 'ok' }, { '01': 0 }, { '01': 'fora' }, { '01': 1.5 }, { '1': 'ok' }, { '01': 20001 }]) assert.equal(calendarioValido(invalido), false)
+})
+
+test('calendário do amigo mostra os mesmos textos do calendário pessoal', () => {
+  const linhas = diasDoCalendario({ '01': 'ok', '02': 301, '03': -1001 }, 2026, 10, HOJE)
+  assert.equal(linhas.length, 31)
+  assert.deepEqual([linhas[0].status, linhas[0].comentario, linhas[0].comentarioCompacto], ['concluido', 'Dentro do plano', 'No plano'])
+  assert.deepEqual([linhas[1].status, linhas[1].comentario], ['fora_da_dieta', '301 kcal acima'])
+  assert.deepEqual([linhas[2].status, linhas[2].comentario], ['fora_da_dieta', '1.001 kcal abaixo'])
+  assert.deepEqual([linhas[3].status, linhas[3].comentario], ['nao_preenchido', 'Sem registro'])
+  assert.equal(linhas[11].futuro, false)
+  assert.deepEqual([linhas[12].futuro, linhas[12].status, linhas[12].comentario], [true, 'futuro', ''])
+  // Documento adulterado não quebra a tela: vira mês sem registro.
+  assert.equal(diasDoCalendario({ '01': '<script>' }, 2026, 10, HOJE)[0].status, 'nao_preenchido')
+  assert.equal(diasDoCalendario(null, 2026, 2, HOJE).length, 28)
+  assert.equal(diasDoCalendario(null, 2028, 2, '2028-03-01').length, 29)
+})
+
+test('navegação de meses vira o ano nos dois sentidos', () => {
+  assert.deepEqual(deslocarMes(2026, 1, -1), { ano: 2025, mes: 12 })
+  assert.deepEqual(deslocarMes(2026, 12, 1), { ano: 2027, mes: 1 })
+  assert.deepEqual(deslocarMes(2026, 10, -14), { ano: 2025, mes: 8 })
+  assert.equal(mesId(2026, 3), '2026-03')
 })

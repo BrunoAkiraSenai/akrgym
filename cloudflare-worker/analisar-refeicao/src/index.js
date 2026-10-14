@@ -25,10 +25,11 @@ const FOOD_CONTEXT_TERMS = [
   'brocolis', 'batata', 'azeite', 'macarrao', 'prato',
 ]
 
-const PROMPT = `Você é um assistente de nutrição focado estritamente em alimentos do Brasil.
-Use como referência prioritária as tabelas TACO (Unicamp) e TBCA (USP).
-Estime porções típicas de restaurantes brasileiros quando relevante.
-Analise somente alimentos, bebidas ou ingredientes consumíveis. Objetos, móveis, eletrônicos, exercícios, serviços, pessoas e textos sem relação com alimentação devem ser rejeitados.
+const PROMPT = `Você é um assistente de nutrição de um diário alimentar usado no Brasil.
+Estime calorias e macronutrientes de qualquer alimento, bebida, prato, lanche, sobremesa ou item de restaurante ou marca, brasileiro ou internacional (exemplos: corn dog, costela barbecue, Bloomin' Onion, sushi, burrito).
+Para alimentos brasileiros, use como referência prioritária as tabelas TACO (Unicamp) e TBCA (USP). Para os demais, use tabelas como a USDA e as informações nutricionais divulgadas pelo restaurante ou fabricante; sem dado exato, estime por um prato equivalente.
+A descrição pode trazer vários itens, com quantidades, frações (1/3, 1,5 unidade) e observações entre parênteses: considere a quantidade ou fração informada de cada item e some tudo. Números soltos antes de um item são contagem de linha e devem ser ignorados. Sem quantidade, use uma porção típica.
+Alimento desconhecido, estrangeiro ou de marca NÃO é motivo para rejeitar: estime. Marque a entrada como inválida somente quando o texto não descrever nada comestível (objetos, móveis, eletrônicos, exercícios, serviços, pessoas).
 Responda SOMENTE com um objeto JSON puro (sem markdown, sem texto extra), exatamente neste formato:
 Para entrada alimentar válida: { "valido": true, "kcal": number, "p": number, "c": number, "g": number, "fibras": number }
 Para entrada inválida: { "valido": false, "kcal": 0, "p": 0, "c": 0, "g": 0, "fibras": 0 }
@@ -254,29 +255,47 @@ function releaseRateLimit(uid) {
   if (current) current.active = false
 }
 
+// Cada recusa tem um motivo próprio: a pessoa precisa saber se deve reescrever
+// o texto, dividir a refeição ou só tentar de novo.
+const MOTIVOS_RECUSA = {
+  nao_alimento: 'Não reconheci alimentos nessa descrição. Revise o texto e tente novamente.',
+  formato: 'A IA respondeu fora do formato esperado. Tente novamente em instantes.',
+  limite: 'Essa descrição soma mais do que uma análise comporta. Divida em refeições menores e analise uma de cada vez.',
+}
+
 function sanitizeModelResponse(raw, originalText) {
   const match = String(raw || '').match(/\{[\s\S]*\}/)
-  if (!match) return null
+  if (!match) return { motivo: 'formato' }
   let parsed
   try {
     parsed = JSON.parse(match[0])
   } catch {
-    return null
+    return { motivo: 'formato' }
   }
-  if (parsed?.valido !== true) return null
+  if (parsed?.valido === false) return { motivo: 'nao_alimento' }
+  if (parsed?.valido !== true) return { motivo: 'formato' }
   const fields = [parsed.kcal, parsed.p, parsed.c, parsed.g, parsed.fibras]
-  if (!fields.every((value) => typeof value === 'number' && Number.isFinite(value))) return null
+  if (!fields.every((value) => typeof value === 'number' && Number.isFinite(value))) return { motivo: 'formato' }
   const values = fields
-  if (!values.every(Number.isFinite) || values.some((value) => value < 0) || values.every((value) => value === 0)) return null
-  if (values[0] > 9999 || values.slice(1).some((value) => value > 999)) return null
+  if (values.some((value) => value < 0)) return { motivo: 'formato' }
+  if (values.every((value) => value === 0)) return { motivo: 'nao_alimento' }
+  if (values[0] > 9999 || values.slice(1).some((value) => value > 999)) return { motivo: 'limite' }
   return {
-    nome: originalText,
-    kcal: Math.round(values[0]),
-    proteinas: Math.round(values[1]),
-    carboidratos: Math.round(values[2]),
-    gorduras: Math.round(values[3]),
-    fibras: Math.round(values[4]),
+    result: {
+      nome: originalText,
+      kcal: Math.round(values[0]),
+      proteinas: Math.round(values[1]),
+      carboidratos: Math.round(values[2]),
+      gorduras: Math.round(values[3]),
+      fibras: Math.round(values[4]),
+    },
   }
+}
+
+// Texto colado de planilha chega com tabulações e quebras de linha; para o
+// modelo, cada linha vira um item separado por ponto e vírgula.
+function textoParaPrompt(text) {
+  return text.replace(/\t+/g, ' ').replace(/\s*[\r\n]+\s*/g, '; ').replace(/ {2,}/g, ' ').replace(/"/g, "'").trim()
 }
 
 async function callGemini(text, apiKey) {
@@ -287,7 +306,7 @@ async function callGemini(text, apiKey) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: `${PROMPT}\n\nRefeição: "${text}"` }] }],
+        contents: [{ role: 'user', parts: [{ text: `${PROMPT}\n\nRefeição: "${textoParaPrompt(text)}"` }] }],
         generationConfig: {
           responseMimeType: 'application/json',
           temperature: 0.2,
@@ -348,8 +367,12 @@ export default {
     const rateError = rateLimit(authPayload.sub)
     if (rateError) return json({ _erro: rateError }, 429, origin)
     try {
-      const result = sanitizeModelResponse(await callGemini(text, env.GEMINI_API_KEY), text)
-      if (!result) return json({ _erro: 'Não reconheci alimentos nessa descrição. Revise o texto e tente novamente.' }, 422, origin)
+      const { result, motivo } = sanitizeModelResponse(await callGemini(text, env.GEMINI_API_KEY), text)
+      if (!result) {
+        // Só o motivo vai para o log; a descrição da refeição não é registrada.
+        console.warn('analisarRefeicao recusado:', motivo)
+        return json({ _erro: MOTIVOS_RECUSA[motivo], _motivo: motivo }, 422, origin)
+      }
       return json(result, 200, origin)
     } catch (error) {
       const detalheErro = error?.name === 'AbortError'

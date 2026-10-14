@@ -62,6 +62,9 @@ export async function calcularMacrosIA(textoAlimentos) {
         _erro: payload._erro || 'Limite da API de IA atingido. Aguarde a renovação da cota e tente novamente.',
       }
     }
+    // 422 é uma recusa explicada pelo backend (não é alimento, soma grande demais...):
+    // a mensagem já diz o que fazer e não deve parecer indisponibilidade.
+    if (response.status === 422 && payload._erro) return { ...FALLBACK, nome: texto, _erro: payload._erro }
     if (!response.ok) throw new Error(payload._erro || `Serviço de IA indisponível (${response.status})`)
 
     const parsed = {

@@ -166,6 +166,23 @@ service cloud.firestore {
         allow create, update: if contaReal() && request.auth.uid == userId && resumoValido();
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
+
+      // CALENDARIO DO MES (mes-YYYY-MM): por dia, 'ok' ou a diferença em kcal
+      // para a meta. O dono escreve e lista; só amigos aceitos leem.
+      match /compartilhado/{docId} {
+        function calendarioValido() {
+          let d = request.resource.data;
+          return docId.matches('^mes-[0-9]{4}-(0[1-9]|1[0-2])$')
+                 && d.keys().hasOnly(['dias', 'atualizadoEm'])
+                 && d.dias is map
+                 && d.dias.size() <= 31;
+        }
+        allow get: if request.auth != null
+                   && (request.auth.uid == userId || saoAmigos(request.auth.uid, userId));
+        allow list: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if contaReal() && request.auth.uid == userId && calendarioValido();
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
     }
 
     // AMIZADE: um documento por par. Quem pede cria como 'pendente'; só a

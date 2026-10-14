@@ -1,29 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, Check, Copy, Flame, Minus, ShieldCheck, Trash, UserPlus, Users, X } from 'lucide-react'
+import { Camera, Check, ChevronRight, Copy, Flame, Minus, ShieldCheck, Trash, UserPlus, Users, X } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
 import ConfirmModal from '../ConfirmModal'
+import Avatar from './Avatar'
+import CalendarioAmigo from './CalendarioAmigo'
 import { prepararFotoPerfil } from '../../utils/avatar'
 import {
   DIA_SOCIAL, JANELA_DIAS, LIMITE_AMIGOS, NOME_PERFIL_MAX, codigoAmizadeValido, dataLocalId, formatarCodigoAmizade,
-  iniciaisPerfil, limparNomePerfil, normalizarCodigoAmizade, ordenarRanking, sequenciaVigente,
+  limparNomePerfil, normalizarCodigoAmizade, ordenarRanking, sequenciaVigente,
 } from '../../utils/social'
 import {
   aceitarPedido, ativarPerfil, buscarPerfilPorCodigo, carregarPerfil, carregarPessoa, desativarPerfil, enviarPedido,
-  listarAmizades, marcarPerfilAtivo, removerAmizade, salvarPerfil, semPermissao, sincronizarResumoDieta,
+  listarAmizades, marcarPerfilAtivo, publicarHistoricoCalendario, removerAmizade, salvarPerfil, semPermissao, sincronizarResumoDieta,
 } from '../../utils/socialStore'
 
 function mensagemDeErro(erro) {
   if (semPermissao(erro)) return 'O recurso de amigos ainda não está liberado no servidor. Tente novamente mais tarde.'
   if (erro?.code === 'unavailable') return 'Sem conexão. Verifique a internet e tente novamente.'
   return erro?.code ? 'Não foi possível concluir agora. Tente novamente.' : (erro?.message || 'Não foi possível concluir agora.')
-}
-
-function Avatar({ nome, foto, grande = false }) {
-  return (
-    <span className={`social-avatar${grande ? ' social-avatar-lg' : ''}`} aria-hidden="true">
-      {foto ? <img src={foto} alt="" width={grande ? 72 : 40} height={grande ? 72 : 40} /> : iniciaisPerfil(nome)}
-    </span>
-  )
 }
 
 const ROTULO_DIA = { [DIA_SOCIAL.OK]: 'dentro da meta', [DIA_SOCIAL.FORA]: 'fora da meta', [DIA_SOCIAL.VAZIO]: 'sem registro' }
@@ -43,15 +37,15 @@ function Semana({ ultimos7 }) {
 }
 
 function Numeros({ resumo, hoje }) {
-  if (!resumo) return <p className="social-muted">Ainda sem dias registrados para mostrar.</p>
+  if (!resumo) return <span className="social-muted">Ainda sem dias registrados para mostrar.</span>
   const sequencia = sequenciaVigente(resumo, hoje)
   return (
-    <div className="social-numbers">
+    <span className="social-numbers">
       <span className="social-streak"><Flame size={14} aria-hidden="true" /> <strong>{sequencia === JANELA_DIAS ? `${JANELA_DIAS}+` : sequencia}</strong> {sequencia === 1 ? 'dia seguido' : 'dias seguidos'}</span>
       <span className="social-muted"><strong>{resumo.acertos30}</strong> de {JANELA_DIAS} dias na meta</span>
       <Semana ultimos7={resumo.ultimos7} />
       {resumo.ate !== hoje && <span className="social-muted">Atualizado em {resumo.ate.slice(8, 10)}/{resumo.ate.slice(5, 7)}</span>}
-    </div>
+    </span>
   )
 }
 
@@ -71,6 +65,7 @@ export default function AmigosDieta({ refs, metaKcal, baseReady }) {
   const [encontrado, setEncontrado] = useState(null)
   const [codigoCopiado, setCodigoCopiado] = useState(false)
   const [confirmacao, setConfirmacao] = useState(null)
+  const [amigoAberto, setAmigoAberto] = useState(null)
   const sequencia = useRef(0)
   const planoRef = useRef({ refs, metaKcal })
   useEffect(() => { planoRef.current = { refs, metaKcal } }, [refs, metaKcal])
@@ -91,6 +86,8 @@ export default function AmigosDieta({ refs, metaKcal, baseReady }) {
       const pessoas = await Promise.all(lista.map(async amizade => ({ ...amizade, ...(await carregarPessoa(amizade.uid, amizade.status === 'aceita')) })))
       if (!vigente()) return
       setPerfil(dados); setMeuResumo(resumo); setAmizades(pessoas); setFase('ativo')
+      // Meses anteriores do calendário: uma vez por aparelho, sem travar a tela.
+      publicarHistoricoCalendario(uid, planoRef.current.refs, planoRef.current.metaKcal).catch(() => {})
     } catch (erro) {
       if (!vigente()) return
       setAviso({ tipo: 'erro', texto: mensagemDeErro(erro) })
@@ -223,7 +220,7 @@ export default function AmigosDieta({ refs, metaKcal, baseReady }) {
         <span className="section-label"><Users size={13} aria-hidden="true" /> Amigos</span>
         <h2 className="social-title">Compare seus dias de dieta com amigos</h2>
         <p className="social-text">Ative seu perfil para trocar códigos com amigos e ver quem está mantendo a sequência.</p>
-        <p className="social-privacy"><ShieldCheck size={15} aria-hidden="true" /> <span>Seus amigos veem só seu nome, sua foto e quantos dias você ficou dentro da meta. Refeições, calorias, treinos e medidas continuam privados.</span></p>
+        <p className="social-privacy"><ShieldCheck size={15} aria-hidden="true" /> <span>Seus amigos veem seu nome, sua foto e seu calendário de dieta: quais dias ficaram dentro da meta e, nos dias fora, quantas kcal acima ou abaixo. O que você comeu, seus totais, treinos e medidas continuam privados.</span></p>
         <label className="social-field">
           <span>Como seus amigos vão ver você</span>
           <input type="text" maxLength={NOME_PERFIL_MAX} autoComplete="nickname" placeholder="Seu nome ou apelido" value={nomeNovo} onChange={evento => setNomeNovo(evento.target.value)} />
@@ -240,6 +237,10 @@ export default function AmigosDieta({ refs, metaKcal, baseReady }) {
   const enviados = amizades.filter(amizade => amizade.status === 'pendente' && amizade.enviadoPorMim)
   const amigos = amizades.filter(amizade => amizade.status === 'aceita')
   const ranking = ordenarRanking([{ uid, nome: perfil.nome, foto: perfil.foto, resumo: meuResumo, eu: true }, ...amigos], hoje)
+
+  // O calendário só abre para quem ainda é amigo na lista atual.
+  const aberto = amigoAberto && amigos.find(amigo => amigo.uid === amigoAberto)
+  if (aberto) return <CalendarioAmigo key={aberto.uid} pessoa={aberto} onVoltar={() => setAmigoAberto(null)} />
 
   return (
     <>
@@ -327,11 +328,24 @@ export default function AmigosDieta({ refs, metaKcal, baseReady }) {
           {ranking.map((pessoa, indice) => (
             <li key={pessoa.uid} className={`social-row social-rank${pessoa.eu ? ' social-rank-me' : ''}`}>
               <span className="social-position" aria-label={`${indice + 1}º lugar`}>{indice + 1}</span>
-              <Avatar nome={pessoa.nome} foto={pessoa.foto} />
-              <div className="social-row-main">
-                <strong>{pessoa.nome}{pessoa.eu && <span className="social-you"> Você</span>}</strong>
-                <Numeros resumo={pessoa.resumo} hoje={hoje} />
-              </div>
+              {pessoa.eu ? (
+                <>
+                  <Avatar nome={pessoa.nome} foto={pessoa.foto} />
+                  <div className="social-row-main">
+                    <strong>{pessoa.nome}<span className="social-you"> Você</span></strong>
+                    <Numeros resumo={pessoa.resumo} hoje={hoje} />
+                  </div>
+                </>
+              ) : (
+                <button type="button" className="social-open" onClick={() => setAmigoAberto(pessoa.uid)} aria-label={`Ver calendário de ${pessoa.nome}`}>
+                  <Avatar nome={pessoa.nome} foto={pessoa.foto} />
+                  <span className="social-row-main">
+                    <strong>{pessoa.nome}</strong>
+                    <Numeros resumo={pessoa.resumo} hoje={hoje} />
+                    <span className="social-open-hint">Ver calendário <ChevronRight size={13} aria-hidden="true" /></span>
+                  </span>
+                </button>
+              )}
               {!pessoa.eu && (
                 <button type="button" className="social-remove" aria-label={`Desfazer amizade com ${pessoa.nome}`} title="Desfazer amizade" disabled={Boolean(ocupado)}
                   onClick={() => setConfirmacao({ title: 'Desfazer amizade?', message: `Você e ${pessoa.nome} deixam de ver os dias de dieta um do outro.`, onConfirm: () => remover(pessoa, 'Amizade desfeita.') })}>
