@@ -24,3 +24,14 @@ test('frontend aceita o Worker sem remover o fallback da Cloud Function', () => 
   assert.match(cliente, /VITE_FIREBASE_FUNCTIONS_URL/)
   assert.match(cliente, /X-Firebase-AppCheck/)
 })
+
+test('Worker estima alimentos estrangeiros e de restaurante e explica cada recusa', () => {
+  const worker = read('cloudflare-worker/analisar-refeicao/src/index.js')
+  assert.doesNotMatch(worker, /estritamente em alimentos do Brasil/)
+  assert.match(worker, /brasileiro ou internacional/)
+  assert.match(worker, /NÃO é motivo para rejeitar/)
+  for (const motivo of ['nao_alimento', 'formato', 'limite']) assert.match(worker, new RegExp(`motivo: '${motivo}'`))
+  // A descrição da refeição não vai para o log, só o motivo.
+  assert.match(worker, /console\.warn\('analisarRefeicao recusado:', motivo\)/)
+  assert.match(read('src/utils/gemini.js'), /response\.status === 422/)
+})

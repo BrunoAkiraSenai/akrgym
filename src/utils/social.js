@@ -100,6 +100,65 @@ export function resumoDieta(diasPorData, plano, metaKcal, hojeId) {
   return { sequencia, acertos30, ultimos7, ate: hojeId }
 }
 
+// ===== Calendário compartilhado =====
+// Um documento por mês: { 'DD': 'ok' } para dia dentro da meta ou
+// { 'DD': diferença em kcal } para dia fora (positivo = acima). Dia sem
+// registro não é gravado. Refeições e totais continuam privados.
+export const DELTA_KCAL_MAX = 20000
+
+export function mesId(ano, mes) {
+  return `${ano}-${String(mes).padStart(2, '0')}`
+}
+
+export function deslocarMes(ano, mes, delta) {
+  const indice = ano * 12 + (mes - 1) + delta
+  return { ano: Math.floor(indice / 12), mes: (indice % 12 + 12) % 12 + 1 }
+}
+
+function ultimoDia(ano, mes) {
+  return new Date(Date.UTC(ano, mes, 0)).getUTCDate()
+}
+
+export function calendarioMes(diasPorData, plano, metaKcal, ano, mes, hojeId) {
+  const dias = {}
+  for (let dia = 1; dia <= ultimoDia(ano, mes); dia++) {
+    const chave = String(dia).padStart(2, '0')
+    const dataId = `${mesId(ano, mes)}-${chave}`
+    if (dataId > hojeId) break
+    const { status, kcal, metaKcal: meta } = classificarDiaPorCalorias(diasPorData?.[dataId], plano, metaKcal)
+    if (status === DIET_DAY_STATUS.COMPLETE) dias[chave] = 'ok'
+    else if (status === DIET_DAY_STATUS.OUT_OF_PLAN) {
+      // Mesmo arredondamento do calendário pessoal: nunca volta para dentro da tolerância.
+      const diferenca = Math.min(DELTA_KCAL_MAX, Math.max(1, Math.ceil(Math.abs(kcal - meta))))
+      dias[chave] = kcal > meta ? diferenca : -diferenca
+    }
+  }
+  return dias
+}
+
+export function calendarioValido(dias) {
+  return Boolean(dias) && typeof dias === 'object' && !Array.isArray(dias)
+    && Object.entries(dias).every(([chave, valor]) => /^(0[1-9]|[12][0-9]|3[01])$/.test(chave)
+      && (valor === 'ok' || (Number.isInteger(valor) && valor !== 0 && Math.abs(valor) <= DELTA_KCAL_MAX)))
+}
+
+// Linhas prontas para desenhar o mês, com os mesmos textos do calendário pessoal.
+export function diasDoCalendario(dias, ano, mes, hojeId) {
+  const seguro = calendarioValido(dias) ? dias : {}
+  return Array.from({ length: ultimoDia(ano, mes) }, (_, indice) => {
+    const dia = indice + 1
+    const data = `${mesId(ano, mes)}-${String(dia).padStart(2, '0')}`
+    const valor = seguro[String(dia).padStart(2, '0')]
+    if (data > hojeId) return { dia, data, futuro: true, status: 'futuro', comentario: '', comentarioCompacto: '', detalhe: 'Dia futuro' }
+    if (valor === 'ok') return { dia, data, futuro: false, status: DIET_DAY_STATUS.COMPLETE, comentario: 'Dentro do plano', comentarioCompacto: 'No plano', detalhe: 'Dentro do plano' }
+    if (Number.isInteger(valor)) {
+      const texto = `${Math.abs(valor).toLocaleString('pt-BR')} kcal ${valor > 0 ? 'acima' : 'abaixo'}`
+      return { dia, data, futuro: false, status: DIET_DAY_STATUS.OUT_OF_PLAN, comentario: texto, comentarioCompacto: texto, detalhe: `${texto} da meta` }
+    }
+    return { dia, data, futuro: false, status: DIET_DAY_STATUS.EMPTY, comentario: 'Sem registro', comentarioCompacto: 'Sem dados', detalhe: 'Sem registro' }
+  })
+}
+
 export function resumoValido(resumo) {
   return Boolean(resumo)
     && Number.isInteger(resumo.sequencia) && resumo.sequencia >= 0 && resumo.sequencia <= JANELA_DIAS

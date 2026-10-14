@@ -465,3 +465,53 @@ describe('AkrGym Firestore Rules — amigos', () => {
     await assertFails(real(BOB).doc(`users/${ALICE}/diario_dieta/2026-10-12`).get())
   })
 })
+
+describe('AkrGym Firestore Rules — calendário do amigo', () => {
+  const CAROL = 'user-carol'
+  const real = uid => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'password' } }).firestore()
+  const visitante = uid => env.authenticatedContext(uid, { firebase: { sign_in_provider: 'anonymous' } }).firestore()
+  const mes = uid => `perfis/${uid}/compartilhado/mes-2026-10`
+  const calendario = (extra = {}) => ({ dias: { '01': 'ok', '02': 301, '03': -1001 }, ...extra })
+
+  before(async () => {
+    await env.clearFirestore()
+    await env.withSecurityRulesDisabled(async contexto => {
+      await contexto.firestore().doc(`amizades/${ALICE}_${BOB}`).set({ membros: [ALICE, BOB], solicitante: ALICE, status: 'aceita' })
+      await contexto.firestore().doc(`amizades/${ALICE}_${CAROL}`).set({ membros: [ALICE, CAROL], solicitante: CAROL, status: 'pendente' })
+    })
+  })
+
+  it('dono publica o mês; formato e nome do documento são validados', async () => {
+    await assertSucceeds(real(ALICE).doc(mes(ALICE)).set(calendario()))
+    await assertSucceeds(real(ALICE).doc(mes(ALICE)).set({ dias: {} }))
+    await assertSucceeds(real(ALICE).doc(mes(ALICE)).set(calendario()))
+    await assertFails(real(ALICE).doc(mes(ALICE)).set(calendario({ refeicoes: ['arroz'] })))
+    await assertFails(real(ALICE).doc(mes(ALICE)).set({ dias: 'ok' }))
+    await assertFails(real(ALICE).doc(mes(ALICE)).set({ dias: Object.fromEntries(Array.from({ length: 32 }, (_, i) => [`d${i}`, 'ok'])) }))
+    await assertFails(real(ALICE).doc(`perfis/${ALICE}/compartilhado/mes-2026-13`).set(calendario()))
+    await assertFails(real(ALICE).doc(`perfis/${ALICE}/compartilhado/diario`).set(calendario()))
+    await assertFails(visitante(ALICE).doc(mes(ALICE)).set(calendario()))
+    await assertFails(real(BOB).doc(mes(ALICE)).set(calendario()))
+  })
+
+  it('só amigo aceito lê o calendário; pedido pendente e estranhos não', async () => {
+    await assertSucceeds(real(ALICE).doc(mes(ALICE)).get())
+    await assertSucceeds(real(BOB).doc(mes(ALICE)).get())
+    await assertSucceeds(real(BOB).doc(`perfis/${ALICE}/compartilhado/mes-2026-01`).get())
+    await assertFails(real(CAROL).doc(mes(ALICE)).get())
+    await assertFails(real('user-dave').doc(mes(ALICE)).get())
+    await assertFails(anonDb().doc(mes(ALICE)).get())
+  })
+
+  it('só o dono lista e apaga os meses publicados', async () => {
+    await assertSucceeds(real(ALICE).collection(`perfis/${ALICE}/compartilhado`).get())
+    await assertFails(real(BOB).collection(`perfis/${ALICE}/compartilhado`).get())
+    await assertFails(real(BOB).doc(mes(ALICE)).delete())
+    await assertSucceeds(real(ALICE).doc(mes(ALICE)).delete())
+  })
+
+  it('o diário privado continua fechado para o amigo', async () => {
+    await assertFails(real(BOB).doc(`users/${ALICE}/diario_dieta/2026-10-12`).get())
+    await assertFails(real(BOB).collection(`users/${ALICE}/diario_dieta`).get())
+  })
+})

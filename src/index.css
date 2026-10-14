@@ -1614,6 +1614,12 @@ img, svg, video, canvas { max-width: 100%; }
 @media (hover: hover) { .social-remove:hover { border-color: rgba(239,68,68,0.35); color: #f87171; background: rgba(239,68,68,0.1); } }
 .social-remove:disabled { opacity: 0.4; cursor: not-allowed; }
 .social-deactivate { align-self: center; color: var(--text-secondary); }
+.social-open { display: flex; min-width: 0; flex: 1; align-items: flex-start; gap: 0.7rem; border: 0; border-radius: 0.6rem; padding: 0; color: inherit; background: none; text-align: left; cursor: pointer; }
+.social-open:active { transform: scale(0.99); }
+.social-open:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 3px; }
+.social-open-hint { display: inline-flex; align-items: center; gap: 0.15rem; color: var(--brand-bright); font-size: 0.74rem; font-weight: 700; }
+.social-back { display: inline-flex; align-items: center; gap: 0.25rem; align-self: flex-start; text-decoration: none; }
+.social-calendar-day { cursor: default; }
 [data-theme="lava"] .social-row { background: rgba(106,61,43,0.035); }
 @media (max-width: 420px) {
   .social-row { flex-wrap: wrap; }

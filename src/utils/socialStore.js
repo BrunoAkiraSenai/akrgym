@@ -2,6 +2,7 @@
 //
 //   perfis/{uid}                       nome, foto, codigo (identidade)
 //   perfis/{uid}/compartilhado/dieta   resumo dos dias de dieta (só amigos leem)
+//   perfis/{uid}/compartilhado/mes-YYYY-MM   calendário do mês (só amigos leem)
 //   codigos_amizade/{codigo}           { uid } — permite achar alguém pelo código
 //   amizades/{uidA_uidB}               pedido pendente ou amizade aceita
 import {
@@ -9,12 +10,15 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import {
-  JANELA_DIAS, codigoAmizadeValido, dataLocalId, deslocarDia, gerarCodigoAmizade, idAmizade, limparNomePerfil,
-  resumoDieta, resumoValido,
+  JANELA_DIAS, calendarioMes, calendarioValido, codigoAmizadeValido, dataLocalId, deslocarDia, deslocarMes,
+  gerarCodigoAmizade, idAmizade, limparNomePerfil, mesId, resumoDieta, resumoValido,
 } from './social.js'
 
 const perfilRef = uid => doc(db, 'perfis', uid)
 const resumoRef = uid => doc(db, 'perfis', uid, 'compartilhado', 'dieta')
+const calendarioRef = (uid, mes) => doc(db, 'perfis', uid, 'compartilhado', `mes-${mes}`)
+const MESES_HISTORICO = 6
+const CHAVE_HISTORICO = uid => `akrgym-social-calendario-v1-${uid}`
 const codigoRef = codigo => doc(db, 'codigos_amizade', codigo)
 const amizadeRef = (primeiroUid, segundoUid) => doc(db, 'amizades', idAmizade(primeiroUid, segundoUid))
 
@@ -87,20 +91,74 @@ export async function sincronizarResumoDieta(uid, plano, metaKcal, hojeId = data
   }
   if (!estado.ativo) return null
 
-  const inicio = deslocarDia(hojeId, -JANELA_DIAS)
-  const snap = await getDocs(query(
-    collection(db, 'users', uid, 'diario_dieta'),
-    where('data', '>=', inicio),
-    where('data', '<=', hojeId),
-  ))
-  const dias = Object.fromEntries(snap.docs.map(item => [item.id, item.data()]))
+  // Uma leitura cobre o resumo (30 dias) e o calendário do mês atual e do anterior.
+  const [ano, mes] = hojeId.split('-').map(Number)
+  const anterior = deslocarMes(ano, mes, -1)
+  const inicioResumo = deslocarDia(hojeId, -JANELA_DIAS)
+  const inicioCalendario = `${mesId(anterior.ano, anterior.mes)}-01`
+  const dias = await lerDiario(uid, inicioResumo < inicioCalendario ? inicioResumo : inicioCalendario, hojeId)
+
   const resumo = resumoDieta(dias, plano, metaKcal, hojeId)
   const chave = JSON.stringify(resumo)
   if (chave !== estado.ultimo) {
     await publicarResumo(uid, resumo)
     estado.ultimo = chave
   }
+
+  estado.meses ||= {}
+  try {
+    for (const alvo of [anterior, { ano, mes }]) {
+      await publicarCalendario(uid, estado, alvo, calendarioMes(dias, plano, metaKcal, alvo.ano, alvo.mes, hojeId))
+    }
+  } catch { /* O resumo já foi publicado; o calendário tenta de novo na próxima vez. */ }
   return resumo
+}
+
+async function lerDiario(uid, inicio, fim) {
+  const snap = await getDocs(query(
+    collection(db, 'users', uid, 'diario_dieta'),
+    where('data', '>=', inicio),
+    where('data', '<=', fim),
+  ))
+  return Object.fromEntries(snap.docs.map(item => [item.id, item.data()]))
+}
+
+async function publicarCalendario(uid, estado, { ano, mes }, dias) {
+  const id = mesId(ano, mes)
+  const chave = JSON.stringify(dias)
+  if (estado.meses[id] === chave) return
+  await setDoc(calendarioRef(uid, id), { dias, atualizadoEm: serverTimestamp() })
+  estado.meses[id] = chave
+}
+
+/**
+ * Publica os meses anteriores uma única vez por aparelho, para o amigo
+ * conseguir voltar no calendário. Os dois meses mais recentes já são mantidos
+ * por sincronizarResumoDieta.
+ */
+export async function publicarHistoricoCalendario(uid, plano, metaKcal, hojeId = dataLocalId()) {
+  try { if (localStorage.getItem(CHAVE_HISTORICO(uid)) === hojeId.slice(0, 7)) return } catch { /* Sem armazenamento, publica de novo. */ }
+  const [ano, mes] = hojeId.split('-').map(Number)
+  const alvos = Array.from({ length: MESES_HISTORICO - 2 }, (_, i) => deslocarMes(ano, mes, -(i + 2)))
+  const maisAntigo = alvos.at(-1), maisRecente = alvos[0]
+  const dias = await lerDiario(uid, `${mesId(maisAntigo.ano, maisAntigo.mes)}-01`, `${mesId(maisRecente.ano, maisRecente.mes)}-31`)
+  const estado = estadoSync.get(uid) || {}
+  estado.meses ||= {}
+  estadoSync.set(uid, estado)
+  for (const alvo of alvos) {
+    const calendario = calendarioMes(dias, plano, metaKcal, alvo.ano, alvo.mes, hojeId)
+    // Mês sem nenhum registro não precisa de documento.
+    if (Object.keys(calendario).length) await publicarCalendario(uid, estado, alvo, calendario)
+  }
+  try { localStorage.setItem(CHAVE_HISTORICO(uid), hojeId.slice(0, 7)) } catch { /* Opcional. */ }
+}
+
+// `null` = a pessoa ainda não publicou esse mês.
+export async function carregarCalendarioAmigo(uid, ano, mes) {
+  const snap = await getDoc(calendarioRef(uid, mesId(ano, mes)))
+  if (!snap.exists()) return null
+  const dias = snap.data().dias
+  return calendarioValido(dias) ? dias : {}
 }
 
 export async function buscarPerfilPorCodigo(codigo) {
@@ -161,7 +219,10 @@ export async function carregarPessoa(uid, comResumo) {
 export async function desativarPerfil(uid, codigo) {
   const amizades = await listarAmizades(uid)
   await Promise.all(amizades.map(amizade => removerAmizade(uid, amizade.uid)))
-  await deleteDoc(resumoRef(uid))
+  // Resumo e todos os meses de calendário publicados.
+  const compartilhado = await getDocs(collection(db, 'perfis', uid, 'compartilhado'))
+  await Promise.all(compartilhado.docs.map(item => deleteDoc(item.ref)))
+  try { localStorage.removeItem(CHAVE_HISTORICO(uid)) } catch { /* Opcional. */ }
   await deleteDoc(perfilRef(uid))
   if (codigoAmizadeValido(codigo)) await deleteDoc(codigoRef(codigo))
   marcarPerfilAtivo(uid, false)
