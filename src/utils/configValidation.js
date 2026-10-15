@@ -24,8 +24,8 @@ export function prepararConfigParaSalvar(config) {
     ...rotina,
     exercicios: (rotina.exercicios || []).map(ex => ({
       ...ex,
-      // Carga inicial em branco significa "ainda não sei": vale como zero.
-      base_top: String(ex.base_top ?? '').trim() === '' ? 0 : validarNumeroConfig(ex.base_top, 0, 9999, `Base Top de "${ex.nome}"`),
+      // Carga em branco significa "ainda sem carga para este exercício" e continua em branco.
+      base_top: String(ex.base_top ?? '').trim() === '' ? '' : validarNumeroConfig(ex.base_top, 0, 9999, `Base Top de "${ex.nome}"`),
       descanso_segundos: validarNumeroConfig(ex.descanso_segundos ?? 90, 15, 600, `Descanso de "${ex.nome}"`),
     })),
   }]))

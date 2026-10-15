@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, nomesDeExerciciosCompativeis, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho, reordenarExercicios, garantirIdsExercicios, exercicioUsaRegraAgachamento } from '../src/utils/workoutSession.js'
+import { exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, nomesDeExerciciosCompativeis, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho, reordenarExercicios, garantirIdsExercicios, exercicioUsaRegraAgachamento, valoresDoExercicio, reconciliarRascunho, chaveExercicio } from '../src/utils/workoutSession.js'
 
 test('reordenar move o exercício inteiro e mantém a referência do histórico', () => {
   const exercicios = [
@@ -212,4 +212,108 @@ test('substituição não herda protocolo específico do exercício original', (
   assert.equal(replacement.ref, 0)
   assert.equal(replacement.repsAnterior, null)
   assert.equal(replacement.descanso_segundos, 90)
+})
+
+test('trocar de exercício traz carga e reps do último treino dele, do plano ou em branco', () => {
+  const historico = [
+    { data: '2026-10-12', exercicios: [{ nome: 'Puxada aberta', carga_top: 55, reps_top: 9, meta_reps: '8-10', descanso_segundos: 120 }] },
+    { data: '2026-10-08', exercicios: [{ nome: 'Supino reto', carga_top: 80, reps_top: 7, meta_reps: '6-8', descanso_segundos: 180 }, { nome: 'Rosca direta', carga_top: '', reps_top: '' }] },
+    { data: '2026-10-01', exercicios: [{ nome: 'Supino reto', carga_top: 75, reps_top: 8, meta_reps: '6-8' }] },
+  ]
+  const treinos = {
+    upper: { nome: 'Upper', exercicios: [{ nome: 'Puxada', base_top: 40, meta_reps: '10' }, { nome: 'Supino reto', base_top: 60, meta_reps: '8-12', tem_aquecimento: true }] },
+    lower: { nome: 'Lower', exercicios: [{ nome: 'Cadeira extensora', base_top: 50, meta_reps: '12-15', descanso_segundos: 60, tem_aquecimento: false }] },
+  }
+
+  // Último registro vence o plano; a meta registrada vence as reps feitas.
+  const supino = valoresDoExercicio('Supino reto', { historico, treinos })
+  assert.deepEqual({ ...supino, origem: supino.origem.tipo }, { base_top: 80, meta_reps: '6-8', descanso_segundos: 180, tem_aquecimento: true, origem: 'historico' })
+
+  // Sem histórico, copia de outra posição do plano.
+  const extensora = valoresDoExercicio('Cadeira extensora', { historico, treinos, ignorar: { key: 'upper', idx: 0 } })
+  assert.deepEqual({ ...extensora, origem: extensora.origem }, { base_top: 50, meta_reps: '12-15', descanso_segundos: 60, tem_aquecimento: false, origem: { tipo: 'plano', rotina: 'Lower' } })
+
+  // A própria posição sendo editada não serve de fonte.
+  assert.equal(valoresDoExercicio('Cadeira extensora', { historico, treinos, ignorar: { key: 'lower', idx: 0 } }).base_top, '')
+
+  // Nunca treinado nem no plano: carga e reps em branco.
+  assert.deepEqual(valoresDoExercicio('Leg press 45 graus', { historico, treinos }), { base_top: '', meta_reps: '', descanso_segundos: 90, tem_aquecimento: false, origem: null })
+  // Registro vazio não conta como carga.
+  assert.equal(valoresDoExercicio('Rosca direta', { historico, treinos }).base_top, '')
+  // Variação não herda: "Supino reto na máquina" não é "Supino reto".
+  assert.equal(valoresDoExercicio('Supino reto na máquina', { historico, treinos }).base_top, '')
+  // Sem meta registrada, usa a meta do plano e, por último, as reps feitas.
+  assert.equal(valoresDoExercicio('Puxada aberta', { historico: [{ exercicios: [{ nome: 'Puxada aberta', carga_top: 50, reps_top: 9 }] }], treinos: {} }).meta_reps, '9')
+  assert.equal(valoresDoExercicio('', { historico, treinos }).origem, null)
+})
+
+test('carga em branco no plano vira "sem referência" no treino, não 0 kg', () => {
+  const [ex] = prepareSession({ exercicios: [{ nome: 'Leg press 45 graus', base_top: '', meta_reps: '' }] })
+  assert.equal(Number(ex.ref) > 0, false)
+  assert.equal(ex.meta_reps, '')
+})
+
+test('editar o plano durante o treino ajusta o rascunho sem perder o que foi digitado', () => {
+  const rotina = { exercicios: garantirIdsExercicios([{ nome: 'Supino reto', base_top: 60, meta_reps: '6-8' }, { nome: 'Remada', base_top: 50, meta_reps: '8-10' }, { nome: 'Rosca', base_top: 12 }]) }
+  const sessao = prepareSession(rotina)
+  sessao[0] = { ...sessao[0], carga: '80', reps: '8' }
+  sessao[1] = { ...sessao[1], pulado: true }
+  sessao[2] = { ...sessao[2], carga: '14', reps: '10' }
+  const draft = { rotinaKey: 'a', fingerprint: routineFingerprint(rotina), topSetData: sessao }
+
+  // Plano sem mudança: nada a ajustar.
+  assert.equal(reconciliarRascunho(draft, rotina).alterado, false)
+
+  // Carga base, aquecimento, ordem invertida e exercício novo no fim.
+  const [supino, remada, rosca] = rotina.exercicios
+  const novoPlano = { exercicios: [{ ...remada, meta_reps: '10-12' }, { ...supino, base_top: 62, tem_aquecimento: true }, rosca, { id: 'ex:novo', nome: 'Tríceps corda', base_top: 20 }] }
+  const ajustado = reconciliarRascunho(draft, novoPlano)
+  assert.equal(ajustado.alterado, true)
+  assert.deepEqual(ajustado.topSetData.map(ex => [ex.nome, ex.carga, ex.reps, ex.pulado]), [
+    ['Remada', '', '', true], ['Supino reto', '80', '8', false], ['Rosca', '14', '10', false], ['Tríceps corda', '', '', false],
+  ])
+  assert.equal(ajustado.topSetData[0].meta_reps, '10-12')
+  assert.equal(ajustado.topSetData[1].tem_aquecimento, true)
+  assert.deepEqual(ajustado.novosIds, ['ex:novo'])
+  assert.deepEqual(ajustado.removidos, [])
+
+  // Exercício removido do plano com dados digitados é avisado, não some em silêncio.
+  const semRosca = reconciliarRascunho(draft, { exercicios: [supino, remada] })
+  assert.deepEqual(semRosca.removidos, ['Rosca'])
+
+  // Renomear para outro exercício não leva a carga digitada do antigo.
+  const renomeado = reconciliarRascunho(draft, { exercicios: [{ ...supino, nome: 'Leg press' }, remada, rosca] })
+  assert.deepEqual([renomeado.topSetData[0].nome, renomeado.topSetData[0].carga], ['Leg press', ''])
+  assert.deepEqual(renomeado.removidos, ['Supino reto'])
+
+  // Nada em comum com o plano atual: o rascunho não serve mais.
+  assert.equal(reconciliarRascunho(draft, { exercicios: [{ id: 'x', nome: 'Agachamento' }] }), null)
+  assert.equal(reconciliarRascunho(draft, undefined), null)
+})
+
+test('troca feita durante a sessão continua valendo depois de ajustar o rascunho', () => {
+  const rotina = { exercicios: garantirIdsExercicios([{ nome: 'Voador', base_top: 40 }, { nome: 'Remada', base_top: 50 }]) }
+  const sessao = prepareSession(rotina)
+  sessao[0] = { ...createReplacementExercise(sessao[0], 'Crucifixo na máquina', 'tok'), carga: '35', reps: '12' }
+  const draft = { rotinaKey: 'a', fingerprint: routineFingerprint(rotina), topSetData: sessao }
+  const ajustado = reconciliarRascunho(draft, { exercicios: [rotina.exercicios[1], rotina.exercicios[0]] })
+  assert.deepEqual(ajustado.topSetData.map(ex => [ex.nome, ex.carga]), [['Remada', ''], ['Crucifixo na máquina', '35']])
+  assert.equal(ajustado.topSetData[1].substituidoDe, 'Voador')
+})
+
+test('referência do treino vem do último treino do exercício em qualquer divisão', () => {
+  const upperB = { exercicios: [{ nome: 'Supino reto', base_top: 60 }] }
+  const historicoRecente = [
+    { rotina_id: 'upper_a', exercicios: [{ id: 'legacy:3:Supino reto', nome: 'Supino reto', carga_top: 85, reps_top: 6 }] },
+    { rotina_id: 'upper_b', exercicios: [{ id: 'legacy:0:Supino reto', nome: 'Supino reto', carga_top: 70, reps_top: 8 }] },
+  ]
+  assert.deepEqual([prepareSession(upperB, historicoRecente)[0].ref, prepareSession(upperB, historicoRecente)[0].repsAnterior], [85, 6])
+})
+
+test('chave agrupa o mesmo exercício escrito de formas diferentes', () => {
+  const chaves = new Set(['Supino reto', 'supino reto', 'Supino Reto ', 'Súpino reto'].map(chaveExercicio))
+  assert.equal(chaves.size, 1)
+  assert.equal(chaveExercicio('Supino reto c/ barra'), chaveExercicio('Supino reto com barra'))
+  assert.notEqual(chaveExercicio('Supino reto'), chaveExercicio('Supino reto com barra'))
+  assert.equal(chaveExercicio(''), '')
 })

@@ -4,7 +4,8 @@ import { db } from '../../firebase'
 import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { useThemeColor } from '../../utils/themes'
-import { diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../../utils/fitness'
+import { calcularSequenciaTreinos, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../../utils/fitness'
+import { chaveExercicio } from '../../utils/workoutSession'
 import TrendChart from '../../components/TrendChart'
 import {
   Dumbbell, BarChart3, Trophy, Target, Flame,
@@ -116,9 +117,13 @@ export default function Evolucao() {
         const config = await getDoc(doc(db, 'users', uid, 'config', 'data'))
         setTreinosConfig(config.exists() ? config.data().treinos || {} : {})
       } catch { setTreinosConfig({}) }
-      const nomes = new Set()
-      docs.forEach(t => { if (t.exercicios) t.exercicios.forEach(ex => { if (ex.nome) nomes.add(ex.nome) }) })
-      setExercicios([...nomes].sort())
+      // Um item por exercício, mesmo escrito de formas diferentes; vale a grafia mais recente.
+      const nomes = new Map()
+      docs.forEach(t => (t.exercicios || []).forEach(ex => {
+        const chave = chaveExercicio(ex.nome)
+        if (chave && !nomes.has(chave)) nomes.set(chave, String(ex.nome).trim())
+      }))
+      setExercicios([...nomes.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')))
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
   }, [uid])
@@ -212,11 +217,12 @@ export default function Evolucao() {
 
   const dadosTreino = useMemo(() => {
     if (!selecionado) return []
+    const chave = chaveExercicio(selecionado)
     return todosTreinos
       .filter(t => rotinaFiltro === 'todas' || t.rotina_id === rotinaFiltro)
-      .filter(t => t.exercicios?.some(ex => ex.nome === selecionado))
+      .filter(t => t.exercicios?.some(ex => chaveExercicio(ex.nome) === chave))
       .map(t => {
-        const ex = t.exercicios.find(e => e.nome === selecionado)
+        const ex = t.exercicios.find(e => chaveExercicio(e.nome) === chave)
         if (!ex || ex.carga_top == null) return null
         return {
           data: t.data,
@@ -235,9 +241,10 @@ export default function Evolucao() {
 
   const ultimoTreino = dadosTreino.length > 0 ? dadosTreino[dadosTreino.length - 1] : null
   const recorde = dadosTreino.length > 0 ? Math.max(...dadosTreino.map(d => d.carga)) : null
-  const lastMatching = [...todosTreinos].reverse().find(t => (rotinaFiltro === 'todas' || t.rotina_id === rotinaFiltro) && t.exercicios?.some(ex => ex.nome === selecionado))
-  const historicalExercise = lastMatching?.exercicios?.find(ex => ex.nome === selecionado)
-  const configuredExercise = treinosConfig[lastMatching?.rotina_id]?.exercicios?.find(ex => ex.nome === selecionado)
+  const chaveSelecionado = chaveExercicio(selecionado)
+  const lastMatching = [...todosTreinos].reverse().find(t => (rotinaFiltro === 'todas' || t.rotina_id === rotinaFiltro) && t.exercicios?.some(ex => chaveExercicio(ex.nome) === chaveSelecionado))
+  const historicalExercise = lastMatching?.exercicios?.find(ex => chaveExercicio(ex.nome) === chaveSelecionado)
+  const configuredExercise = treinosConfig[lastMatching?.rotina_id]?.exercicios?.find(ex => chaveExercicio(ex.nome) === chaveSelecionado)
   const metaReps = historicalExercise?.meta_reps ?? configuredExercise?.meta_reps ?? null
   const nomeRotina = id => [...todosTreinos].reverse().find(t => t.rotina_id === id && t.rotina_nome)?.rotina_nome || treinosConfig[id]?.nome || id
   const tetoMeta = parseMetaTeto(metaReps)
@@ -269,17 +276,8 @@ export default function Evolucao() {
     const volumeSemana = treinos.filter(t => t.data >= inicioSemana).reduce((acc, t) => acc + volumePorTreino(t), 0)
     const volumeSemanaAnterior = treinos.filter(t => t.data >= inicioSemanaAnterior && t.data < inicioSemana).reduce((acc, t) => acc + volumePorTreino(t), 0)
 
-    // Sequência atual (dias consecutivos com treino)
-    const diasComTreino = new Set()
-    treinos.forEach(t => {
-      const d = new Date(t.data); d.setHours(0, 0, 0, 0); diasComTreino.add(d.getTime())
-    })
-    let sequenciaAtual = 0
-    let cursor = new Date(agora); cursor.setHours(0, 0, 0, 0)
-    while (diasComTreino.has(cursor.getTime())) {
-      sequenciaAtual++
-      cursor.setDate(cursor.getDate() - 1)
-    }
+    // Mesma regra da Home: hoje ainda em aberto não quebra a sequência que vem de ontem.
+    const sequenciaAtual = calcularSequenciaTreinos(treinos, agora, 3650)
 
     // Melhor 1RM estimado entre todos os exercícios
     let melhor1RM = null
@@ -295,7 +293,7 @@ export default function Evolucao() {
     })
 
     const exerciciosAtivos = new Set()
-    treinosPeriodo.forEach(t => (t.exercicios || []).forEach(ex => ex.nome && exerciciosAtivos.add(ex.nome)))
+    treinosPeriodo.forEach(t => (t.exercicios || []).forEach(ex => ex.nome && exerciciosAtivos.add(chaveExercicio(ex.nome))))
     const ultimo = treinos[treinos.length - 1]
     const diasSemTreino = ultimo ? diasDesde(ultimo.data, agora) : null
     const progressoPeriodo = volumePeriodoAnterior > 0
@@ -313,18 +311,19 @@ export default function Evolucao() {
 
   // Top PRs (top 5 por carga máxima) por exercício
   const topPRs = useMemo(() => {
-    const prMap = new Map() // nome → { carga, reps, data }
+    const prMap = new Map() // exercício → { nome, carga, reps, data }
     todosTreinos.forEach(t => {
       (t.exercicios || []).forEach(ex => {
         if (!ex.carga_top) return
-        const atual = prMap.get(ex.nome)
+        const chave = chaveExercicio(ex.nome)
+        const atual = prMap.get(chave)
         if (!atual || ex.carga_top > atual.carga) {
-          prMap.set(ex.nome, { carga: ex.carga_top, reps: ex.reps_top, data: t.data })
+          prMap.set(chave, { nome: String(ex.nome).trim(), carga: ex.carga_top, reps: ex.reps_top, data: t.data })
         }
       })
     })
-    return [...prMap.entries()]
-      .map(([nome, v]) => ({ nome, ...v, um: epley1RM(v.carga, v.reps) }))
+    return [...prMap.values()]
+      .map(v => ({ ...v, um: epley1RM(v.carga, v.reps) }))
       .sort((a, b) => b.carga - a.carga)
       .slice(0, 5)
   }, [todosTreinos])

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcularRitmoTreino, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
+import { calcularRitmoTreino, calcularSequenciaTreinos, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
 import { LIMITS, normalizarNomeAlimentoExtra, parseNumero, sanitizarTexto, truncar } from '../src/utils/validation.js'
 
 test('parseMetaTeto interpreta meta simples e intervalo', () => {
@@ -71,8 +71,32 @@ test('ritmo cai sem sessões, ignora duplicatas e datas futuras, e se recupera',
   assert.equal(calcularRitmoTreino([], now).score, 0)
 })
 
+test('sequência de treinos considera hoje ou ontem e respeita o limite do histórico consultado', () => {
+  const agora = new Date(2026, 8, 9, 12)
+  const data = diasAtras => {
+    const dia = new Date(agora)
+    dia.setDate(dia.getDate() - diasAtras)
+    return { data: dia }
+  }
+
+  assert.equal(calcularSequenciaTreinos([data(1), data(2), data(3)], agora), 3)
+  assert.equal(calcularSequenciaTreinos([data(0), data(1), data(3)], agora), 2)
+  assert.equal(calcularSequenciaTreinos([data(2)], agora), 0)
+  assert.equal(calcularSequenciaTreinos(Array.from({ length: 95 }, (_, i) => data(i)), agora), 90)
+  assert.equal(calcularSequenciaTreinos(Array.from({ length: 90 }, (_, i) => data(i + 1)), agora), 90)
+})
+
 test('classificarSessaoTreino prioriza o contexto explícito e reconhece exercícios', () => {
   assert.equal(classificarSessaoTreino({ rotinaNome: 'Lower A', exercicios: ['Agachamento'] }), 'lower')
   assert.equal(classificarSessaoTreino({ rotinaNome: 'Sessão', exercicios: ['Supino inclinado', 'Crucifixo'] }), 'chest')
   assert.equal(classificarSessaoTreino({ rotinaNome: 'Treino', exercicios: ['Remada curvada', 'Puxada'] }), 'back')
+})
+
+test('sequência de treinos: hoje sem treino não zera a sequência que vem de ontem', () => {
+  const agora = new Date(2026, 9, 15, 10)
+  const dia = recuo => ({ data: new Date(2026, 9, 15 - recuo, 19) })
+  assert.equal(calcularSequenciaTreinos([dia(1), dia(2)], agora), 2)
+  assert.equal(calcularSequenciaTreinos([dia(0), dia(1), dia(2)], agora), 3)
+  assert.equal(calcularSequenciaTreinos([dia(2), dia(3)], agora), 0)
+  assert.equal(calcularSequenciaTreinos(Array.from({ length: 200 }, (_, i) => dia(i)), agora, 3650), 200)
 })

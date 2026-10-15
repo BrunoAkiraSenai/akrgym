@@ -5,7 +5,7 @@ import {
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
-import { calcularRitmoTreino, classificarSessaoTreino, dataTreinoParaDate } from '../../utils/fitness'
+import { calcularRitmoTreino, calcularSequenciaTreinos, classificarSessaoTreino, dataTreinoParaDate } from '../../utils/fitness'
 import { Activity, ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Dumbbell, Flame, Minus, Play, Trophy } from 'lucide-react'
 import DescansoTimer from '../DescansoTimer'
 
@@ -146,24 +146,9 @@ export default function Home({ onStartWorkout }) {
 
   const hoje = useMemo(() => new Date(), [])
 
-  const calcularStreak = (listaTreinos) => {
-    if (!listaTreinos || listaTreinos.length === 0) return 0
-    const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0)
-    const datas = new Set()
-    for (const treino of listaTreinos) {
-      const data = dataTreinoParaDate(treino.data)
-      if (!data) continue
-      data.setHours(0, 0, 0, 0)
-      datas.add(data.getTime())
-    }
-    let streak = 0
-    let dia = inicioHoje.getTime()
-    while (datas.has(dia)) {
-      streak++
-      dia -= 86400000
-    }
-    return streak
-  }
+  // Hoje ainda em aberto não quebra a sequência que vem de ontem (mesma regra da Evolução).
+  const calcularStreak = (listaTreinos) => calcularSequenciaTreinos(listaTreinos || [], new Date(), 3650)
+
 
   const carregarDados = useCallback(async () => {
     setLoading(true)

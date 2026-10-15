@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  collection, getDocs, query, where, orderBy, limit, runTransaction, doc, getDoc, setDoc, serverTimestamp,
+  collection, getDocs, query, orderBy, limit, doc, getDoc, setDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
-import { exercicioUsaRegraAgachamento, exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho } from '../../utils/workoutSession'
+import { exercicioUsaRegraAgachamento, exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, prepareSession, reconciliarRascunho, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
+
+// Sessões recentes de todas as divisões: a referência de um exercício é o
+// último treino dele, não importa em qual divisão foi feito.
+const LIMITE_HISTORICO = 200
+const SALVAMENTO_ESPERA_MS = 6000
 import ConfirmModal from '../ConfirmModal'
 import DescansoTimer from '../DescansoTimer'
 import {
@@ -84,30 +89,50 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     carregarTreinos()
   }, [activeTab, carregarTreinos])
 
-  // Restaura um rascunho persistido ao entrar na sessão.
+  const buscarHistoricoRecente = useCallback(async () => {
+    const snap = await getDocs(query(collection(db, 'users', user.uid, 'historico_treinos'), orderBy('data', 'desc'), limit(LIMITE_HISTORICO)))
+    return snap.docs.map(item => item.data())
+  }, [user.uid])
+
+  // Restaura um rascunho persistido ao entrar na sessão. Se o plano mudou
+  // nesse meio-tempo, o rascunho é ajustado em vez de descartado.
   useEffect(() => {
     if (!treinosState) return
+    let draft
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return
-      const draft = JSON.parse(raw)
-      if (!draft?.rotinaKey || !draft?.topSetData?.length) return
-      const rotinaRascunho = treinosState[draft.rotinaKey]
-      if (!rotinaRascunho || !validDraft(draft, rotinaRascunho)) {
-        localStorage.removeItem(STORAGE_KEY)
-        return
-      }
-      // Mantém o ID da sessão para que finalizar depois de recarregar não duplique o treino.
-      if (typeof draft.sessionId === 'string' && draft.sessionId) sessionId.current = draft.sessionId
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRotinaKey(draft.rotinaKey)
-      setTopSetData(normalizarRascunho(draft, rotinaRascunho).topSetData)
-      setStep('active')
-      setRecuperado(true)
+      draft = JSON.parse(raw)
     } catch {
-      // Rascunhos inválidos não interrompem a sessão atual.
+      return // Rascunho ilegível não interrompe a sessão atual.
     }
-  }, [treinosState, STORAGE_KEY])
+    if (!draft?.rotinaKey || !draft?.topSetData?.length) return
+    const rotinaRascunho = treinosState[draft.rotinaKey]
+    const ajustado = reconciliarRascunho(draft, rotinaRascunho)
+    if (!ajustado) {
+      try { localStorage.removeItem(STORAGE_KEY) } catch { /* Nada a apagar. */ }
+      return
+    }
+    // Mantém o ID da sessão para que finalizar depois de recarregar não duplique o treino.
+    if (typeof draft.sessionId === 'string' && draft.sessionId) sessionId.current = draft.sessionId
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRotinaKey(draft.rotinaKey)
+    setTopSetData(ajustado.topSetData)
+    setStep('active')
+    setRecuperado(true)
+    if (ajustado.alterado) {
+      setSucesso(`O plano mudou durante o treino. O que você já tinha preenchido foi mantido${ajustado.removidos.length ? `; ${ajustado.removidos.join(', ')} saiu do plano e ficou fora deste treino` : ''}.`)
+    }
+    // Exercícios que entraram no plano agora precisam da referência do histórico.
+    if (ajustado.novosIds.length) {
+      buscarHistoricoRecente().then(historico => {
+        const referencias = new Map(prepareSession(rotinaRascunho, historico).map(ex => [ex.id, ex]))
+        setTopSetData(atual => atual.map(ex => (ajustado.novosIds.includes(ex.id) && referencias.has(ex.id)
+          ? { ...ex, ref: referencias.get(ex.id).ref, repsAnterior: referencias.get(ex.id).repsAnterior }
+          : ex)))
+      }).catch(() => { /* Fica a carga base do plano. */ })
+    }
+  }, [treinosState, STORAGE_KEY, buscarHistoricoRecente])
 
   const keys = treinosState ? Object.keys(treinosState) : []
   const exerciciosSalvos = [
@@ -119,15 +144,27 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     ? moduloCatalogo.buscarExercicios(buscaTroca, exerciciosSalvos)
     : []
 
+  // Rascunho pronto para gravar; null quando não há treino em andamento.
+  const rascunhoPendente = useRef(null)
+  const gravarRascunho = useCallback(() => {
+    const dados = rascunhoPendente.current
+    if (!dados) return true
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(dados)); return true }
+    catch { return false }
+  }, [STORAGE_KEY])
+
   useEffect(() => {
+    rascunhoPendente.current = step === 'active' && rotinaKey && topSetData.length > 0
+      ? { rotinaKey, topSetData, sessionId: sessionId.current, fingerprint: routineFingerprint(treinosState?.[rotinaKey]) }
+      : null
     const timer = setTimeout(() => {
-      if (step === 'active' && rotinaKey && topSetData.length > 0) {
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ rotinaKey, topSetData, sessionId: sessionId.current, fingerprint: routineFingerprint(treinosState?.[rotinaKey]) })) }
-        catch { setErro('Não foi possível guardar o rascunho neste navegador. Não feche a aba antes de finalizar.') }
-      }
+      if (!gravarRascunho()) setErro('Não foi possível guardar o rascunho neste navegador. Não feche a aba antes de finalizar.')
     }, 500)
     return () => clearTimeout(timer)
-  }, [rotinaKey, topSetData, step, STORAGE_KEY, treinosState])
+  }, [rotinaKey, topSetData, step, treinosState, gravarRascunho])
+
+  // Trocar de aba logo depois de digitar não pode perder o último número.
+  useEffect(() => () => { gravarRascunho() }, [gravarRascunho])
 
   const iniciarTreino = useCallback(async (key) => {
     if (loadingHistorico) return
@@ -151,12 +188,12 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     setRecuperado(false)
     setErro(null); setSucesso(null)
     try {
-      const snap = await getDocs(
-        query(collection(db, 'users', user.uid, 'historico_treinos'), where('rotina_id', '==', key), orderBy('data', 'desc'))
-      )
+      const historico = await buscarHistoricoRecente()
       if (request !== historyRequest.current) return
-      const historico = snap.docs.map(item => item.data())
       setHistoricoTreino(historico)
+      // O mesmo histórico serve para a troca de exercício: evita uma segunda leitura.
+      setHistoricoGlobal(historico)
+      setHistoricoGlobalCarregado(true)
       setTopSetData(prepareSession(protocolo, historico))
     } catch {
       if (request !== historyRequest.current) return
@@ -165,7 +202,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
       setTopSetData(prepareSession(protocolo))
     }
     setLoadingHistorico(false)
-  }, [loadingHistorico, treinosState, user.uid])
+  }, [buscarHistoricoRecente, loadingHistorico, treinosState])
 
   const atualizar = (exIdx, campo, valor) => {
     setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, [campo]: valor, pulado: false } : { ...ex }))
@@ -191,12 +228,8 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
           .catch(erro => ({ tipo: 'catalogo', erro })))
       }
       if (!historicoGlobalCarregado) {
-        tarefas.push(getDocs(query(
-          collection(db, 'users', user.uid, 'historico_treinos'),
-          orderBy('data', 'desc'),
-          limit(100),
-        ))
-          .then(snap => ({ tipo: 'historico', valor: snap.docs.map(item => item.data()) }))
+        tarefas.push(buscarHistoricoRecente()
+          .then(valor => ({ tipo: 'historico', valor }))
           .catch(erro => ({ tipo: 'historico', erro })))
       }
       const resultados = await Promise.all(tarefas)
@@ -301,12 +334,23 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
           substituto: ex.nome,
         }))
         if (substituicoes.length > 0) record.exercicios_substituidos = substituicoes
-      await runTransaction(db, async transaction => {
-        const existing = await transaction.get(target)
-        if (!existing.exists()) transaction.set(target, record)
+      // Sem internet a gravação fica na fila do aparelho (cache persistente do
+      // Firestore) e sobe sozinha quando a conexão voltar.
+      const gravacao = setDoc(target, record)
+      const resultado = await Promise.race([
+        gravacao.then(() => 'enviado'),
+        new Promise(resolve => setTimeout(() => resolve('na-fila'), SALVAMENTO_ESPERA_MS)),
+      ]).catch(async erro => {
+        // Mesmo ID de sessão já gravado antes (ex.: confirmação perdida e nova tentativa).
+        if (erro?.code === 'permission-denied' && (await getDoc(target).catch(() => null))?.exists()) return 'enviado'
+        throw erro
       })
+      gravacao.catch(() => { /* Falha posterior: o Firestore desfaz a gravação local. */ })
+      rascunhoPendente.current = null
       try { localStorage.removeItem(STORAGE_KEY) } catch { /* Remote record is safe. */ }
-      setSucesso('Treino finalizado com sucesso!')
+      setSucesso(resultado === 'na-fila'
+        ? 'Treino salvo no aparelho. Ele será enviado assim que a conexão voltar.'
+        : 'Treino finalizado com sucesso!')
       setStep('select'); setTopSetData([]); setRotinaKey(null); setTrocaAberta(null); setBuscaTroca(''); setErroTroca(null)
       setSaving(false)
       saveLock.current = false
@@ -382,6 +426,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
         <div className="exec-feedback exec-feedback-info">
           <span><CheckCircle size={14} /> Rascunho recuperado</span>
           <button type="button" onClick={() => {
+            rascunhoPendente.current = null
             try { localStorage.removeItem(STORAGE_KEY) } catch { /* Sem armazenamento, não há rascunho para apagar. */ }
             sessionId.current = null
             setRecuperado(false)
@@ -437,7 +482,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
             <div key={`${originalIndex}-${ex.nome}`} className={`exec-exercise-card card-premium${ex.pulado ? ' is-skipped' : ''}`}>
               <div className="flex items-center justify-between">
                 <h2 className="text-white font-semibold text-sm tracking-tight">{ex.nome}</h2>
-                <span className="text-neutral-500 text-[11px] font-mono">meta {ex.meta_reps}</span>
+                {ex.meta_reps && <span className="text-neutral-500 text-[11px] font-mono">meta {ex.meta_reps}</span>}
               </div>
 
               {ex.substituidoDe && (
