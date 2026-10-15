@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
 import { ArrowDown, ArrowUp, Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, Download, Clock3 } from 'lucide-react'
@@ -9,7 +9,8 @@ import { THEMES, useTheme } from '../../utils/themes'
 import { buildUserDataExport, formatExportFilename } from '../../utils/exportData'
 import { prepararConfigParaSalvar } from '../../utils/configValidation'
 import { focusTabWithArrowKey } from '../../utils/rovingTabs'
-import { exerciseId, garantirIdsExercicios, novoIdExercicio, reordenarExercicios } from '../../utils/workoutSession'
+import { dataTreinoParaDate } from '../../utils/fitness'
+import { exerciseId, garantirIdsExercicios, nomesDeExerciciosCompativeis, novoIdExercicio, reordenarExercicios, valoresDoExercicio } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 
 function gerarIdRefeicao() {
@@ -234,6 +235,8 @@ export default function Configuracao({ abaInicial }) {
     const exs = [...(n.treinos[key].exercicios || [])]
     exs[idx] = { ...exs[idx], [campo]: valor }
     n.treinos[key] = { ...n.treinos[key], exercicios: exs }
+    // Quem lê logo em seguida (troca de exercício, autosave) precisa do valor novo.
+    configRef.current = n
     setConfig(n)
     setAlteracaoPendente(true)
   }
@@ -257,6 +260,70 @@ export default function Configuracao({ abaInicial }) {
       setConfig(config)
       setErro('Erro ao salvar a nova ordem: ' + err.message)
     }
+  }
+
+  // Histórico só é lido quando a pessoa troca um exercício, e uma vez por tela.
+  const historicoRef = useRef(null)
+  const garantirHistorico = () => {
+    historicoRef.current ||= getDocs(query(collection(db, 'users', user.uid, 'historico_treinos'), orderBy('data', 'desc'), limit(200)))
+      .then(snap => snap.docs.map(item => item.data()))
+      .catch(() => { historicoRef.current = null; return [] })
+    return historicoRef.current
+  }
+
+  // Nome que o campo tinha quando recebeu o foco: é a referência para saber se
+  // a pessoa trocou de exercício ou só corrigiu a digitação.
+  const nomeNoFocoRef = useRef(new Map())
+
+  const aplicarExercicioEscolhido = async (key, idx, nome) => {
+    const exAntes = configRef.current.treinos?.[key]?.exercicios?.[idx]
+    if (!exAntes) return
+    const id = exerciseId(exAntes, idx)
+    nomeNoFocoRef.current.set(`${key}:${idx}`, nome)
+    const historico = await garantirHistorico()
+    const atual = configRef.current
+    const lista = atual.treinos?.[key]?.exercicios || []
+    const posicao = lista.findIndex((ex, i) => exerciseId(ex, i) === id)
+    // A pessoa apagou, moveu ou renomeou de novo enquanto o histórico carregava.
+    if (posicao < 0 || lista[posicao].nome !== nome) return
+    const { origem, ...valores } = valoresDoExercicio(nome, { historico, treinos: atual.treinos, ignorar: { key, idx: posicao } })
+    const exercicios = lista.map((ex, i) => (i === posicao ? { ...ex, ...valores } : ex))
+    const novo = { ...atual, treinos: { ...atual.treinos, [key]: { ...atual.treinos[key], exercicios } } }
+    configRef.current = novo
+    setConfig(novo)
+    setAlteracaoPendente(true)
+    if (origem?.tipo === 'historico') {
+      const data = dataTreinoParaDate(origem.data)
+      mostrarSucesso(`${nome}: carga e repetições do último treino${data ? ` (${data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})` : ''}.`)
+    } else if (origem?.tipo === 'plano') {
+      mostrarSucesso(`${nome}: carga e repetições copiadas de ${origem.rotina}.`)
+    } else {
+      mostrarSucesso(`${nome} ainda não tem treino registrado: carga e repetições ficaram em branco.`)
+    }
+  }
+
+  const trocouDeExercicio = (key, idx, nome) => {
+    const anterior = nomeNoFocoRef.current.get(`${key}:${idx}`)
+    return Boolean(String(nome || '').trim()) && anterior !== undefined && !nomesDeExerciciosCompativeis(anterior, nome)
+  }
+
+  const aoFocarNomeExercicio = (campoId, nome) => {
+    if (!nomeNoFocoRef.current.has(campoId)) nomeNoFocoRef.current.set(campoId, nome)
+    void abrirCatalogoExercicio(campoId)
+  }
+
+  // Nome digitado à mão também conta como troca de exercício.
+  const aoSairDoNomeExercicio = (key, idx, campoId) => {
+    const nomeAtual = configRef.current.treinos?.[key]?.exercicios?.[idx]?.nome
+    if (trocouDeExercicio(key, idx, nomeAtual)) void aplicarExercicioEscolhido(key, idx, nomeAtual)
+    nomeNoFocoRef.current.delete(campoId)
+  }
+
+  const aoEscolherExercicio = (key, idx, nome) => {
+    setCampoBuscaExercicio(null)
+    const trocou = trocouDeExercicio(key, idx, nome)
+    updateExercise(key, idx, 'nome', nome)
+    if (trocou) void aplicarExercicioEscolhido(key, idx, nome)
   }
 
   const limparNomeExercicio = (key, idx, campoId) => {
@@ -491,6 +558,8 @@ export default function Configuracao({ abaInicial }) {
             {Object.entries(config.treinos || {}).length === 0 && <div className="settings-empty card-premium"><Dumbbell size={22} /><h2>Nenhuma divisão criada</h2><p>Crie sua primeira divisão para começar a montar o treino.</p></div>}
 
             <div className="settings-routines">
+              {/* As refs só são lidas nos eventos (foco, saída e escolha do exercício), não ao desenhar. */}
+              {/* eslint-disable-next-line react-hooks/refs */}
               {Object.entries(config.treinos || {}).map(([key, rotina], index) => {
                 const isOpen = expandedKey === key
                 const exerciseCount = (rotina.exercicios || []).length
@@ -525,11 +594,12 @@ export default function Configuracao({ abaInicial }) {
                                 <div className="settings-exercise-input-wrap">
                                   <input id={inputId} type="text" value={ex.nome} role="combobox" aria-autocomplete="list"
                                     aria-expanded={buscaAtiva} aria-controls={listId}
-                                    onFocus={() => { void abrirCatalogoExercicio(campoId) }}
+                                    onFocus={() => aoFocarNomeExercicio(campoId, ex.nome)}
                                     onBlur={() => window.setTimeout(() => {
                                       const nomeField = exerciseRefs.current[`${key}:${idx}`]?.querySelector('.settings-exercise-name')
                                       if (nomeField?.contains(document.activeElement)) return
                                       setCampoBuscaExercicio(atual => atual === campoId ? null : atual)
+                                      aoSairDoNomeExercicio(key, idx, campoId)
                                     }, 150)}
                                     onChange={e => { void updateExercise(key, idx, 'nome', e.target.value) }} />
                                   {ex.nome && <button type="button" className="settings-exercise-clear"
@@ -555,10 +625,7 @@ export default function Configuracao({ abaInicial }) {
                                       aria-selected={opcao.nome === textoBusca}
                                       className="settings-exercise-catalog-option"
                                       onMouseDown={e => e.preventDefault()}
-                                      onClick={() => {
-                                        setCampoBuscaExercicio(null)
-                                        void updateExercise(key, idx, 'nome', opcao.nome)
-                                      }}>
+                                      onClick={() => aoEscolherExercicio(key, idx, opcao.nome)}>
                                       <span><strong>{opcao.nome}</strong><small>{opcao.grupo}</small></span>
                                       {opcao.nome === textoBusca && <CheckCircle2 size={15} aria-hidden="true" />}
                                     </button>
@@ -573,8 +640,8 @@ export default function Configuracao({ abaInicial }) {
                             <button type="button" onClick={() => pedirExclusaoExercicio(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome || 'exercício'}`}><Trash size={15} /></button>
                           </div>
                           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            <label className="settings-field"><span>Base Top (kg)</span><input type="number" value={ex.base_top} onChange={e => updateExercise(key, idx, 'base_top', Number(e.target.value))} inputMode="decimal" /></label>
-                            <label className="settings-field"><span>Meta de reps</span><input type="text" value={ex.meta_reps} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label>
+                            <label className="settings-field"><span>Base Top (kg)</span><input type="number" min="0" placeholder="Sem carga" value={ex.base_top ?? ''} onChange={e => updateExercise(key, idx, 'base_top', e.target.value === '' ? '' : Number(e.target.value))} inputMode="decimal" /></label>
+                            <label className="settings-field"><span>Meta de reps</span><input type="text" placeholder="Ex.: 8-10" value={ex.meta_reps ?? ''} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label>
                             <label className="settings-field"><span className="flex items-center gap-1"><Clock3 size={11} /> Descanso</span><select value={ex.descanso_segundos ?? 90} onChange={e => updateExercise(key, idx, 'descanso_segundos', Number(e.target.value))} aria-label={`Tempo de descanso de ${ex.nome}`}>
                               {[30, 60, 90, 120, 180, 300].map(segundos => <option key={segundos} value={segundos}>{segundos < 60 ? `${segundos}s` : `${segundos / 60} min`}</option>)}
                             </select></label>

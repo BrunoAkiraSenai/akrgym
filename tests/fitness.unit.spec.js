@@ -91,3 +91,12 @@ test('classificarSessaoTreino prioriza o contexto explícito e reconhece exercí
   assert.equal(classificarSessaoTreino({ rotinaNome: 'Sessão', exercicios: ['Supino inclinado', 'Crucifixo'] }), 'chest')
   assert.equal(classificarSessaoTreino({ rotinaNome: 'Treino', exercicios: ['Remada curvada', 'Puxada'] }), 'back')
 })
+
+test('sequência de treinos: hoje sem treino não zera a sequência que vem de ontem', () => {
+  const agora = new Date(2026, 9, 15, 10)
+  const dia = recuo => ({ data: new Date(2026, 9, 15 - recuo, 19) })
+  assert.equal(calcularSequenciaTreinos([dia(1), dia(2)], agora), 2)
+  assert.equal(calcularSequenciaTreinos([dia(0), dia(1), dia(2)], agora), 3)
+  assert.equal(calcularSequenciaTreinos([dia(2), dia(3)], agora), 0)
+  assert.equal(calcularSequenciaTreinos(Array.from({ length: 200 }, (_, i) => dia(i)), agora, 3650), 200)
+})

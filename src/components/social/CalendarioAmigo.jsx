@@ -41,7 +41,8 @@ export default function CalendarioAmigo({ pessoa, onVoltar }) {
   const nomeMes = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^(\w)/, letra => letra.toUpperCase())
   const primeiroDia = new Date(ano, mes - 1, 1).getDay()
   const dias = diasDoCalendario(estado.dias, ano, mes, hoje)
-  const avaliados = dias.filter(dia => !dia.futuro)
+  // Mês não publicado (ou ainda carregando) não entra nas contas.
+  const avaliados = estado.fase === 'pronto' && estado.dias !== null ? dias.filter(dia => !dia.futuro) : []
   const verdes = avaliados.filter(dia => dia.status === DIET_DAY_STATUS.COMPLETE).length
   const vermelhos = avaliados.filter(dia => dia.status === DIET_DAY_STATUS.OUT_OF_PLAN).length
   const amarelos = avaliados.length - verdes - vermelhos
@@ -102,9 +103,14 @@ export default function CalendarioAmigo({ pessoa, onVoltar }) {
           <p className="social-feedback social-feedback-erro" role="alert">{estado.mensagem}</p>
         ) : estado.fase === 'carregando' ? (
           <div className="skeleton skeleton-card" role="status" aria-label="Carregando calendário" />
+        ) : semPublicacao ? (
+          // Sem publicação não dá para saber se houve registro: nada de pintar o mês de "sem registro".
+          <div className="social-empty" role="status">
+            <h2>{pessoa.nome} ainda não compartilhou este mês</h2>
+            <p>O calendário aparece depois que {pessoa.nome} abrir o app atualizado e entrar em Dieta. Se o app dele estiver instalado, peça para fechar e abrir de novo.</p>
+          </div>
         ) : (
           <>
-            {semPublicacao && <p className="social-muted mb-2" role="status">{pessoa.nome} ainda não compartilhou este mês. O calendário aparece depois que a pessoa abre o app e registra a dieta.</p>}
             <div className="diet-calendar-grid">
               {DIAS_SEMANA.map(dia => <div key={dia} className="diet-calendar-weekday">{dia}</div>)}
               {Array.from({ length: primeiroDia }).map((_, indice) => <div key={`vazio-${indice}`} />)}

@@ -24,6 +24,12 @@ function normalizarNomeExercicio(nome) {
     .filter(palavra => palavra && !palavrasDeLigacaoExercicio.has(palavra))
 }
 
+// Chave para agrupar o mesmo exercício escrito de formas diferentes
+// ("Supino Reto ", "supino reto", "c/ barra" x "com barra").
+export function chaveExercicio(nome) {
+  return normalizarNomeExercicio(nome).join(' ')
+}
+
 function nomesIguais(primeiroNome, segundoNome) {
   const primeiro = normalizarNomeExercicio(primeiroNome)
   const segundo = normalizarNomeExercicio(segundoNome)
@@ -128,6 +134,50 @@ export function reordenarExercicios(exercicios, de, para) {
   return lista
 }
 
+/**
+ * Valores que um exercício recém-escolhido deve trazer para o plano.
+ * Ordem: último treino registrado com esse exercício; senão, o mesmo
+ * exercício em outra posição do plano; senão, carga e reps em branco.
+ * `historico` vem do mais recente para o mais antigo.
+ */
+export function valoresDoExercicio(nome, { historico = [], treinos = {}, ignorar = null } = {}) {
+  const vazio = { base_top: '', meta_reps: '', descanso_segundos: DEFAULT_DESCANSO_SEGUNDOS, tem_aquecimento: false, origem: null }
+  if (!String(nome || '').trim()) return vazio
+
+  let doPlano = null
+  for (const [key, rotina] of Object.entries(treinos || {})) {
+    (rotina?.exercicios || []).forEach((ex, idx) => {
+      if (doPlano || (ignorar && ignorar.key === key && ignorar.idx === idx)) return
+      if (nomesDeExerciciosCompativeis(ex?.nome, nome)) doPlano = { ex, rotina: rotina.nome || key }
+    })
+  }
+
+  for (const sessao of historico || []) {
+    const ex = (sessao?.exercicios || []).find(item => nomesDeExerciciosCompativeis(item.nome, nome)
+      && exercicioPreenchido({ carga: item.carga_top, reps: item.reps_top }))
+    if (!ex) continue
+    return {
+      base_top: decimal(ex.carga_top),
+      // A meta registrada no treino vale mais que as reps feitas naquele dia.
+      meta_reps: ex.meta_reps || doPlano?.ex.meta_reps || String(ex.reps_top),
+      descanso_segundos: descanso(ex.descanso_segundos ?? doPlano?.ex.descanso_segundos),
+      tem_aquecimento: Boolean(doPlano?.ex.tem_aquecimento),
+      origem: { tipo: 'historico', data: sessao.data, reps: decimal(ex.reps_top) },
+    }
+  }
+
+  if (doPlano) {
+    return {
+      base_top: doPlano.ex.base_top ?? '',
+      meta_reps: doPlano.ex.meta_reps || '',
+      descanso_segundos: descanso(doPlano.ex.descanso_segundos),
+      tem_aquecimento: Boolean(doPlano.ex.tem_aquecimento),
+      origem: { tipo: 'plano', rotina: doPlano.rotina },
+    }
+  }
+  return vazio
+}
+
 export function validDraft(draft, routine) {
   if (!routine || !Array.isArray(draft?.topSetData) || !draft.topSetData.length) return false
   // Old drafts without a fingerprint can no longer prove which plan they used.
@@ -143,6 +193,53 @@ export function validDraft(draft, routine) {
       }
       return ex.id === originalId && ex.nome === original.nome
     })
+}
+
+const temDadosDigitados = ex => String(ex?.carga ?? '').trim() !== '' || String(ex?.reps ?? '').trim() !== ''
+
+/**
+ * Ajusta um rascunho ao plano atual em vez de descartá-lo: o que já foi
+ * digitado continua com o exercício a que pertence, mesmo que o plano tenha
+ * mudado de ordem, ganhado ou perdido exercícios ou trocado carga e reps.
+ * Devolve `null` quando nada do rascunho corresponde ao plano.
+ */
+export function reconciliarRascunho(draft, routine) {
+  if (!routine?.exercicios?.length || !Array.isArray(draft?.topSetData) || !draft.topSetData.length) return null
+  const novos = prepareSession(routine)
+  const usados = new Set()
+  const ids = new Set()
+  let aproveitados = 0
+
+  const topSetData = routine.exercicios.map((ex, index) => {
+    const id = exerciseId(ex, index)
+    const indice = draft.topSetData.findIndex((item, i) => !usados.has(i) && (item.substituidoDe
+      ? item.substituidoDeId === id && nomesDeExerciciosCompativeis(item.substituidoDe, ex.nome)
+      : item.id === id && nomesDeExerciciosCompativeis(item.nome, ex.nome)))
+    if (indice < 0) { ids.add(id); return novos[index] }
+    usados.add(indice)
+    aproveitados++
+    const item = draft.topSetData[indice]
+    // Troca feita nesta sessão continua valendo; o resto acompanha o plano atual.
+    if (item.substituidoDe) return { ...item, substituidoDe: ex.nome, substituidoDeId: id }
+    return {
+      ...item,
+      nome: ex.nome,
+      meta_reps: ex.meta_reps || '',
+      descanso_segundos: descanso(ex.descanso_segundos ?? item.descanso_segundos),
+      tem_aquecimento: ex.tem_aquecimento ?? false,
+      IsAgachamento: ex.IsAgachamento ?? false,
+      nota: ex.nota ?? null,
+    }
+  })
+
+  if (!aproveitados) return null
+  const removidos = draft.topSetData.filter((item, i) => !usados.has(i) && temDadosDigitados(item)).map(item => item.nome)
+  return {
+    topSetData,
+    novosIds: [...ids],
+    removidos,
+    alterado: draft.fingerprint !== routineFingerprint(routine) || removidos.length > 0 || ids.size > 0,
+  }
 }
 
 export function normalizarRascunho(draft, routine) {
