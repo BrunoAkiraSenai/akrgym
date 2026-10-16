@@ -5,7 +5,7 @@ import {
 import { db } from '../../firebase'
 import PROTOCOLO_BASE from '../../config/protocolo'
 import { useUser } from '../../context/UserContext'
-import { calcularRitmoTreino, calcularSequenciaTreinos, classificarSessaoTreino, dataTreinoParaDate } from '../../utils/fitness'
+import { calcularRitmoTreino, classificarSessaoTreino, dataTreinoParaDate, normalizarMetaSemanal, resumoSemanalTreinos } from '../../utils/fitness'
 import { Activity, ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Dumbbell, Flame, Minus, Play, Trophy } from 'lucide-react'
 import DescansoTimer from '../DescansoTimer'
 
@@ -134,7 +134,7 @@ function routineData(ultimoTreino, treinosConfig) {
   return { nome, exercicios, contexto: classificarSessaoTreino({ rotinaNome: nome, exercicios }) }
 }
 
-export default function Home({ onStartWorkout }) {
+export default function Home({ onStartWorkout, onIrParaConfig }) {
   const user = useUser()
   const [ultimoTreino, setUltimoTreino] = useState(null)
   const [totalTreinos, setTotalTreinos] = useState(0)
@@ -143,6 +143,8 @@ export default function Home({ onStartWorkout }) {
   const [erro, setErro] = useState(null)
   const [treinos, setTreinos] = useState([])
   const [treinosConfig, setTreinosConfig] = useState({})
+  const [metaSemanal, setMetaSemanal] = useState(normalizarMetaSemanal())
+  const [plano, setPlano] = useState({ carregado: false, temTreino: true, temDieta: true })
 
   const [hoje, setHoje] = useState(() => new Date())
 
@@ -184,7 +186,10 @@ export default function Home({ onStartWorkout }) {
       let configTreinos = {}
       try {
         const configSnap = await getDoc(doc(db, 'users', user.uid, 'config', 'data'))
-        configTreinos = configSnap.exists() ? configSnap.data().treinos || {} : {}
+        const config = configSnap.exists() ? configSnap.data() : {}
+        configTreinos = config.treinos || {}
+        setMetaSemanal(normalizarMetaSemanal(config.metaTreinosSemana))
+        setPlano({ carregado: true, temTreino: Object.keys(configTreinos).length > 0, temDieta: (config.refeicoes || []).length > 0 })
       } catch {
         // O histórico continua útil mesmo quando a configuração não está disponível.
       }
@@ -211,9 +216,10 @@ export default function Home({ onStartWorkout }) {
   useEffect(() => { carregarDados() }, [carregarDados])
 
   const dataTreino = dataTreinoParaDate(ultimoTreino?.data)
-  const streak = calcularSequenciaTreinos(treinos, hoje)
-  const ritmo = useMemo(() => calcularRitmoTreino(treinos, hoje), [treinos, hoje])
-  const sessoesNaSemana = diasComTreino.length
+  // Histórico da Home cobre 90 dias: até 12 semanas seguidas dá para afirmar.
+  const semanal = useMemo(() => resumoSemanalTreinos(treinos, hoje, metaSemanal, 12), [treinos, hoje, metaSemanal])
+  const ritmo = useMemo(() => calcularRitmoTreino(treinos, hoje, metaSemanal), [treinos, hoje, metaSemanal])
+  const precisaMontarPlano = plano.carregado && (!plano.temTreino || !plano.temDieta)
   const sessao = useMemo(() => routineData(ultimoTreino, treinosConfig), [ultimoTreino, treinosConfig])
 
   return (
@@ -233,6 +239,8 @@ export default function Home({ onStartWorkout }) {
         </div>
       )}
 
+      {precisaMontarPlano && <PrimeirosPassos plano={plano} onIrParaConfig={onIrParaConfig} />}
+
       <button type="button" onClick={onStartWorkout} className="home-start-card">
         <span className="home-start-icon"><Play size={18} fill="currentColor" aria-hidden="true" /></span>
         <span className="home-start-copy"><strong>Começar treino</strong><small>Escolha sua divisão e registre as séries</small></span>
@@ -246,12 +254,12 @@ export default function Home({ onStartWorkout }) {
           <div className="home-stat-label"><Flame size={14} /> Ritmo atual</div>
           <div className="home-rhythm-content">
             <div>
-              <strong>{loading ? <LoadingValue /> : streak === 90 ? '90+' : streak}</strong>
-              <span>{streak === 1 ? 'dia seguido' : 'dias seguidos'}</span>
+              <strong>{loading ? <LoadingValue /> : semanal.noLimite ? '12+' : semanal.semanasNaMeta}</strong>
+              <span>{semanal.semanasNaMeta === 1 ? 'semana na meta' : 'semanas na meta'}</span>
             </div>
             <RhythmChart points={ritmo.pontos} loading={loading} score={ritmo.score} variacao={ritmo.variacao} />
           </div>
-          <span className="home-rhythm-note" title="Cada ponto mede dias ativos nos 7 dias anteriores; 4 dias ativos = 100%. A tendência compara a semana atual com a anterior.">Ritmo: últimos 14 dias</span>
+          <span className="home-rhythm-note" title={`Cada ponto mede os dias com treino nos 7 dias anteriores; ${metaSemanal} dias = 100%. A tendência compara a semana atual com a anterior.`}>Meta: {metaSemanal} treinos por semana</span>
         </article>
 
         <article className="home-stat home-history-card">
@@ -275,7 +283,7 @@ export default function Home({ onStartWorkout }) {
       <section className="home-panel card-premium" aria-labelledby="home-week-title">
         <div className="home-panel-head">
           <div><p className="home-kicker">Constância</p><h2 id="home-week-title">Semana em movimento</h2></div>
-          <span className="home-week-count">{sessoesNaSemana}/7 dias</span>
+          <span className="home-week-count">{semanal.feitosSemana}/{semanal.meta} treinos</span>
         </div>
         <div className="home-week-grid">
           {DIAS_SEMANA.map((label, i) => {
@@ -289,16 +297,41 @@ export default function Home({ onStartWorkout }) {
           })}
         </div>
         <div className="home-panel-foot">
-          <span>{sessoesNaSemana === 0 ? 'Nenhum dia com treino nesta semana' : `${sessoesNaSemana} ${sessoesNaSemana === 1 ? 'dia' : 'dias'} com treino nesta semana`}</span>
-          {sessoesNaSemana > 0 && <span className="home-status"><CheckCircle2 size={13} /> Você está mantendo o ritmo</span>}
+          <span>{semanal.feitosSemana === 0 ? 'Nenhum treino nesta semana' : `${semanal.feitosSemana} ${semanal.feitosSemana === 1 ? 'treino' : 'treinos'} nesta semana`}</span>
+          {semanal.metaDaSemanaCumprida
+            ? <span className="home-status"><CheckCircle2 size={13} /> Meta da semana cumprida</span>
+            : <span className="home-status home-status-pending">{semanal.faltamSemana === 1 ? 'Falta 1 treino para a meta' : `Faltam ${semanal.faltamSemana} treinos para a meta`}</span>}
         </div>
       </section>
 
-      <section className="home-next card-premium">
-        <div className="home-next-icon"><Dumbbell size={17} /></div>
-        <div><h2>{ultimoTreino ? 'Pronto para a próxima?' : 'Monte seu primeiro registro'}</h2><p>{ultimoTreino ? 'Entre em Treinar quando quiser continuar sua evolução.' : 'Comece uma sessão para criar seu histórico e acompanhar sua evolução.'}</p></div>
-        <ChevronRight className="home-next-arrow" size={18} aria-hidden="true" />
-      </section>
+      {!precisaMontarPlano && (
+        <button type="button" className="home-next card-premium" onClick={onStartWorkout}>
+          <span className="home-next-icon"><Dumbbell size={17} /></span>
+          <span><span className="home-next-title">{ultimoTreino ? 'Pronto para a próxima?' : 'Faça seu primeiro registro'}</span><span className="home-next-text">{ultimoTreino ? 'Escolha a divisão de hoje e registre as séries.' : 'Comece uma sessão para criar seu histórico e acompanhar sua evolução.'}</span></span>
+          <ChevronRight className="home-next-arrow" size={18} aria-hidden="true" />
+        </button>
+      )}
     </div>
+  )
+}
+
+// Conta nova: o próximo passo é montar o plano, não treinar.
+function PrimeirosPassos({ plano, onIrParaConfig }) {
+  return (
+        <section className="home-setup card-premium" aria-labelledby="home-setup-title">
+          <div><p className="home-kicker">Primeiros passos</p><h2 id="home-setup-title">Monte seu plano</h2></div>
+          <ul className="home-setup-list">
+            <li>
+              <span className={`home-setup-check${plano.temTreino ? ' is-done' : ''}`} aria-hidden="true">{plano.temTreino && <Check size={14} strokeWidth={3} />}</span>
+              <span><strong>Divisões de treino</strong><small>{plano.temTreino ? 'Pronto' : 'Escolha os exercícios, cargas e repetições'}</small></span>
+              {!plano.temTreino && <button type="button" className="btn-secondary home-setup-action" onClick={() => onIrParaConfig?.('treinos')}>Montar</button>}
+            </li>
+            <li>
+              <span className={`home-setup-check${plano.temDieta ? ' is-done' : ''}`} aria-hidden="true">{plano.temDieta && <Check size={14} strokeWidth={3} />}</span>
+              <span><strong>Refeições e metas</strong><small>{plano.temDieta ? 'Pronto' : 'Defina refeições e calorias do dia'}</small></span>
+              {!plano.temDieta && <button type="button" className="btn-secondary home-setup-action" onClick={() => onIrParaConfig?.('dieta')}>Montar</button>}
+            </li>
+          </ul>
+        </section>
   )
 }

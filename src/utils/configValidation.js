@@ -29,5 +29,9 @@ export function prepararConfigParaSalvar(config) {
       descanso_segundos: validarNumeroConfig(ex.descanso_segundos ?? 90, 15, 600, `Descanso de "${ex.nome}"`),
     })),
   }]))
-  return { ...config, metas, refeicoes, treinos }
+  const salvo = { ...config, metas, refeicoes, treinos }
+  if (config.metaTreinosSemana !== undefined) {
+    salvo.metaTreinosSemana = Math.round(validarNumeroConfig(config.metaTreinosSemana, 1, 7, 'Meta de treinos por semana'))
+  }
+  return salvo
 }

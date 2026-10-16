@@ -124,11 +124,13 @@ export default function App() {
 
   if (!user) return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login /></Suspense></ErrorBoundary>
 
+  const abrirConfiguracao = aba => { setAbaInicialConfig(aba); setActiveTab('configurar') }
+
   const renderPage = () => {
     const pageKey = user?.uid || 'guest'
     switch (activeTab) {
       case 'home':
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
       case 'dieta':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
       case 'treinar':
@@ -138,7 +140,7 @@ export default function App() {
       case 'configurar':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Configuracao abaInicial={abaInicialConfig} /></Suspense>
       default:
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
     }
   }
 

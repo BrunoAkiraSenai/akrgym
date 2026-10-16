@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { calcularRitmoTreino, calcularSequenciaTreinos, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../src/utils/fitness.js'
+import { calcularRitmoTreino, calcularSequenciaTreinos, classificarSessaoTreino, diasDesde, epley1RM, formatarVolume, normalizarMetaSemanal, parseMetaTeto, resumoSemanalTreinos, volumePorTreino } from '../src/utils/fitness.js'
 import { LIMITS, normalizarNomeAlimentoExtra, parseNumero, sanitizarTexto, truncar } from '../src/utils/validation.js'
 
 test('parseMetaTeto interpreta meta simples e intervalo', () => {
@@ -99,4 +99,43 @@ test('sequência de treinos: hoje sem treino não zera a sequência que vem de o
   assert.equal(calcularSequenciaTreinos([dia(0), dia(1), dia(2)], agora), 3)
   assert.equal(calcularSequenciaTreinos([dia(2), dia(3)], agora), 0)
   assert.equal(calcularSequenciaTreinos(Array.from({ length: 200 }, (_, i) => dia(i)), agora, 3650), 200)
+})
+
+test('constância semanal: treino em dias alternados conta, semana em andamento não quebra', () => {
+  // Sexta, 16/10/2026. Semana de domingo (11/10) a sábado (17/10).
+  const agora = new Date(2026, 9, 16, 10)
+  const treino = (dia, mes = 9) => ({ data: new Date(2026, mes, dia, 19) })
+  // Seg/qua/sex nas três semanas anteriores; nesta semana, seg e qua.
+  const lista = [5, 7, 9, 28, 30, 2, 12, 14].map(d => treino(d, d >= 28 ? 8 : 9)).concat([treino(21, 8), treino(23, 8), treino(25, 8)])
+  const resumo = resumoSemanalTreinos(lista, agora, 3)
+  assert.deepEqual({ ...resumo }, { meta: 3, feitosSemana: 2, faltamSemana: 1, metaDaSemanaCumprida: false, semanasNaMeta: 3, noLimite: false })
+  // Com a sexta registrada, a semana atual entra na conta.
+  assert.equal(resumoSemanalTreinos([...lista, treino(16)], agora, 3).semanasNaMeta, 4)
+  // Dois treinos no mesmo dia contam uma vez.
+  assert.equal(resumoSemanalTreinos([treino(12), { data: new Date(2026, 9, 12, 7) }], agora, 3).feitosSemana, 1)
+  // Semana anterior abaixo da meta quebra a sequência.
+  assert.equal(resumoSemanalTreinos([treino(12), treino(14), treino(16), treino(5)], agora, 3).semanasNaMeta, 1)
+  assert.equal(resumoSemanalTreinos([], agora, 3).semanasNaMeta, 0)
+})
+
+test('meta semanal fora de 1 a 7 volta para o padrão de 3', () => {
+  assert.equal(normalizarMetaSemanal(4), 4)
+  for (const invalido of [0, 8, 'x', null, undefined, -2]) assert.equal(normalizarMetaSemanal(invalido), 3)
+  assert.equal(normalizarMetaSemanal('5'), 5)
+})
+
+test('tendência do ritmo compara a semana até hoje com o mesmo trecho da anterior', () => {
+  const sextaManha = new Date(2026, 9, 16, 9)
+  const treino = d => ({ data: new Date(2026, 9, d, 19) })
+  // Seg/qua/sex na semana passada; seg e qua nesta, sexta ainda por fazer.
+  const lista = [5, 7, 9, 12, 14].map(treino)
+  assert.equal(calcularRitmoTreino(lista, sextaManha, 3).variacao, 0)
+  assert.ok(calcularRitmoTreino([5, 7, 9, 12].map(treino), sextaManha, 3).variacao < 0)
+  assert.ok(calcularRitmoTreino([5, 12, 14].map(treino), sextaManha, 3).variacao > 0)
+})
+
+test('tendência conta o dia de hoje dos dois lados só depois do treino de hoje', () => {
+  const sextaNoite = new Date(2026, 9, 16, 21)
+  const treino = d => ({ data: new Date(2026, 9, d, 19) })
+  assert.equal(calcularRitmoTreino([5, 7, 9, 12, 14, 16].map(treino), sextaNoite, 3).variacao, 0)
 })

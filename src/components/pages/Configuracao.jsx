@@ -9,7 +9,7 @@ import { THEMES, useTheme } from '../../utils/themes'
 import { buildUserDataExport, formatExportFilename } from '../../utils/exportData'
 import { prepararConfigParaSalvar } from '../../utils/configValidation'
 import { focusTabWithArrowKey } from '../../utils/rovingTabs'
-import { dataTreinoParaDate } from '../../utils/fitness'
+import { dataTreinoParaDate, normalizarMetaSemanal } from '../../utils/fitness'
 import { exerciseId, garantirIdsExercicios, nomesDeExerciciosCompativeis, novoIdExercicio, reordenarExercicios, valoresDoExercicio } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 
@@ -543,6 +543,13 @@ export default function Configuracao({ abaInicial }) {
               <div><span className="section-label" id="treinos-heading">Divisões de treino</span><p className="mt-1 text-xs text-neutral-500">Organize exercícios, carga inicial e meta de repetições.</p></div>
               <button type="button" onClick={() => setShowNewRoutine(true)} className="settings-action settings-action-primary"><Plus size={15} /> <span>Nova divisão</span></button>
             </div>
+
+            <label className="settings-weekly-goal card-premium">
+              <span><strong>Meta de treinos por semana</strong><small>Usada na constância da Home e da Evolução.</small></span>
+              <select value={normalizarMetaSemanal(config.metaTreinosSemana)} onChange={e => { setConfig(atual => ({ ...atual, metaTreinosSemana: Number(e.target.value) })); setAlteracaoPendente(true) }}>
+                {[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n} {n === 1 ? 'treino' : 'treinos'}</option>)}
+              </select>
+            </label>
 
             {showNewRoutine && (
               <div className="settings-form card-premium p-4">

@@ -4,7 +4,7 @@ import { db } from '../../firebase'
 import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { useThemeColor } from '../../utils/themes'
-import { calcularSequenciaTreinos, diasDesde, epley1RM, formatarVolume, parseMetaTeto, volumePorTreino } from '../../utils/fitness'
+import { diasDesde, epley1RM, formatarVolume, normalizarMetaSemanal, parseMetaTeto, resumoSemanalTreinos, volumePorTreino } from '../../utils/fitness'
 import { chaveExercicio } from '../../utils/workoutSession'
 import TrendChart from '../../components/TrendChart'
 import {
@@ -68,6 +68,7 @@ export default function Evolucao() {
   const [filtroPeriodo, setFiltroPeriodo] = useState('tudo')
   const [limiteRegistros, setLimiteRegistros] = useState(5)
   const [treinosConfig, setTreinosConfig] = useState({})
+  const [metaSemanal, setMetaSemanal] = useState(normalizarMetaSemanal())
   const exercicioBuscaRef = useRef(null)
   const pageRef = useRef(null)
   const [agora] = useState(() => new Date())
@@ -116,6 +117,7 @@ export default function Evolucao() {
       try {
         const config = await getDoc(doc(db, 'users', uid, 'config', 'data'))
         setTreinosConfig(config.exists() ? config.data().treinos || {} : {})
+        setMetaSemanal(normalizarMetaSemanal(config.exists() ? config.data().metaTreinosSemana : undefined))
       } catch { setTreinosConfig({}) }
       // Um item por exercício, mesmo escrito de formas diferentes; vale a grafia mais recente.
       const nomes = new Map()
@@ -277,7 +279,7 @@ export default function Evolucao() {
     const volumeSemanaAnterior = treinos.filter(t => t.data >= inicioSemanaAnterior && t.data < inicioSemana).reduce((acc, t) => acc + volumePorTreino(t), 0)
 
     // Mesma regra da Home: hoje ainda em aberto não quebra a sequência que vem de ontem.
-    const sequenciaAtual = calcularSequenciaTreinos(treinos, agora, 3650)
+    const semanal = resumoSemanalTreinos(treinos, agora, metaSemanal)
 
     // Melhor 1RM estimado entre todos os exercícios
     let melhor1RM = null
@@ -303,11 +305,11 @@ export default function Evolucao() {
 
     return {
       treinosTotal, volumeTotal, volumeSemana, volumeSemanaAnterior,
-      treinosSemana, treinosSemanaAnterior, sequenciaAtual, melhor1RM,
+      treinosSemana, treinosSemanaAnterior, semanal, melhor1RM,
       treinosPeriodo: treinosPeriodo.length, volumePeriodo, volumePeriodoAnterior,
       progressoPeriodo, exerciciosAtivos: exerciciosAtivos.size, diasSemTreino, ritmo,
     }
-  }, [agora, todosTreinos, janelaDashboard])
+  }, [agora, todosTreinos, janelaDashboard, metaSemanal])
 
   // Top PRs (top 5 por carga máxima) por exercício
   const topPRs = useMemo(() => {
@@ -475,7 +477,7 @@ export default function Evolucao() {
                 { icon: Activity, label: 'Sessões', value: stats.treinosPeriodo, detail: `${stats.ritmo}/semana`, color: 'text-[var(--brand-bright)]' },
                 { icon: BarChart3, label: 'Volume', value: formatarVolume(stats.volumePeriodo), detail: 'kg × reps', color: 'text-[var(--accent-bright)]' },
                 { icon: Dumbbell, label: 'Exercícios', value: stats.exerciciosAtivos, detail: 'com histórico', color: 'text-[var(--highlight)]' },
-                { icon: Flame, label: 'Sequência', value: stats.sequenciaAtual, detail: stats.sequenciaAtual === 1 ? 'dia ativo' : 'dias ativos', color: 'text-amber-300' },
+                { icon: Flame, label: 'Constância', value: stats.semanal.noLimite ? '52+' : stats.semanal.semanasNaMeta, detail: `${stats.semanal.semanasNaMeta === 1 ? 'semana' : 'semanas'} na meta de ${stats.semanal.meta}`, color: 'text-amber-300' },
               ].map(item => {
                 const Icon = item.icon
                 return (

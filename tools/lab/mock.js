@@ -86,6 +86,7 @@ export async function getDocs(ref) {
   const found = list.map(([path, data]) => snapshot(path, data))
   return { docs: found, empty: !found.length, size: found.length, forEach: fn => found.forEach(fn) }
 }
+export async function getCountFromServer(ref) { const r = await getDocs(ref); return { data: () => ({ count: r.size }) } }
 const subs = new Map()
 function notify(path) { for (const fn of subs.get(path) || []) fn(snapshot(path, docs.get(path))) }
 export async function setDoc(ref, data) { await delay(300); docs.set(ref.path, clone(data)); notify(ref.path) }
