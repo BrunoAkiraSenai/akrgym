@@ -62,9 +62,9 @@ export default function App() {
 
   const prevUidRef = useRef(null)
 
+  // A abertura fica só enquanto o app carrega; se passar de 1,7 s, avisa que está conectando.
   useEffect(() => {
-    const movimentoReduzido = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    const timer = window.setTimeout(() => setIntroConcluida(true), movimentoReduzido ? 80 : 1700)
+    const timer = window.setTimeout(() => setIntroConcluida(true), 1700)
     return () => window.clearTimeout(timer)
   }, [])
 
@@ -111,12 +111,11 @@ export default function App() {
     return () => { cancelado = true; unsub() }
   }, [])
 
-  if (loading || initializing || !introConcluida) {
+  if (loading || initializing) {
     return (
       <ErrorBoundary>
         <StartupSplash
-          animated={!introConcluida}
-          showWaiting={introConcluida && (loading || initializing)}
+          showWaiting={introConcluida}
         />
       </ErrorBoundary>
     )
