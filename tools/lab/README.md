@@ -8,7 +8,7 @@ Roda o app real com o Firebase trocado por dados de exemplo (`mock.js`): 45 dias
 npm run lab
 ```
 
-Abre em `http://127.0.0.1:5187/?scene=normal`. Para rodar outra cópia do app (por exemplo, uma pasta com a versão de `PRD`), passe o caminho: `node tools/lab/server.mjs C:\caminho\da\copia`.
+Abre em `http://127.0.0.1:5187/?scene=normal`. Para rodar outra cópia do app (por exemplo, uma pasta com a versão de `PRD`), passe o caminho e, para rodar junto com a principal, uma porta: `node tools/lab/server.mjs C:\caminho\da\copia 5188`. A cópia precisa de `node_modules` (uma junção para o do repositório basta).
 
 ## Parâmetros da URL
 
@@ -19,10 +19,10 @@ Abre em `http://127.0.0.1:5187/?scene=normal`. Para rodar outra cópia do app (p
 
 ## Capturas em lote (Windows)
 
-Cada linha de uma lista: `nome;largura;altura;query`.
+Cada linha de uma lista: `nome;largura;altura;query`, com um quinto campo opcional para o tempo virtual em ms (padrão 12000). Espaço na query vira `%20`.
 
 ```bash
-powershell -File tools/lab/shots.ps1 -Lista lista.txt -Saida capturas
+powershell -File tools/lab/shots.ps1 -Lista lista.txt -Saida capturas -Porta 5187
 ```
 
 Usa o Chrome instalado em modo invisível. Animações não rodam nesse modo, então confira movimento num navegador visível.
