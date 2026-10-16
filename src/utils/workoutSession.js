@@ -134,6 +134,38 @@ export function reordenarExercicios(exercicios, de, para) {
   return lista
 }
 
+// ===== Divisões de treino =====
+// O Firestore não guarda a ordem das chaves de um mapa; `ordem` define a
+// sequência. Divisões antigas, sem `ordem`, ficam depois, pela chave.
+export function ordenarRotinas(treinos) {
+  return Object.entries(treinos || {}).sort(([chaveA, a], [chaveB, b]) => {
+    const ordemA = Number.isFinite(a?.ordem) ? a.ordem : Infinity
+    const ordemB = Number.isFinite(b?.ordem) ? b.ordem : Infinity
+    return ordemA - ordemB || (chaveA < chaveB ? -1 : chaveA > chaveB ? 1 : 0)
+  })
+}
+
+export function moverRotina(treinos, chave, delta) {
+  const lista = ordenarRotinas(treinos)
+  const de = lista.findIndex(([k]) => k === chave)
+  const para = de + delta
+  if (de < 0 || para < 0 || para >= lista.length) return treinos
+  const [item] = lista.splice(de, 1)
+  lista.splice(para, 0, item)
+  return Object.fromEntries(lista.map(([k, rotina], ordem) => [k, { ...rotina, ordem }]))
+}
+
+// ID interno gerado a partir do nome: a pessoa não precisa inventar um.
+export function gerarIdRotina(nome, existentes = []) {
+  const base = String(nome || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+    .slice(0, 40) || 'divisao'
+  const usados = new Set(existentes)
+  if (!usados.has(base)) return base
+  for (let n = 2; ; n++) if (!usados.has(`${base}_${n}`)) return `${base}_${n}`
+}
+
 /**
  * Valores que um exercício recém-escolhido deve trazer para o plano.
  * Ordem: último treino registrado com esse exercício; senão, o mesmo

@@ -1044,11 +1044,12 @@ img, svg, video, canvas { max-width: 100%; }
 .settings-routines, .settings-meal-list { display: flex; flex-direction: column; gap: 0.65rem; }
 .settings-routine { overflow: hidden; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
 .settings-routine-open { overflow: visible; border-color: rgba(var(--brand-rgb),0.26); box-shadow: var(--shadow-sm), 0 0 0 2px rgba(var(--brand-rgb),0.05); }
-.settings-routine-trigger { display: flex; width: 100%; align-items: center; gap: 0.7rem; padding: 0.85rem 0.95rem; text-align: left; cursor: pointer; }
+.settings-routine-head { display: flex; align-items: center; gap: 0.35rem; padding-right: 0.7rem; }
+.settings-routine-trigger { display: flex; min-width: 0; flex: 1; align-items: center; gap: 0.7rem; padding: 0.85rem 0.95rem; text-align: left; cursor: pointer; }
 @media (hover: hover) { .settings-routine-trigger:hover { background: rgba(var(--brand-rgb),0.06); } }
 .settings-routine-index, .settings-meal-index, .settings-exercise-number { display: grid; place-items: center; flex-shrink: 0; border-radius: 0.55rem; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.12); font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; }
 .settings-routine-index { width: 2rem; height: 2rem; }
-.settings-routine-count { flex-shrink: 0; color: var(--text-secondary); font-size: 0.62rem; font-family: var(--font-mono); }
+.settings-routine-count { display: block; margin-top: 0.15rem; color: var(--text-secondary); font-size: 0.72rem; }
 .settings-routine-body { display: flex; flex-direction: column; gap: 0.6rem; border-top: 1px solid var(--settings-border); padding: 0.8rem 0.95rem 0.95rem; }
 .settings-exercise, .settings-meal { border: 1px solid var(--settings-border); border-radius: 0.85rem; padding: 0.75rem; background: rgba(0,0,0,0.16); }
 .settings-exercise-top, .settings-meal-head, .settings-food-row { display: flex; align-items: flex-end; gap: 0.55rem; }
@@ -1694,8 +1695,10 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
   .settings-exercise-top,
   .settings-meal-head,
   .settings-food-row { flex-wrap: wrap; }
-  .settings-exercise-top .settings-field-grow,
+  .settings-exercise-top .settings-exercise-name,
   .settings-meal-head .settings-field-grow { flex-basis: calc(100% - 2.3rem); }
+  /* Nome inteiro na primeira linha; ordem e excluir logo abaixo, à direita. */
+  .settings-exercise-top .settings-exercise-order { margin-left: auto; }
   .settings-meal-head .settings-time { margin-left: 2.2rem; }
   .settings-food-row .settings-field-grow { flex-basis: 100%; }
   .settings-food-row .settings-ai-button { flex: 1; }

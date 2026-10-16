@@ -7,6 +7,7 @@ import {
   formatarDescanso,
   normalizarDescansoSegundos,
   resolverDescansoSalvo,
+  restaurarDescanso,
   timerReducer,
 } from '../src/utils/restTimer.js'
 import {
@@ -218,4 +219,25 @@ test('descanso formata minutos e segundos para o cronômetro', () => {
 
 test('presets de descanso oferecem opções rápidas', () => {
   assert.deepEqual(DESCANSO_PRESETS, [30, 60, 90, 120, 180, 300])
+})
+
+test('trocar de aba e voltar mantém o descanso em andamento', () => {
+  const agora = 1_000_000
+  const salvo = JSON.stringify({ configurado: 90, rodando: true, terminaEm: agora + 40_500, restante: null })
+  assert.deepEqual(restaurarDescanso(salvo, 60, agora), { configurado: 90, restante: 41, rodando: true, concluido: false, terminaEm: agora + 40_500 })
+})
+
+test('descanso que acabou fora da tela avisa só se acabou há pouco', () => {
+  const agora = 1_000_000
+  const recente = JSON.stringify({ configurado: 90, rodando: true, terminaEm: agora - 20_000 })
+  const antigo = JSON.stringify({ configurado: 90, rodando: true, terminaEm: agora - 5 * 60_000 })
+  assert.equal(restaurarDescanso(recente, 90, agora).concluido, true)
+  assert.deepEqual(restaurarDescanso(antigo, 90, agora), { configurado: 90, restante: 90, rodando: false, concluido: false, terminaEm: null })
+})
+
+test('descanso pausado volta pausado; dado inválido é ignorado', () => {
+  assert.equal(restaurarDescanso(JSON.stringify({ configurado: 120, rodando: false, restante: 75 }), 90).restante, 75)
+  assert.equal(restaurarDescanso(JSON.stringify({ configurado: 120, rodando: false, restante: 0 }), 90).restante, 120)
+  assert.equal(restaurarDescanso('{quebrado', 90), null)
+  assert.equal(restaurarDescanso(null, 90), null)
 })

@@ -8,6 +8,7 @@ import {
   formatarDescanso,
   normalizarDescansoSegundos,
   resolverDescansoSalvo,
+  restaurarDescanso,
   timerReducer,
   acompanharDescanso,
 } from '../utils/restTimer'
@@ -23,19 +24,27 @@ function lerPreferencia(storageKey, fallback) {
   }
 }
 
-function criarEstadoInicial({ defaultSeconds, storageKey }) {
+function criarEstadoInicial({ defaultSeconds, storageKey, chaveEstado }) {
   const configurado = lerPreferencia(storageKey, defaultSeconds)
+  if (chaveEstado) {
+    try {
+      const restaurado = restaurarDescanso(sessionStorage.getItem(chaveEstado), configurado)
+      if (restaurado) return restaurado
+    } catch { /* Sem armazenamento, começa parado. */ }
+  }
   return { configurado, restante: configurado, rodando: false, concluido: false, terminaEm: null }
 }
 
 function DescansoTimer({
   defaultSeconds = DEFAULT_DESCANSO_SEGUNDOS,
   storageKey = null,
+  // Mantém o descanso em andamento quando a pessoa troca de aba e volta.
+  chaveEstado = null,
   label = 'Descanso rápido',
   exerciseName = '',
   compact = false,
 }) {
-  const [timer, dispatch] = useReducer(timerReducer, { defaultSeconds, storageKey }, criarEstadoInicial)
+  const [timer, dispatch] = useReducer(timerReducer, { defaultSeconds, storageKey, chaveEstado }, criarEstadoInicial)
   const [aberto, setAberto] = useState(false)
   const { configurado, restante, rodando, concluido, terminaEm } = timer
 
@@ -43,6 +52,13 @@ function DescansoTimer({
     if (!storageKey) return
     try { localStorage.setItem(storageKey, String(timer.configurado)) } catch { /* A preferência continua apenas nesta sessão. */ }
   }, [storageKey, timer.configurado])
+
+  // Grava só quando o estado muda de fato (iniciar, pausar, concluir), não a cada segundo.
+  const restanteParado = rodando ? null : restante
+  useEffect(() => {
+    if (!chaveEstado) return
+    try { sessionStorage.setItem(chaveEstado, JSON.stringify({ configurado, rodando, terminaEm, restante: restanteParado })) } catch { /* Sem armazenamento, o descanso vale só nesta tela. */ }
+  }, [chaveEstado, configurado, rodando, terminaEm, restanteParado])
 
   useEffect(() => {
     if (!rodando) return undefined

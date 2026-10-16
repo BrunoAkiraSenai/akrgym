@@ -126,6 +126,13 @@ export default function Evolucao() {
         if (chave && !nomes.has(chave)) nomes.set(chave, String(ex.nome).trim())
       }))
       setExercicios([...nomes.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')))
+      // Abre no primeiro exercício do treino mais recente, em vez de uma tela vazia.
+      const recente = docs.find(t => t.exercicios?.some(ex => chaveExercicio(ex.nome)))?.exercicios.find(ex => chaveExercicio(ex.nome))
+      if (recente) {
+        const nome = nomes.get(chaveExercicio(recente.nome))
+        setSelecionado(atual => atual || nome)
+        setBuscaExercicio(atual => atual || nome)
+      }
     } catch (err) { setErro(`Erro: ${err.message}`) }
     setLoading(false)
   }, [uid])
