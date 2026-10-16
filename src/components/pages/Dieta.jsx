@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { doc, getDoc, runTransaction, onSnapshot, getDocs, collection, query, where, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, diaryProgress, classificarDiaPorCalorias, comentarioDiaPorCalorias, DIET_DAY_STATUS } from '../../utils/dietDiary'
+import { applyDiaryAction, normalizeDay, diaryTotals as calcularTotais, emptyMeal as refeicaoVazia, hasLegacyNutrition, classificarDiaPorCalorias, comentarioDiaPorCalorias, contagemRefeicoes, statusDoDia, DIET_DAY_STATUS } from '../../utils/dietDiary'
 import { validarNumeroConfig } from '../../utils/configValidation'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
@@ -9,7 +9,7 @@ import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
 import { LIMITS, normalizarNomeAlimentoExtra, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
 import { focusTabWithArrowKey } from '../../utils/rovingTabs'
-import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Copy, Droplets, Dumbbell, Flame, Leaf, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
+import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Copy, Droplets, Dumbbell, Flame, Leaf, Loader, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
 import { diaryText } from '../../utils/dietDiary'
 import { sincronizarResumoDieta } from '../../utils/socialStore'
 
@@ -123,6 +123,7 @@ export default function Dieta({ onIrParaConfig }) {
   const editingOriginal = useRef(null)
   const savingExtra = useRef(false)
   const [extraSaving, setExtraSaving] = useState(false)
+  const [formManualAberto, setFormManualAberto] = useState(false)
   const context = useRef(0)
   const formVersion = useRef(0)
   const aiRequest = useRef(0)
@@ -340,8 +341,20 @@ export default function Dieta({ onIrParaConfig }) {
     ++formVersion.current
     editingOriginal.current = null
     setAiResultReady(false)
+    setFormManualAberto(false)
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '', fibras: '' })
     setEditandoExtraIdx(null)
+  }
+
+  // O formulário fica acima das refeições: levar a pessoa até ele ao abrir.
+  const mostrarFormulario = () => requestAnimationFrame(() => {
+    extraCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setTimeout(() => extraNomeRef.current?.focus({ preventScroll: true }), 350)
+  })
+
+  const abrirFormularioManual = () => {
+    setFormManualAberto(true)
+    mostrarFormulario()
   }
 
   const editarExtra = (id) => {
@@ -358,12 +371,34 @@ export default function Dieta({ onIrParaConfig }) {
     ++formVersion.current
     editingOriginal.current = e
     setEditandoExtraIdx(id)
-    requestAnimationFrame(() => extraNomeRef.current?.focus({ preventScroll: true }))
+    setFormManualAberto(true)
+    mostrarFormulario()
   }
 
   const removerExtraGlobal = (id) => {
     salvarHoje(dataAtiva, { type: 'extra-remove', id })
     if (editandoExtraIdx === id) limparExtras()
+  }
+
+  // Resultado da IA vai para o formulário, que abre para revisão antes de salvar.
+  const aplicarResultadoIA = (parsed) => {
+    ++formVersion.current
+    setEditandoExtraIdx(null); editingOriginal.current = null
+    setExtraGlobal({
+      nome: parsed.nome || 'Analisado por IA',
+      kcal: String(parsed.kcal || 0),
+      proteinas: String(parsed.proteinas || 0),
+      carboidratos: String(parsed.carboidratos || 0),
+      gorduras: String(parsed.gorduras || 0),
+      fibras: String(parsed.fibras || 0),
+    })
+    setAiResultReady(true)
+    setFormManualAberto(true)
+    setAiInput('')
+    showToast('Valores preenchidos. Revise e adicione.', 'sucesso')
+    setExtraHighlighted(true)
+    mostrarFormulario()
+    setTimeout(() => setExtraHighlighted(false), 1600)
   }
 
   // IA Gemini via backend seguro (Cloud Function ou Worker)
@@ -387,8 +422,9 @@ export default function Dieta({ onIrParaConfig }) {
       return
     }
     const cacheKey = textoSanitizado.toLowerCase()
-    if (ultimaAnalise[cacheKey] && (agora - ultimaAnalise[cacheKey].timestamp) < 10000) {
-      showToast('Análise recente já feita. Use o resultado anterior.', 'sucesso')
+    // A mesma descrição analisada há pouco: reaplica o resultado sem gastar outra chamada.
+    if (ultimaAnalise[cacheKey] && (agora - ultimaAnalise[cacheKey].timestamp) < 10 * 60 * 1000) {
+      aplicarResultadoIA(ultimaAnalise[cacheKey].resultado)
       return
     }
     const request = ++aiRequest.current
@@ -412,26 +448,8 @@ export default function Dieta({ onIrParaConfig }) {
           setErroIA(parsed._erro)
         }
       } else {
-        setEditandoExtraIdx(null); editingOriginal.current = null
-        setExtraGlobal({
-          nome: parsed.nome || 'Analisado por IA',
-          kcal: String(parsed.kcal || 0),
-          proteinas: String(parsed.proteinas || 0),
-          carboidratos: String(parsed.carboidratos || 0),
-          gorduras: String(parsed.gorduras || 0),
-          fibras: String(parsed.fibras || 0),
-        })
-        setAiResultReady(true)
         setUltimaAnalise(prev => ({ ...prev, [cacheKey]: { timestamp: agora, resultado: parsed } }))
-        setAiInput('')
-        showToast('Valores preenchidos! Revise e adicione.', 'sucesso')
-        // UX: rolar até o card de extras, destacar e focar no campo nome
-        setExtraHighlighted(true)
-        requestAnimationFrame(() => {
-          extraCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          setTimeout(() => extraNomeRef.current?.focus({ preventScroll: true }), 350)
-        })
-        setTimeout(() => setExtraHighlighted(false), 1600)
+        aplicarResultadoIA(parsed)
       }
     } catch (err) {
       if (request !== aiRequest.current || generation !== context.current) return
@@ -487,12 +505,14 @@ export default function Dieta({ onIrParaConfig }) {
     gorduras:     gordurasAnim,
     fibras:       fibrasAnim,
   }
-  const progresso = diaryProgress(hoje, refs)
   const classificacaoDia = classificarDiaPorCalorias(hoje, refs, userMetas.kcal)
-  // Um alimento extra também representa uma refeição realizada, mas continua
-  // separado do almoço/jantar planejado para preservar a organização do diário.
-  const refeicoesConcluidas = progresso.planned ? Math.min(progresso.planned, progresso.consumed) : progresso.consumed
+  // Extras entram nos totais, mas não contam como refeição do plano.
+  const contagem = contagemRefeicoes(hoje, refs)
+  const statusDia = statusDoDia(classificacaoDia, dataAtiva === hojeId())
   const refeicoesPuladas = refs.filter(ref => hoje?.refeicoes?.[ref.id]?.status === 'pulado').length
+  const extrasDoDia = hoje?.extras_globais || []
+  const formManualVisivel = formManualAberto || editandoExtraIdx !== null || aiResultReady
+    || ['nome', 'kcal', 'proteinas', 'carboidratos', 'gorduras', 'fibras'].some(campo => String(extraGlobal[campo] ?? '').trim() !== '')
 
   return (
     <div className="diet-page flex flex-col gap-3 pt-2 pb-4">
@@ -569,10 +589,16 @@ export default function Dieta({ onIrParaConfig }) {
             </div>
 
             <div className="diet-summary-card card-premium">
-              <div className="diet-summary-top"><div><span className="section-label">Resumo do dia</span><p>{refeicoesConcluidas === 0 ? 'Nenhuma refeição concluída' : `${refeicoesConcluidas} ${refeicoesConcluidas === 1 ? 'refeição concluída' : 'refeições concluídas'}`}</p></div><strong>{refeicoesConcluidas}/{progresso.planned}</strong></div>
-              <div className={`diet-day-status diet-day-status-${classificacaoDia.status}`} role="status">
-                <span>{classificacaoDia.status === DIET_DAY_STATUS.COMPLETE ? 'Dia concluído' : classificacaoDia.status === DIET_DAY_STATUS.OUT_OF_PLAN ? 'Fora da dieta' : 'Dia não preenchido'}</span>
-                <small>{classificacaoDia.status === DIET_DAY_STATUS.EMPTY ? 'Registre o consumo para avaliar a aderência.' : `Faixa considerada: ${Math.round(classificacaoDia.minimoKcal).toLocaleString('pt-BR')}–${Math.round(classificacaoDia.maximoKcal).toLocaleString('pt-BR')} kcal`}</small>
+              <div className="diet-summary-top">
+                <div>
+                  <span className="section-label">Resumo do dia</span>
+                  <p>{contagem.feitas} de {contagem.planejadas} {contagem.planejadas === 1 ? 'refeição concluída' : 'refeições concluídas'}{contagem.extras ? ` · ${contagem.extras} ${contagem.extras === 1 ? 'extra' : 'extras'}` : ''}</p>
+                </div>
+                <strong>{contagem.feitas}/{contagem.planejadas}</strong>
+              </div>
+              <div className={`diet-day-status diet-day-status-${statusDia.classe}`} role="status">
+                <span>{statusDia.titulo}</span>
+                <small>{statusDia.detalhe}</small>
               </div>
               {refeicoesPuladas > 0 && <div className="diet-progress-summary"><span>{refeicoesPuladas === 1 ? '1 refeição pulada' : `${refeicoesPuladas} refeições puladas`}</span></div>}
               <div className="diet-summary-body">
@@ -587,212 +613,6 @@ export default function Dieta({ onIrParaConfig }) {
                     return <div className="diet-macro-item" key={item.key}><div className="diet-macro-item-head"><span><span className="diet-macro-item-icon" title={item.label}><IconeNutriente nutrientKey={item.key} /></span>{item.label}</span><strong>{Math.round(animados[item.key])} <small>/ {Math.round(meta)}g</small></strong></div><div className="diet-macro-track"><span style={{ width: `${pct}%` }} /></div></div>
                   })}
                 </div>
-              </div>
-            </div>
-
-            {hasLegacyNutrition(hoje) && <p role="note" className="text-xs text-amber-200">Registro antigo sem nutrientes preservados: os totais usam o plano disponível e podem estar incompletos.</p>}
-            {refs.length === 0 && (
-              <div className="card-premium flex flex-col items-center gap-2 p-6 text-center">
-                <Settings size={28} className="text-cyan-400" aria-hidden="true" />
-                <h2 className="text-sm font-semibold text-white">Seu plano alimentar ainda não foi montado</h2>
-                <p className="max-w-sm text-xs leading-relaxed text-neutral-500">Configure suas refeições para acompanhar o progresso diário e registrar alimentos extras.</p>
-                {onIrParaConfig && <button type="button" onClick={onIrParaConfig} className="btn-primary mt-2 px-4 py-2.5 text-xs">Configurar refeições</button>}
-              </div>
-            )}
-
-            {refs.map(ref => {
-              const r = hoje?.refeicoes?.[ref.id] || refeicaoVazia()
-              const eLimpo = r.status === 'limpo'
-              const eCustom = r.status === 'customizado'
-              const ePulado = r.status === 'pulado'
-              const MealIcon = iconeRefeicao(tipoRefeicao(ref.nome))
-
-              return (
-                <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`diet-meal-card card-premium p-4 space-y-2 transition ${
-                  eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'opacity-40' : ''
-                }`}>
-                  <div className="diet-meal-head">
-                    <div className="diet-meal-identity">
-                      <span className="diet-meal-icon" aria-hidden="true"><MealIcon size={19} /></span>
-                      <div><span className="text-white font-semibold text-sm tracking-tight">{ref.nome}</span><span className="diet-meal-time">{ref.horario}</span></div>
-                    </div>
-                    <span className={`diet-meal-status ${
-                      eLimpo ? 'diet-meal-status-complete' : eCustom ? 'diet-meal-status-custom' : ePulado ? 'diet-meal-status-skipped' : 'diet-meal-status-pending'
-                    }`}>
-                      {eLimpo ? <><Check size={12} /> Concluído</> : eCustom ? 'Customizado' : ePulado ? 'Pulado' : 'Pendente'}
-                    </span>
-                  </div>
-
-                  <div className="diet-meal-context" aria-hidden="true"><MealIcon size={50} strokeWidth={1.35} /></div>
-                  <ChevronRight className="diet-meal-chevron" size={19} strokeWidth={1.7} aria-hidden="true" />
-
-                  <div className="text-[11px] text-neutral-500 font-mono">{ref.alimentos?.join(' · ') || ref.nome}</div>
-
-                  <div className="diet-meal-nutrition" aria-label={`Nutrientes de ${ref.nome}`}>
-                    <div className="diet-meal-kcal"><strong>{Math.round(Number(ref.kcal) || 0)}</strong><span>kcal</span></div>
-                    {NUTRIENTE_DEFINICOES.map(item => (
-                      <div key={item.key} title={item.label} aria-label={`${item.label}: ${Math.round(Number(ref[item.key]) || 0)} g`}><strong>{Math.round(Number(ref[item.key]) || 0)}</strong><span className="diet-meal-nutrient-icon"><IconeNutriente nutrientKey={item.key} /></span></div>
-                    ))}
-                  </div>
-
-                  {eLimpo && <div className="diet-meal-confirmed"><Check size={13} /> Incluída no progresso alimentar</div>}
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <button type="button" onClick={() => confirmar(ref.id)}
-                      aria-label={eLimpo ? 'Desfazer conclusão' : 'Confirmar refeição'}
-                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition active:scale-[0.97] ${
-                        eLimpo ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-emerald-500/30'
-                      }`}>
-                      {eLimpo ? <><Check size={14} /> Concluído</> : <><CircleCheck size={14} /> Confirmar</>}
-                    </button>
-                    <button type="button" onClick={() => pular(ref.id)}
-                      aria-label={ePulado ? 'Desfazer pulo' : 'Pular refeição'}
-                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition active:scale-[0.97] ${
-                        ePulado ? 'bg-red-500/20 text-red-400 border border-red-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-red-500/30'
-                      }`}>
-                      {ePulado ? <><CircleX size={13} /> Pulado</> : <><SkipForward size={13} /> Pular</>}
-                    </button>
-                  </div>
-
-                </div>
-              )
-            })}
-
-            <div
-              ref={extraCardRef}
-              aria-live="polite"
-              className={[
-                'diet-extra-card rounded-2xl p-4 space-y-2 transition-shadow duration-300',
-                extraHighlighted
-                  ? 'bg-cyan-500/10 border-2 border-cyan-400 shadow-[0_0_24px_rgba(34,211,238,0.5)]'
-                  : 'bg-neutral-900/50 backdrop-blur-md border border-cyan-500/20',
-              ].join(' ')}
-            >
-              <div className="diet-extra-card-head">
-                <span className="diet-section-label">
-                  {editandoExtraIdx !== null ? <><Pencil size={13} /> Editar alimento</> : <><Plus size={13} /> Alimento extra</>}
-                </span>
-                {aiResultReady && <span className="diet-ai-ready"><Sparkles size={12} /> Resultado da IA</span>}
-              </div>
-              <div className="space-y-1.5">
-                <div>
-                  <label htmlFor="extra-nome" className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">Nome</label>
-                  <input
-                    id="extra-nome"
-                    ref={extraNomeRef}
-                    type="text"
-                    maxLength={LIMITS.nomeAlimentoExtra}
-                    placeholder="ex: banana"
-                    value={extraGlobal.nome}
-                    onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, nome: e.target.value })) }}
-                    className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { key: 'kcal',         label: 'Calorias (kcal)' },
-                    { key: 'proteinas',    label: 'Proteína (g)' },
-                    { key: 'carboidratos', label: 'Carboidrato (g)' },
-                    { key: 'gorduras',     label: 'Gordura (g)' },
-                    { key: 'fibras',       label: 'Fibras (g)' },
-                  ].map(({ key, label }) => (
-                    <div key={key}>
-                      <label htmlFor={`extra-${key}`} className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold">{label}</label>
-                      <input
-                        id={`extra-${key}`}
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0"
-                        value={extraGlobal[key]}
-                        onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, [key]: e.target.value })) }}
-                        className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-base text-center outline-none focus:ring-2 focus:ring-cyan-400/30 num"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {(editandoExtraIdx !== null || extraGlobal.nome || extraGlobal.kcal || extraGlobal.proteinas || extraGlobal.carboidratos || extraGlobal.gorduras || extraGlobal.fibras) && (
-                  <button
-                    type="button"
-                    onClick={limparExtras}
-                    aria-label="Limpar campos do alimento extra"
-                    className="btn-secondary flex-1 py-3 text-xs"
-                  >
-                    {editandoExtraIdx !== null ? 'Cancelar' : 'Limpar'}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={adicionarExtraGlobal}
-                  disabled={!extraGlobal.nome.trim() || extraSaving}
-                  className="flex-1 btn-primary w-full py-3 flex items-center justify-center gap-1"
-                >
-                  <Plus size={14} /> {editandoExtraIdx !== null ? 'Atualizar' : 'Adicionar'}
-                </button>
-              </div>
-              {(hoje?.extras_globais || []).map(e => (
-                <div key={e.id} ref={node => { if (node) extraItemRefs.current[e.id] = node; else delete extraItemRefs.current[e.id] }} className="diet-extra-entry diet-extra-meal-card">
-                  <div className="diet-extra-entry-head diet-meal-head">
-                    <div className="diet-meal-identity">
-                      <span className="diet-meal-icon diet-extra-entry-icon" aria-hidden="true"><Utensils size={18} /></span>
-                      <div><span className="truncate text-sm text-white font-semibold">{e.nome || '(sem nome)'}</span><span className="diet-meal-time">Alimento extra</span></div>
-                    </div>
-                    <span className="diet-meal-status diet-extra-entry-status"><Check size={12} /> Incluído</span>
-                  </div>
-                  <div className="diet-meal-nutrition" aria-label={`Nutrientes de ${e.nome || 'alimento extra'}`}>
-                    <div className="diet-meal-kcal"><strong>{Math.round(Number(e.kcal) || 0)}</strong><span>kcal</span></div>
-                    {NUTRIENTE_DEFINICOES.map(item => (
-                      <div key={item.key} title={item.label} aria-label={`${item.label}: ${Math.round(Number(e[item.key]) || 0)} g`}><strong>{Math.round(Number(e[item.key]) || 0)}</strong><span className="diet-meal-nutrient-icon"><IconeNutriente nutrientKey={item.key} /></span></div>
-                    ))}
-                  </div>
-                  <div className="diet-extra-actions diet-extra-entry-actions">
-                    <button type="button" onClick={() => editarExtra(e.id)} aria-label={`Editar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-edit"><Pencil size={13} /><span>Editar</span></button>
-                    <button type="button" onClick={() => removerExtraGlobal(e.id)} aria-label={`Apagar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-delete"><X size={13} /><span>Apagar</span></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className={`diet-ai-card rounded-2xl p-4 space-y-2 ${aiLoading ? 'diet-ai-card--loading' : ''}`} aria-busy={aiLoading}>
-              {aiLoading && (
-                <svg className="diet-ai-border-loader" aria-hidden="true" focusable="false">
-                  <rect x="0.75" y="0.75" width="calc(100% - 1.5px)" height="calc(100% - 1.5px)" rx="15" pathLength="100" />
-                </svg>
-              )}
-              <div className="diet-ai-head"><span id="diet-ai-title" className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Analisar alimento com IA</span><span className={`diet-ai-helper ${aiLoading ? 'diet-ai-helper-loading' : ''}`} aria-live="polite">{aiLoading ? 'Processando sua descrição...' : 'Revise antes de adicionar'}</span></div>
-              <textarea aria-label="Descreva o alimento ou refeição que consumiu" rows={2} maxLength={LIMITS.textoIA}
-                placeholder="Ex: Comi uma parmegiana de frango com arroz no almoço..."
-                value={aiInput} onChange={e => { ++formVersion.current; setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA)) }}
-                className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-xs outline-none focus:ring-2 focus:ring-cyan-400/30 resize-none" />
-              <button onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading}
-                className="diet-ai-submit w-full flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-xs transition active:scale-[0.97] disabled:opacity-30">
-                {aiLoading ? 'Analisando...' : <><Sparkles size={14} /> Analisar alimento</>}
-              </button>
-              {erroIA && (
-                <div role="alert" className="flex items-start justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-[11px] text-red-300">
-                  <span>{erroIA}</span>
-                  <button type="button" onClick={() => setErroIA(null)} className="shrink-0 text-red-300/70 hover:text-red-200" aria-label="Fechar erro da análise de alimento">✕</button>
-                </div>
-              )}
-            </div>
-
-            <div className="card-premium p-4">
-              <span className="section-label">Total do Dia</span>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
-                {[
-                  { label: 'Calorias', v: Math.round(totais.kcal), m: userMetas.kcal, u: 'kcal' },
-                  { label: 'Proteínas', v: Math.round(totais.proteinas), m: userMetas.proteinas, u: 'g' },
-                  { label: 'Carbo', v: Math.round(totais.carboidratos), m: userMetas.carboidratos, u: 'g' },
-                  { label: 'Gorduras', v: Math.round(totais.gorduras), m: userMetas.gorduras, u: 'g' },
-                  { label: 'Fibras', v: Math.round(totais.fibras), m: userMetas.fibras, u: 'g' },
-                ].map(item => (
-                  <div key={item.label} className="bg-black/30 rounded-xl p-2 text-center border border-white/5">
-                    <div className="text-[9px] text-neutral-500 font-mono">{item.label}</div>
-                    <div className="text-sm font-bold text-white">{item.v}</div>
-                    <div className="text-[9px] text-neutral-600">{item.m}{item.u}</div>
-                  </div>
-                ))}
               </div>
               <div className="diet-copy-summary">
                 <button
@@ -823,6 +643,190 @@ export default function Dieta({ onIrParaConfig }) {
                 )}
               </div>
             </div>
+
+            {hasLegacyNutrition(hoje) && <p role="note" className="text-xs text-amber-200">Registro antigo sem nutrientes preservados: os totais usam o plano disponível e podem estar incompletos.</p>}
+            {refs.length === 0 && (
+              <div className="card-premium flex flex-col items-center gap-2 p-6 text-center">
+                <Settings size={28} className="text-cyan-400" aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-white">Seu plano alimentar ainda não foi montado</h2>
+                <p className="max-w-sm text-xs leading-relaxed text-neutral-500">Configure suas refeições para acompanhar o progresso diário e registrar alimentos extras.</p>
+                {onIrParaConfig && <button type="button" onClick={onIrParaConfig} className="btn-primary mt-2 px-4 py-2.5 text-xs">Configurar refeições</button>}
+              </div>
+            )}
+
+            {/* Registrar o que comeu fora do plano: a ação mais usada, logo abaixo do resumo. */}
+            <div className={`diet-ai-card rounded-2xl p-4 space-y-2 ${aiLoading ? 'diet-ai-card--loading' : ''}`} aria-busy={aiLoading}>
+              {aiLoading && (
+                <svg className="diet-ai-border-loader" aria-hidden="true" focusable="false">
+                  <rect x="0.75" y="0.75" width="calc(100% - 1.5px)" height="calc(100% - 1.5px)" rx="15" pathLength="100" />
+                </svg>
+              )}
+              <div className="diet-ai-head"><span id="diet-ai-title" className="diet-section-label diet-section-label-ai"><Sparkles size={13} /> Registrar alimento</span><span className={`diet-ai-helper ${aiLoading ? 'diet-ai-helper-loading' : ''}`} aria-live="polite">{aiLoading ? 'Analisando sua descrição...' : 'A IA estima; você revisa antes de salvar'}</span></div>
+              <textarea aria-labelledby="diet-ai-title" rows={2} maxLength={LIMITS.textoIA} readOnly={aiLoading}
+                placeholder="Descreva o que comeu. Ex.: parmegiana de frango com arroz"
+                value={aiInput} onChange={e => { ++formVersion.current; setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA)) }}
+                className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30 resize-none" />
+              <div className="diet-register-actions">
+                <button type="button" onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading} aria-busy={aiLoading}
+                  className="diet-ai-submit flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-sm transition active:scale-[0.97]">
+                  {aiLoading ? <><Loader size={15} className="animate-spin" aria-hidden="true" /> Analisando...</> : <><Sparkles size={15} aria-hidden="true" /> Analisar com IA</>}
+                </button>
+                <button type="button" onClick={abrirFormularioManual} disabled={aiLoading} className="btn-secondary diet-manual-button">
+                  <Pencil size={14} aria-hidden="true" /> Digitar valores
+                </button>
+              </div>
+              {erroIA && (
+                <div role="alert" className="flex items-start justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">
+                  <span>{erroIA} Se preferir, use "Digitar valores".</span>
+                  <button type="button" onClick={() => setErroIA(null)} className="shrink-0 text-red-300/70 hover:text-red-200" aria-label="Fechar erro da análise de alimento">✕</button>
+                </div>
+              )}
+            </div>
+
+            {formManualVisivel && (
+              <div ref={extraCardRef} aria-live="polite" className={`diet-extra-card rounded-2xl p-4 space-y-2${extraHighlighted ? ' diet-extra-card--destaque' : ''}`}>
+                <div className="diet-extra-card-head">
+                  <span className="diet-section-label">
+                    {editandoExtraIdx !== null ? <><Pencil size={13} /> Editar alimento</> : <><Plus size={13} /> Novo alimento extra</>}
+                  </span>
+                  {aiResultReady && <span className="diet-ai-ready"><Sparkles size={12} /> Resultado da IA</span>}
+                </div>
+                <div className="space-y-1.5">
+                  <div>
+                    <label htmlFor="extra-nome" className="diet-field-label">Nome</label>
+                    <input
+                      id="extra-nome"
+                      ref={extraNomeRef}
+                      type="text"
+                      maxLength={LIMITS.nomeAlimentoExtra}
+                      placeholder="ex: banana"
+                      value={extraGlobal.nome}
+                      onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, nome: e.target.value })) }}
+                      className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-base outline-none focus:ring-2 focus:ring-cyan-400/30"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { key: 'kcal',         label: 'Calorias (kcal)' },
+                      { key: 'proteinas',    label: 'Proteína (g)' },
+                      { key: 'carboidratos', label: 'Carboidrato (g)' },
+                      { key: 'gorduras',     label: 'Gordura (g)' },
+                      { key: 'fibras',       label: 'Fibras (g)' },
+                    ].map(({ key, label }) => (
+                      <div key={key}>
+                        <label htmlFor={`extra-${key}`} className="diet-field-label">{label}</label>
+                        <input
+                          id={`extra-${key}`}
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={extraGlobal[key]}
+                          onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, [key]: e.target.value })) }}
+                          className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-base text-center outline-none focus:ring-2 focus:ring-cyan-400/30 num"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={limparExtras} className="btn-secondary flex-1 py-3 text-sm">
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={adicionarExtraGlobal}
+                    disabled={!extraGlobal.nome.trim() || extraSaving}
+                    className="flex-1 btn-primary w-full py-3 flex items-center justify-center gap-1"
+                  >
+                    <Plus size={14} /> {editandoExtraIdx !== null ? 'Atualizar' : 'Adicionar'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {refs.map(ref => {
+              const r = hoje?.refeicoes?.[ref.id] || refeicaoVazia()
+              const eLimpo = r.status === 'limpo'
+              const eCustom = r.status === 'customizado'
+              const ePulado = r.status === 'pulado'
+              const MealIcon = iconeRefeicao(tipoRefeicao(ref.nome))
+
+              return (
+                <div key={ref.id} id={`refeicao-card-${ref.id}`} className={`diet-meal-card card-premium p-4 space-y-2 transition ${
+                  eLimpo ? 'border-emerald-500/30' : eCustom ? 'border-yellow-500/30' : ePulado ? 'opacity-40' : ''
+                }`}>
+                  <div className="diet-meal-head">
+                    <div className="diet-meal-identity">
+                      <span className="diet-meal-icon" aria-hidden="true"><MealIcon size={19} /></span>
+                      <div><span className="text-white font-semibold text-sm tracking-tight">{ref.nome}</span><span className="diet-meal-time">{ref.horario}</span></div>
+                    </div>
+                    <span className={`diet-meal-status ${
+                      eLimpo ? 'diet-meal-status-complete' : eCustom ? 'diet-meal-status-custom' : ePulado ? 'diet-meal-status-skipped' : 'diet-meal-status-pending'
+                    }`}>
+                      {eLimpo ? <><Check size={12} /> Concluído</> : eCustom ? 'Customizado' : ePulado ? 'Pulado' : 'Pendente'}
+                    </span>
+                  </div>
+
+                  <div className="diet-meal-context" aria-hidden="true"><MealIcon size={50} strokeWidth={1.35} /></div>
+
+                  <div className="diet-meal-foods">{ref.alimentos?.join(' · ') || ref.nome}</div>
+
+                  <div className="diet-meal-nutrition" aria-label={`Nutrientes de ${ref.nome}`}>
+                    <div className="diet-meal-kcal"><strong>{Math.round(Number(ref.kcal) || 0)}</strong><span>kcal</span></div>
+                    {NUTRIENTE_DEFINICOES.map(item => (
+                      <div key={item.key} title={item.label} aria-label={`${item.label}: ${Math.round(Number(ref[item.key]) || 0)} g`}><strong>{Math.round(Number(ref[item.key]) || 0)}</strong><span className="diet-meal-nutrient-icon"><IconeNutriente nutrientKey={item.key} /></span></div>
+                    ))}
+                  </div>
+
+                  {eLimpo && <div className="diet-meal-confirmed"><Check size={13} /> Incluída no progresso alimentar</div>}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button type="button" onClick={() => confirmar(ref.id)}
+                      aria-label={eLimpo ? 'Desfazer conclusão' : 'Confirmar refeição'}
+                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-sm font-semibold transition active:scale-[0.97] ${
+                        eLimpo ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-emerald-500/30'
+                      }`}>
+                      {eLimpo ? <><Check size={14} /> Concluído</> : <><CircleCheck size={14} /> Confirmar</>}
+                    </button>
+                    <button type="button" onClick={() => pular(ref.id)}
+                      aria-label={ePulado ? 'Desfazer pulo' : 'Pular refeição'}
+                      className={`flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-sm font-semibold transition active:scale-[0.97] ${
+                        ePulado ? 'bg-red-500/20 text-red-400 border border-red-500/20' : 'bg-neutral-800 text-neutral-300 border border-neutral-700 hover:border-red-500/30'
+                      }`}>
+                      {ePulado ? <><CircleX size={13} /> Pulado</> : <><SkipForward size={13} /> Pular</>}
+                    </button>
+                  </div>
+
+                </div>
+              )
+            })}
+
+            {extrasDoDia.length > 0 && (
+              <section className="diet-extras-section" aria-labelledby="diet-extras-title">
+                <span id="diet-extras-title" className="diet-section-label"><Utensils size={13} /> Alimentos extras</span>
+                {extrasDoDia.map(e => (
+                  <div key={e.id} ref={node => { if (node) extraItemRefs.current[e.id] = node; else delete extraItemRefs.current[e.id] }} className="diet-extra-entry diet-extra-meal-card">
+                    <div className="diet-extra-entry-head diet-meal-head">
+                      <div className="diet-meal-identity">
+                        <span className="diet-meal-icon diet-extra-entry-icon" aria-hidden="true"><Utensils size={18} /></span>
+                        <div><span className="text-sm text-white font-semibold">{e.nome || '(sem nome)'}</span><span className="diet-meal-time">Alimento extra</span></div>
+                      </div>
+                      <span className="diet-meal-status diet-extra-entry-status"><Check size={12} /> Incluído</span>
+                    </div>
+                    <div className="diet-meal-nutrition" aria-label={`Nutrientes de ${e.nome || 'alimento extra'}`}>
+                      <div className="diet-meal-kcal"><strong>{Math.round(Number(e.kcal) || 0)}</strong><span>kcal</span></div>
+                      {NUTRIENTE_DEFINICOES.map(item => (
+                        <div key={item.key} title={item.label} aria-label={`${item.label}: ${Math.round(Number(e[item.key]) || 0)} g`}><strong>{Math.round(Number(e[item.key]) || 0)}</strong><span className="diet-meal-nutrient-icon"><IconeNutriente nutrientKey={item.key} /></span></div>
+                      ))}
+                    </div>
+                    <div className="diet-extra-actions diet-extra-entry-actions">
+                      <button type="button" onClick={() => editarExtra(e.id)} aria-label={`Editar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-edit"><Pencil size={13} /><span>Editar</span></button>
+                      <button type="button" onClick={() => removerExtraGlobal(e.id)} aria-label={`Apagar ${e.nome || 'alimento'}`} className="diet-extra-action diet-extra-action-delete"><X size={13} /><span>Apagar</span></button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
             </>
           )}
         </section>
@@ -881,16 +885,19 @@ function PainelEstatisticas({ mesDocs, carregarMes, refs, metaKcal, mesAtual, se
     const data = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`
     const futuro = data > hoje
     const classificacao = classificarDiaPorCalorias(diasMap[data], refs, metaKcal)
-    const comentario = futuro ? '' : comentarioDiaPorCalorias(classificacao)
-    const comentarioCompacto = futuro ? '' : comentarioDiaPorCalorias(classificacao, true)
+    // Hoje só tem resultado quando passa do limite; antes disso está em andamento.
+    const emAndamento = data === hoje && classificacao.status !== DIET_DAY_STATUS.EMPTY && statusDoDia(classificacao, true).classe === 'em_andamento'
+    const status = emAndamento ? 'em_andamento' : classificacao.status
+    const comentario = futuro ? '' : emAndamento ? 'Em andamento' : comentarioDiaPorCalorias(classificacao)
+    const comentarioCompacto = futuro ? '' : emAndamento ? 'Hoje' : comentarioDiaPorCalorias(classificacao, true)
     const metaDescricao = classificacao.metaKcal > 0 ? `meta ${classificacao.metaKcal.toLocaleString('pt-BR')} kcal` : 'meta não definida'
     const detalhe = futuro ? 'Dia futuro' : `${comentario}${classificacao.kcal > 0 ? `. ${Math.round(classificacao.kcal).toLocaleString('pt-BR')} kcal consumidas; ${metaDescricao}` : ''}`
-    diasArray.push({ dia: d, data, futuro, status: classificacao.status, comentario, comentarioCompacto, detalhe })
+    diasArray.push({ dia: d, data, futuro, status, comentario, comentarioCompacto, detalhe })
   }
 
   let greenDays = 0; let yellowDays = 0; let redDays = 0
   diasArray.forEach(({ futuro, status }) => {
-    if (futuro) return
+    if (futuro || status === 'em_andamento') return
     if (status === DIET_DAY_STATUS.COMPLETE) greenDays++
     else if (status === DIET_DAY_STATUS.OUT_OF_PLAN) redDays++
     else yellowDays++

@@ -115,6 +115,35 @@ export function comentarioDiaPorCalorias({ status, kcal, metaKcal }, compacto = 
   return `${diferenca.toLocaleString('pt-BR')} kcal ${kcal > metaKcal ? 'acima' : 'abaixo'}`
 }
 
+// Texto do status do dia na tela. A faixa de −1.000/+300 kcal serve para julgar
+// um dia fechado; hoje ainda está em andamento até a meta ser atingida.
+export function statusDoDia(classificacao, ehHoje = false) {
+  const { status, kcal, metaKcal, minimoKcal, maximoKcal } = classificacao
+  const fmt = valor => Math.round(valor).toLocaleString('pt-BR')
+  const faixa = `Faixa considerada: ${fmt(minimoKcal)}–${fmt(maximoKcal)} kcal`
+  if (status === DIET_DAY_STATUS.EMPTY) {
+    return { classe: DIET_DAY_STATUS.EMPTY, titulo: ehHoje ? 'Nenhum registro ainda' : 'Dia não preenchido', detalhe: 'Registre o consumo para avaliar a aderência.' }
+  }
+  if (kcal > maximoKcal) {
+    return { classe: DIET_DAY_STATUS.OUT_OF_PLAN, titulo: 'Acima da meta', detalhe: `${fmt(kcal - metaKcal)} kcal acima da meta. ${faixa}` }
+  }
+  if (ehHoje) {
+    return kcal >= metaKcal
+      ? { classe: DIET_DAY_STATUS.COMPLETE, titulo: 'Meta do dia atingida', detalhe: `Até ${fmt(maximoKcal)} kcal o dia continua dentro do plano.` }
+      : { classe: 'em_andamento', titulo: 'Dia em andamento', detalhe: `Faltam ${fmt(metaKcal - kcal)} kcal para a meta.` }
+  }
+  return status === DIET_DAY_STATUS.COMPLETE
+    ? { classe: DIET_DAY_STATUS.COMPLETE, titulo: 'Dia concluído', detalhe: faixa }
+    : { classe: DIET_DAY_STATUS.OUT_OF_PLAN, titulo: 'Abaixo da meta', detalhe: `${fmt(metaKcal - kcal)} kcal abaixo da meta. ${faixa}` }
+}
+
+// Refeições do plano feitas, sem misturar com alimentos extras.
+export function contagemRefeicoes(day, plan = []) {
+  const feitas = plan.filter(ref => completedMealStatuses.includes(day?.refeicoes?.[ref.id]?.status)).length
+  const extras = Array.isArray(day?.extras_globais) ? day.extras_globais.length : 0
+  return { feitas, planejadas: day?.planejadas?.length ?? plan.length, extras }
+}
+
 function cleanDiaryText(value) {
   const text = String(value ?? '').replaceAll('\n', ' ').replaceAll('\r', ' ').replaceAll('\t', ' ').replace(/\s+/g, ' ').trim()
   return Array.from(text).filter(character => character.codePointAt(0) >= 32 && character.codePointAt(0) !== 127).join('')
