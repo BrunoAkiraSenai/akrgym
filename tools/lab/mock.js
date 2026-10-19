@@ -116,4 +116,13 @@ export const signInWithPopup = falha
 export const signInWithRedirect = falha
 export const getAuth = () => auth
 export class GoogleAuthProvider { setCustomParameters() {} }
-export async function calcularMacrosIA(texto) { await delay(2200); return { nome: texto, kcal: 640, proteinas: 38, carboidratos: 62, gorduras: 24, fibras: 6 } }
+// Resposta no formato do Worker v2 (detalhe por item), já normalizada como o gemini.js faz.
+export async function calcularMacrosIA(texto) {
+  await delay(2200)
+  const itens = [
+    { nome: 'arroz branco', referencia: 'Arroz, tipo 1, cozido', fonte: 'taco', estado: 'cozido', estadoInformado: false, gramasEstimadas: false, gramas: 230, por100: { kcal: 128, proteinas: 2.5, carboidratos: 28.1, gorduras: 0.2, fibras: 1.6 }, kcal: 294.4, proteinas: 5.8, carboidratos: 64.6, gorduras: 0.5, fibras: 3.7 },
+    { nome: 'carne bovina fraldinha', referencia: 'Carne, bovina, fraldinha, com gordura, crua', fonte: 'taco', estado: 'cru', estadoInformado: true, gramasEstimadas: false, gramas: 150, por100: { kcal: 221, proteinas: 17.6, carboidratos: 0, gorduras: 16.1, fibras: 0 }, kcal: 331.5, proteinas: 26.4, carboidratos: 0, gorduras: 24.2, fibras: 0 },
+    { nome: 'molho barbecue', referencia: null, fonte: 'estimativa', estado: null, estadoInformado: false, gramasEstimadas: true, gramas: 20, por100: { kcal: 170, proteinas: 1, carboidratos: 40, gorduras: 0.5, fibras: 0.5 }, kcal: 34, proteinas: 0.2, carboidratos: 8, gorduras: 0.1, fibras: 0.1 },
+  ]
+  return { nome: texto, kcal: 660, proteinas: 32, carboidratos: 73, gorduras: 25, fibras: 4, itens }
+}

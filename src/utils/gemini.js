@@ -1,6 +1,7 @@
 import { getToken } from 'firebase/app-check'
 import { auth, appCheck } from '../firebase'
 import { NUTRITION_RESULT_ERROR, validarResultadoMacros, validarTextoAlimento } from './nutrition.js'
+import { normalizarItensIA } from './itensIA.js'
 
 /**
  * calcularMacrosIA — análise de macros via backend seguro.
@@ -85,6 +86,8 @@ export async function calcularMacrosIA(textoAlimentos) {
       carboidratos: Math.round(parsed.c),
       gorduras: Math.round(parsed.g),
       fibras: Math.round(parsed.fibras),
+      // Detalhe por item (Worker v2); vazio quando o Worker ainda é o antigo.
+      itens: normalizarItensIA(payload.itens),
     }
   } catch (err) {
     if (err instanceof TypeError && /Failed to fetch|NetworkError|Load failed/i.test(err.message || '')) {

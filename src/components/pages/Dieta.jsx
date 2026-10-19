@@ -8,6 +8,8 @@ import { calcularMacrosIA } from '../../utils/gemini'
 import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
 import { LIMITS, normalizarNomeAlimentoExtra, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
+import ItensAnalise from '../dieta/ItensAnalise'
+import { mudarGramas, removerItem, totaisDosItens } from '../../utils/itensIA'
 import { focusTabWithArrowKey } from '../../utils/rovingTabs'
 import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Copy, Droplets, Dumbbell, Flame, Leaf, Loader, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
 import { diaryText } from '../../utils/dietDiary'
@@ -134,6 +136,8 @@ export default function Dieta({ onIrParaConfig }) {
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResultReady, setAiResultReady] = useState(false)
+  // Itens da última análise (alimento, gramas, origem do valor), para conferir antes de salvar.
+  const [itensIA, setItensIA] = useState([])
   const [userMetas, setUserMetas] = useState({ kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 30 })
   const [toast, setToast] = useState(null)
   const [copiandoRefeicoes, setCopiandoRefeicoes] = useState(false)
@@ -176,6 +180,7 @@ export default function Dieta({ onIrParaConfig }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHoje(null); setLoading(true); setErro(null)
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '', fibras: '' })
+    setItensIA([])
     setEditandoExtraIdx(null); editingOriginal.current = null
     setPularConfirmId(null); setToast(null); setErroIA(null); setAiInput('')
     setAiLoading(false); setAnalisando(false)
@@ -341,6 +346,7 @@ export default function Dieta({ onIrParaConfig }) {
     ++formVersion.current
     editingOriginal.current = null
     setAiResultReady(false)
+    setItensIA([])
     setFormManualAberto(false)
     setExtraGlobal({ nome: '', kcal: '', proteinas: '', carboidratos: '', gorduras: '', fibras: '' })
     setEditandoExtraIdx(null)
@@ -370,6 +376,7 @@ export default function Dieta({ onIrParaConfig }) {
     })
     ++formVersion.current
     editingOriginal.current = e
+    setItensIA([])
     setEditandoExtraIdx(id)
     setFormManualAberto(true)
     mostrarFormulario()
@@ -392,6 +399,7 @@ export default function Dieta({ onIrParaConfig }) {
       gorduras: String(parsed.gorduras || 0),
       fibras: String(parsed.fibras || 0),
     })
+    setItensIA(parsed.itens || [])
     setAiResultReady(true)
     setFormManualAberto(true)
     setAiInput('')
@@ -399,6 +407,14 @@ export default function Dieta({ onIrParaConfig }) {
     setExtraHighlighted(true)
     mostrarFormulario()
     setTimeout(() => setExtraHighlighted(false), 1600)
+  }
+
+  // Corrigir gramas ou tirar um item refaz o total do formulário.
+  const atualizarItensIA = (novos) => {
+    ++formVersion.current
+    setItensIA(novos)
+    const totais = totaisDosItens(novos)
+    setExtraGlobal(p => ({ ...p, ...Object.fromEntries(Object.entries(totais).map(([campo, valor]) => [campo, String(valor)])) }))
   }
 
   // IA Gemini via backend seguro (Cloud Function ou Worker)
@@ -691,6 +707,11 @@ export default function Dieta({ onIrParaConfig }) {
                   </span>
                   {aiResultReady && <span className="diet-ai-ready"><Sparkles size={12} /> Resultado da IA</span>}
                 </div>
+                {aiResultReady && itensIA.length > 0 && (
+                  <ItensAnalise itens={itensIA}
+                    onMudarGramas={(indice, gramas) => atualizarItensIA(mudarGramas(itensIA, indice, gramas))}
+                    onRemover={indice => atualizarItensIA(removerItem(itensIA, indice))} />
+                )}
                 <div className="space-y-1.5">
                   <div>
                     <label htmlFor="extra-nome" className="diet-field-label">Nome</label>
@@ -721,7 +742,8 @@ export default function Dieta({ onIrParaConfig }) {
                           inputMode="decimal"
                           placeholder="0"
                           value={extraGlobal[key]}
-                          onChange={e => { ++formVersion.current; setExtraGlobal(p => ({ ...p, [key]: e.target.value })) }}
+                          // Total digitado à mão deixa de bater com os itens: o detalhe sai.
+                          onChange={e => { ++formVersion.current; setItensIA([]); setExtraGlobal(p => ({ ...p, [key]: e.target.value })) }}
                           className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-2.5 rounded-xl text-base text-center outline-none focus:ring-2 focus:ring-cyan-400/30 num"
                         />
                       </div>
