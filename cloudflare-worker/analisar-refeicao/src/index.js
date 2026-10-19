@@ -36,7 +36,7 @@ Separe a descrição em itens de comida ou bebida, brasileiros ou internacionais
 Para cada item informe:
 - "alimento": nome curto do alimento como na tabela TACO quando existir (ex.: "arroz tipo 1", "carne bovina fraldinha", "frango peito sem pele", "feijao carioca", "banana prata"); para pratos, marcas e itens de restaurante, o nome do prato.
 - "estado": "cru", "cozido", "grelhado", "assado", "frito", "refogado", "torrado" ou "nenhum" (para o que não tem preparo, como pão, leite, queijo, iogurte, bebidas e pratos prontos).
-- "estado_informado": true somente se a pessoa escreveu o estado (cru, crua, cozido, grelhado...). O estado escrito pela pessoa é obrigatório: "fraldinha cru" é "cru", nunca "cozido". Se ela não escreveu, escolha o estado em que o alimento costuma ser pesado e comido (arroz e feijão: cozido; carnes: grelhado ou cozido) e use false.
+- "estado_informado": true somente se a pessoa escreveu o estado (cru, crua, cozido, grelhado...). O estado escrito pela pessoa é obrigatório: "fraldinha cru" é "cru", nunca "cozido". Se ela não escreveu, escolha o estado em que o alimento costuma ser pesado e comido (arroz e feijão: cozido; carnes: grelhado ou cozido; frutas, verduras cruas, aveia e castanhas: cru) e use false.
 - "gramas": o peso em gramas. Converta unidades, colheres, fatias e frações (1/3, 1,5 unidade) para gramas. Sem quantidade, use uma porção típica.
 - "gramas_estimadas": false se a pessoa deu o peso em gramas ou ml; true se você converteu ou estimou.
 - "kcal", "p", "c", "g", "fibras": sua estimativa para ESSA quantidade e ESSE estado (proteína, carboidrato, gordura e fibra em gramas). Use a TACO como referência para alimentos brasileiros e a USDA ou o fabricante para os demais.

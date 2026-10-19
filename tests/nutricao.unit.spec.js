@@ -67,3 +67,21 @@ test('respostas que não servem são recusadas com o motivo certo', () => {
 test('soma arredonda só no total', () => {
   assert.deepEqual(somarItens([{ kcal: 10.4, proteinas: 0.3, carboidratos: 0, gorduras: 0, fibras: 0 }, { kcal: 10.4, proteinas: 0.3, carboidratos: 0, gorduras: 0, fibras: 0 }]), { kcal: 21, proteinas: 1, carboidratos: 0, gorduras: 0, fibras: 0 })
 })
+
+test('tabela completa: alimentos comuns caem na linha certa ou viram estimativa', async () => {
+  const { default: TACO } = await import('../cloudflare-worker/analisar-refeicao/src/taco.js')
+  const completo = criarIndice(TACO)
+  const casos = [
+    ['carne bovina fraldinha', 'cru', 362], ['arroz branco', 'cozido', 3], ['feijao', 'cozido', 561],
+    ['peito de frango', 'grelhado', 410], ['frango peito sem pele', 'cru', 409], ['patinho', 'grelhado', 377],
+    ['contrafile', 'grelhado', 346], ['carne moida', 'cozido', 326], ['ovo', 'frito', 490], ['clara de ovo', 'cozido', 486],
+    ['banana', 'cru', 182], ['maca fuji', 'cru', 222], ['queijo mussarela', null, 463], ['requeijao', null, 468],
+    ['batata doce', 'cozido', 88], ['aveia flocos', 'cru', 7],
+  ]
+  for (const [alimento, estado, id] of casos) assert.equal(encontrarNaTabela(completo, alimento, estado)?.id, id, alimento)
+  // Leite líquido está "em reavaliação" na TACO: não pode virar leite em pó nem zero.
+  for (const [alimento, estado] of [['leite integral', null], ['tapioca', null], ['maca', 'cozido'], ['whey protein', null]]) {
+    assert.equal(encontrarNaTabela(completo, alimento, estado), null, alimento)
+  }
+  assert.equal(encontrarNaTabela(completo, 'maca', 'cru').nome.startsWith('Maçã'), true)
+})

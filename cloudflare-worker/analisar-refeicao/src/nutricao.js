@@ -18,16 +18,32 @@ export const ESTADOS_VALIDOS = ['cru', 'cozido', 'grelhado', 'assado', 'frito', 
 const VAZIAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'com', 'em', 'a', 'o', 'tipo', 'g', 'gramas'])
 
 // Jeitos comuns de escrever que a TACO nomeia de outro modo.
+// A primeira regra que casar vale.
 const SINONIMOS = [
-  [/\barroz branco\b/, 'arroz tipo 1'],
+  [/\barroz branco\b|^arroz$/, 'arroz tipo 1'],
   [/\bpeito de frango\b|\bfile de frango\b|\bfrango file\b/, 'frango peito sem pele'],
+  [/\bclaras?( de ovo)?\b/, 'ovo galinha clara'],
   [/\bovos?\b(?! de codorna)/, 'ovo galinha inteiro'],
-  [/\bclara de ovo\b|\bclaras?\b/, 'ovo galinha clara'],
-  [/\bbatata doce\b/, 'batata doce'],
   [/\bpao frances\b|\bpaozinho\b/, 'pao trigo frances'],
+  [/\bpao de forma\b/, 'pao trigo forma'],
   [/\bfeijao\b(?! (preto|carioca|fradinho|rajado|jalo|rosinha|roxo|branco))/, 'feijao carioca'],
-  [/\bcarne moida\b/, 'carne bovina patinho moido'],
+  [/\bcarne moida\b|\bpatinho moido\b/, 'carne bovina acem moido'],
+  [/\bcontra ?file\b/, 'carne bovina contra file sem gordura'],
+  [/\bmussarela\b|\bmucarela\b|\bmuzzarela\b/, 'queijo mozarela'],
+  [/^banana$/, 'banana prata'],
+  [/^requeijao\b/, 'queijo requeijao cremoso'],
+  [/^macarrao$|\bmacarrao (de )?trigo\b/, 'macarrao trigo'],
 ]
+
+// Começo do nome na TACO que é só categoria ("Carne, bovina, patinho"): a
+// busca pode citar só o corte. Nos demais, o primeiro termo da tabela é o
+// próprio alimento e precisa estar na busca ("maçã" não pode cair em
+// "Banana, maçã").
+const CATEGORIAS = new Set(['carne', 'bovina', 'peixe'])
+
+// Variações que mudam muito o valor: só valem se a pessoa escreveu
+// ("leite" não pode virar "leite em pó").
+const SO_SE_PEDIDO = new Set(['po', 'instantaneo', 'milanesa', 'empanado', 'desidratado', 'manteiga', 'achocolatado'])
 
 export function normalizar(texto) {
   return String(texto || '')
@@ -55,7 +71,7 @@ export function estadoDoTexto(texto) {
 export function criarIndice(tabela) {
   return tabela.map(item => {
     const t = tokens(item.nome)
-    return { item, tokens: new Set(t), estado: t.find(p => ESTADOS_VALIDOS.includes(p)) || null, tamanho: t.length }
+    return { item, tokens: new Set(t), cabeca: t[0], estado: t.find(p => ESTADOS_VALIDOS.includes(p)) || null, tamanho: t.length }
   })
 }
 
@@ -74,6 +90,8 @@ export function encontrarNaTabela(indice, alimento, estado) {
   let melhor = null
   for (const entrada of indice) {
     if (!palavras.every(p => entrada.tokens.has(p))) continue
+    if (!CATEGORIAS.has(entrada.cabeca) && !palavras.includes(entrada.cabeca)) continue
+    if ([...entrada.tokens].some(p => SO_SE_PEDIDO.has(p) && !palavras.includes(p))) continue
     if (entrada.estado && estadoBusca && entrada.estado !== estadoBusca) continue
     // Sem estado informado, só aceita item da tabela que também não tem estado.
     if (entrada.estado && !estadoBusca) continue

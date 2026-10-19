@@ -11,7 +11,14 @@ if (!Array.isArray(lista)) { console.error('Formato inesperado'); process.exit(1
 
 // "Tr" (traço), "NA" e células vazias chegam como null: na soma valem 0.
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
-const alimentos = lista.map(a => {
+// Alimento com kcal ou macro "em reavaliação" ou não analisado (ex.: leite
+// integral na 4ª ed.) fica fora: somar 0 seria pior que a estimativa da IA.
+const ESSENCIAIS = ['energia_kcal', 'proteina_g', 'lipideos_g', 'carboidrato_g']
+const incompleto = a => ESSENCIAIS.some(c => a.composicao_centesimal?.[c] == null && !['TRACO', 'NAO_APLICAVEL'].includes(a.qualificadores?.[c]))
+const fora = lista.filter(incompleto)
+console.log(`${fora.length} fora por valor ausente: ${fora.map(a => a.id).join(', ')}`)
+
+const alimentos = lista.filter(a => !incompleto(a)).map(a => {
   const c = a.composicao_centesimal || {}
   return {
     id: a.id,
