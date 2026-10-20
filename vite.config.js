@@ -18,8 +18,10 @@ export default defineConfig(() => ({
         background_color: '#06080f',
         display: 'standalone',
         orientation: 'portrait',
+        // O app mora em /app; o id fixo mantém a mesma instalação para quem já tem o ícone.
+        id: '/',
         scope: '/',
-        start_url: '/',
+        start_url: '/app',
         icons: [
           {
             src: '/pwa-192x192.png',
@@ -43,6 +45,9 @@ export default defineConfig(() => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,xml,txt,webmanifest}'],
+        // Sem rede, só caminhos do app caem no app; "/" e as páginas públicas vêm do cache delas.
+        navigateFallback: 'app.html',
+        navigateFallbackAllowlist: [/^\/app(\/|$|\?)/],
         navigateFallbackDenylist: [/\.xml$/, /\.txt$/, /\.webmanifest$/],
         runtimeCaching: [
           {
@@ -84,6 +89,8 @@ export default defineConfig(() => ({
     ],
     build: {
       rollupOptions: {
+        // Duas páginas: a apresentação pública (index.html) e o app (app.html → /app).
+        input: { index: 'index.html', app: 'app.html' },
         output: {
           manualChunks: (id) => {
             if (id.includes('node_modules')) {

@@ -42,7 +42,7 @@ const server = await createServer({
         const w = Number(p.get('w')) || 390, h = Number(p.get('h')) || 844
         p.delete('w'); p.delete('h')
         res.setHeader('Content-Type', 'text/html')
-        res.end(`<!doctype html><body style="margin:0;background:#000"><iframe src="/?${p}" style="display:block;border:0;width:${w}px;height:${h}px"></iframe></body>`)
+        res.end(`<!doctype html><body style="margin:0;background:#000"><iframe src="/app?${p}" style="display:block;border:0;width:${w}px;height:${h}px"></iframe></body>`)
       })
     },
   }, react(), tailwind()],

@@ -1,4 +1,6 @@
 User-agent: *
 Allow: /
+# Área do app: login e dados de quem usa. A página indexável é a /.
+Disallow: /app
 
 Sitemap: https://akrgym.web.app/sitemap.xml
