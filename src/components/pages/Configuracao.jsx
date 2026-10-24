@@ -8,6 +8,7 @@ import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
 import { buildUserDataExport, formatExportFilename } from '../../utils/exportData'
 import { LIMITE_NOTA, comNomesGravaveis, prepararConfigParaSalvar } from '../../utils/configValidation'
+import ContaPlano, { ExcluirConta } from '../conta/ContaPlano'
 import { focusTabWithArrowKey } from '../../utils/rovingTabs'
 import { dataTreinoParaDate, normalizarMetaSemanal } from '../../utils/fitness'
 import { exerciseId, garantirIdsExercicios, gerarIdRotina, moverRotina, nomesDeExerciciosCompativeis, novoIdExercicio, ordenarRotinas, reordenarExercicios, valoresDoExercicio } from '../../utils/workoutSession'
@@ -757,6 +758,8 @@ export default function Configuracao({ abaInicial }) {
             </button>
           </div>
 
+          <ContaPlano user={user} />
+
           <section className="settings-export card-premium" aria-labelledby="exportar-dados-heading">
             <div className="settings-account-avatar"><Download size={18} /></div>
             <div className="min-w-0 flex-1">
@@ -791,6 +794,8 @@ export default function Configuracao({ abaInicial }) {
               ))}
             </div>
           </div>
+
+          <ExcluirConta user={user} />
         </div>
       </details>
 

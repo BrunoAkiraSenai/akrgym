@@ -8,7 +8,7 @@ const clone = v => structuredClone(v)
 const delay = ms => new Promise(r => setTimeout(r, scene === 'slow' ? ms * 40 : ms))
 const UID = 'audit-user'
 
-export const auth = { currentUser: scene === 'login' ? null : { uid: UID, email: 'teste@example.invalid', displayName: 'Bruno Teste', isAnonymous: scene === 'anonymous', getIdToken: async () => 'fixture' } }
+export const auth = { currentUser: scene === 'login' ? null : { uid: UID, email: 'teste@example.invalid', displayName: 'Bruno Teste', isAnonymous: scene === 'anonymous', metadata: { lastSignInTime: new Date().toUTCString() }, getIdToken: async () => 'fixture' } }
 export const db = {}
 export const provider = {}
 export const appCheck = null
@@ -94,7 +94,10 @@ export async function addDoc(ref, data) { const t = { path: ref.path + '/' + cry
 export async function updateDoc(ref, data) { return setDoc(ref, { ...docs.get(ref.path), ...data }) }
 export async function deleteDoc(ref) { docs.delete(ref.path); notify(ref.path) }
 export const serverTimestamp = () => new Date()
-export const writeBatch = () => { const ops = []; return { set: (r, d) => ops.push([r, d]), commit: () => Promise.all(ops.map(([r, d]) => setDoc(r, d))) } }
+export const writeBatch = () => { const ops = []; return { set: (r, d) => ops.push([r, d]), delete: r => ops.push([r, null]), commit: () => Promise.all(ops.map(([r, d]) => (d === null ? deleteDoc(r) : setDoc(r, d)))) } }
+// No laboratório o contador só guarda o último valor (suficiente para ver a tela).
+export const increment = n => n
+export async function deleteUser() { auth.currentUser = null; for (const cb of listeners) cb(null) }
 export function onSnapshot(ref, fn) { const l = subs.get(ref.path) || new Set(); subs.set(ref.path, l); l.add(fn); queueMicrotask(() => { if (l.has(fn)) fn(snapshot(ref.path, docs.get(ref.path))) }); return () => l.delete(fn) }
 let fila = Promise.resolve()
 export function runTransaction(_, cb) { const r = fila.then(async () => { const w = []; const v = await cb({ get: getDoc, set: (ref, d) => w.push([ref, d]) }); for (const [ref, d] of w) await setDoc(ref, d); return v }); fila = r.catch(() => {}); return r }

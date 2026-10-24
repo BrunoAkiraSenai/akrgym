@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Camera, Check, ChevronRight, Copy, Flame, Minus, ShieldCheck, Trash, UserPlus, Users, X } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
+import { useContaAtual } from '../../context/ContaContext'
 import ConfirmModal from '../ConfirmModal'
 import Avatar from './Avatar'
 import CalendarioAmigo from './CalendarioAmigo'
@@ -51,6 +52,7 @@ function Numeros({ resumo, hoje }) {
 
 export default function AmigosDieta({ refs, metaKcal, baseReady }) {
   const user = useUser()
+  const { abrirLogin } = useContaAtual()
   const uid = user.uid
   const hoje = dataLocalId()
   const [fase, setFase] = useState('carregando')
@@ -198,7 +200,8 @@ export default function AmigosDieta({ refs, metaKcal, baseReady }) {
       <div className="card-premium social-empty">
         <Users size={26} aria-hidden="true" />
         <h2>Amigos precisam de uma conta</h2>
-        <p>Entre com e-mail ou Google em Configurar para criar seu perfil e adicionar amigos.</p>
+        <p>Entre com e-mail ou Google para criar seu perfil e adicionar amigos.</p>
+        {abrirLogin && <button type="button" onClick={abrirLogin} className="btn-secondary">Criar conta ou entrar</button>}
       </div>
     )
   }

@@ -113,7 +113,8 @@ async function migrateAnonymousData(anonymousUid, newUid) {
   }
 }
 
-export default function Login() {
+// onVoltar existe quando um visitante abriu o login: ele pode desistir e seguir como visitante.
+export default function Login({ onVoltar }) {
   const [modo, setModo] = useState('entrar')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -413,6 +414,13 @@ export default function Login() {
               </button>
             </p>
           </form>
+        )}
+        {onVoltar && (
+          <p className="text-center text-sm text-white/50">
+            <button type="button" onClick={onVoltar} className="login-action-link font-medium hover:text-white/80 transition">
+              Continuar como visitante
+            </button>
+          </p>
         )}
       </div>
     </div>

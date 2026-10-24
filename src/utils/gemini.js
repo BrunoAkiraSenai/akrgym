@@ -2,6 +2,8 @@ import { getToken } from 'firebase/app-check'
 import { auth, appCheck } from '../firebase'
 import { NUTRITION_RESULT_ERROR, validarResultadoMacros, validarTextoAlimento } from './nutrition.js'
 import { normalizarItensIA } from './itensIA.js'
+import { MENSAGENS_BLOQUEIO } from './planos.js'
+import { registrarUsoIA } from './contaStore.js'
 
 /**
  * calcularMacrosIA — análise de macros via backend seguro.
@@ -29,6 +31,7 @@ export async function calcularMacrosIA(textoAlimentos) {
 
   const usuario = auth.currentUser
   if (!usuario) return { ...FALLBACK, nome: texto, _erro: 'Sua sessão expirou. Entre novamente para usar a análise por IA.' }
+  if (usuario.isAnonymous) return { ...FALLBACK, nome: texto, _erro: MENSAGENS_BLOQUEIO.conta, _motivo: 'conta' }
   if (!appCheck) return { ...FALLBACK, nome: texto, _erro: 'A proteção da IA ainda não está configurada neste ambiente.' }
 
   try {
@@ -66,6 +69,8 @@ export async function calcularMacrosIA(textoAlimentos) {
     // 422 é uma recusa explicada pelo backend (não é alimento, soma grande demais...):
     // a mensagem já diz o que fazer e não deve parecer indisponibilidade.
     if (response.status === 422 && payload._erro) return { ...FALLBACK, nome: texto, _erro: payload._erro }
+    // Visitante anônimo: a IA pede conta.
+    if (response.status === 403 && payload._motivo === 'conta') return { ...FALLBACK, nome: texto, _erro: payload._erro, _motivo: 'conta' }
     if (!response.ok) throw new Error(payload._erro || `Serviço de IA indisponível (${response.status})`)
 
     const parsed = {
@@ -78,6 +83,8 @@ export async function calcularMacrosIA(textoAlimentos) {
     }
     const erroNutricional = validarResultadoMacros(parsed)
     if (erroNutricional) return { ...FALLBACK, nome: texto, _erro: erroNutricional }
+    // Análise concluída conta no uso do mês (sem limite por enquanto).
+    void registrarUsoIA(usuario.uid)
 
     return {
       nome: texto,

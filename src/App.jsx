@@ -4,6 +4,8 @@ import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { METAS_DIARIAS } from './config/dieta'
 import { UserContext } from './context/UserContext'
+import { ContaContext } from './context/ContaContext'
+import { useConta } from './utils/contaStore'
 import OnboardingWizard from './components/OnboardingWizard'
 import PageTransition from './components/PageTransition'
 import StartupSplash from './components/StartupSplash'
@@ -50,12 +52,17 @@ export default function App() {
   const [initializing, setInitializing] = useState(true)
   const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
   const [mostrarOnboarding, setMostrarOnboarding] = useState(true)
+  const conta = useConta(user?.uid)
+  // Visitante que tocou em "Criar conta": o login abre sem sair da sessão,
+  // para o Login migrar os dados do visitante para a conta nova.
+  const [visitanteEntrando, setVisitanteEntrando] = useState(false)
 
   // Reseta o estado da UI quando o usuário muda (login/logout)
   const resetUIState = () => {
     setActiveTab('home')
     setAbaInicialConfig('treinos')
     setMostrarOnboarding(true)
+    setVisitanteEntrando(false)
     setLoading(true)
     setInitializing(true)
   }
@@ -121,7 +128,9 @@ export default function App() {
     )
   }
 
-  if (!user) return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login /></Suspense></ErrorBoundary>
+  if (!user || (user.isAnonymous && visitanteEntrando)) {
+    return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login onVoltar={user ? () => setVisitanteEntrando(false) : undefined} /></Suspense></ErrorBoundary>
+  }
 
   const abrirConfiguracao = aba => { setAbaInicialConfig(aba); setActiveTab('configurar') }
 
@@ -145,6 +154,7 @@ export default function App() {
 
   return (
     <UserContext.Provider value={user}>
+      <ContaContext.Provider value={{ ...conta, abrirLogin: () => setVisitanteEntrando(true) }}>
       {mostrarOnboarding ? (
         <ErrorBoundary>
           <OnboardingWizard onComplete={() => setMostrarOnboarding(false)} />
@@ -158,6 +168,7 @@ export default function App() {
           </ErrorBoundary>
         </Layout>
       )}
+      </ContaContext.Provider>
     </UserContext.Provider>
   )
 }

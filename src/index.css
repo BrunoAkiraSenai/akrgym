@@ -1107,6 +1107,21 @@ img, svg, video, canvas { max-width: 100%; }
 .settings-utilities[open] summary svg { transform: rotate(180deg); }
 .settings-utilities-content { display: flex; flex-direction: column; gap: 0.8rem; padding: 0.9rem 0; }
 .settings-export { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem; }
+.settings-plan { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.85rem; }
+.settings-plan-uso { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0.6rem 0 0; }
+.settings-plan-uso div { display: flex; flex-direction: column; gap: 0.1rem; }
+.settings-plan-uso dt { color: var(--text-secondary); font-size: 0.72rem; }
+.settings-plan-uso dd { margin: 0; color: var(--text-primary); font-size: 0.9rem; font-weight: 700; }
+.settings-plan-aviso { margin: 0.6rem 0 0; color: #fbbf24; font-size: 0.75rem; line-height: 1.45; }
+.settings-delete { display: flex; flex-direction: column; gap: 0.7rem; padding: 0.85rem; border-color: rgba(239,68,68,0.18); }
+.settings-delete-confirm { display: flex; flex-direction: column; gap: 0.55rem; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.45; }
+.settings-delete-confirm p { display: flex; align-items: flex-start; gap: 0.4rem; margin: 0; }
+.settings-delete-confirm strong { color: #f87171; }
+.settings-delete-confirm input { min-height: 2.75rem; border-radius: 0.7rem; padding: 0 0.8rem; background: rgba(255,255,255,0.05); color: var(--text-primary); font-size: 1rem; letter-spacing: 0.08em; outline: none; }
+.settings-delete-confirm input:focus-visible { box-shadow: 0 0 0 2px rgba(239,68,68,0.45); }
+.settings-delete-erro { color: #fca5a5; }
+[data-theme="lava"] .settings-plan-aviso { color: #a16207; }
+[data-theme="lava"] .settings-delete-confirm strong, [data-theme="lava"] .settings-delete-erro { color: #b91c1c; }
 .settings-appearance { display: flex; flex-direction: column; gap: 0.75rem; }
 .login-action-link { display: inline-flex; min-height: 2.75rem; align-items: center; border-radius: 0.35rem; padding-inline: 0.25rem; font-size: 0.75rem; }
 .login-action-link:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }
@@ -1490,6 +1505,9 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .diet-section-label-ai { color: var(--brand-bright); }
 .diet-extra-card { border: 1px solid rgba(var(--accent-rgb),0.20); background: rgba(var(--accent-rgb),0.035); }
 .diet-extra-card-head, .diet-ai-head { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; }
+.diet-ai-bloqueio { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; border: 1px solid rgba(245,158,11,0.3); border-radius: 0.75rem; padding: 0.6rem 0.75rem; color: var(--text-secondary); background: rgba(245,158,11,0.07); font-size: 0.78rem; line-height: 1.45; }
+.diet-ai-bloqueio p { margin: 0; }
+.diet-ai-bloqueio-acao { min-height: 2.5rem; padding: 0.45rem 0.9rem; font-size: 0.8rem; }
 .diet-ai-items { display: flex; flex-direction: column; gap: 0.5rem; }
 .diet-ai-items ul { display: flex; flex-direction: column; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
 .diet-ai-item { display: flex; flex-direction: column; gap: 0.4rem; border: 1px solid var(--border-subtle); border-radius: 0.8rem; padding: 0.6rem 0.7rem; background: rgba(0,0,0,0.18); }

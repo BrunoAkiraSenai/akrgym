@@ -515,3 +515,35 @@ describe('AkrGym Firestore Rules — calendário do amigo', () => {
     await assertFails(real(BOB).collection(`users/${ALICE}/diario_dieta`).get())
   })
 })
+
+describe('AkrGym Firestore Rules — plano e conta', () => {
+  const uso = uid => authedDb(uid).doc(`users/${uid}/uso_ia/2026-10`)
+
+  it('o dono lê o plano, mas ninguém pelo app consegue se dar um plano', async () => {
+    await assertSucceeds(authedDb(ALICE).doc(`users/${ALICE}/conta/assinatura`).get())
+    await assertFails(authedDb(BOB).doc(`users/${ALICE}/conta/assinatura`).get())
+    await assertFails(authedDb(ALICE).doc(`users/${ALICE}/conta/assinatura`).set({ plano: 'pro', status: 'ativa' }))
+  })
+
+  it('contador de uso só sobe de um em um', async () => {
+    await assertFails(uso(ALICE).set({ total: 5, porDia: { 24: 5 } }))
+    await assertSucceeds(uso(ALICE).set({ total: 1, porDia: { 24: 1 } }))
+    await assertSucceeds(uso(ALICE).set({ total: 2, porDia: { 24: 2 } }))
+    await assertFails(uso(ALICE).set({ total: 2, porDia: { 24: 2 } }))
+    await assertFails(uso(ALICE).set({ total: 9, porDia: { 24: 9 } }))
+    await assertFails(uso(ALICE).set({ total: 3, porDia: {}, extra: true }))
+    await assertFails(authedDb(ALICE).doc(`users/${ALICE}/uso_ia/outubro`).set({ total: 1, porDia: {} }))
+    await assertFails(authedDb(BOB).doc(`users/${ALICE}/uso_ia/2026-10`).get())
+  })
+
+  it('excluir conta: o dono apaga config, diário e uso; outra pessoa não', async () => {
+    const a = authedDb(ALICE)
+    await assertSucceeds(seedConfig(a, ALICE))
+    await assertSucceeds(a.doc(`users/${ALICE}/diario_dieta/2026-10-24`).set({ refeicoes: {}, data: '2026-10-24', extras_globais: [] }))
+    await assertFails(authedDb(BOB).doc(`users/${ALICE}/config/data`).delete())
+    await assertFails(authedDb(BOB).doc(`users/${ALICE}/diario_dieta/2026-10-24`).delete())
+    await assertSucceeds(a.doc(`users/${ALICE}/diario_dieta/2026-10-24`).delete())
+    await assertSucceeds(a.doc(`users/${ALICE}/config/data`).delete())
+    await assertSucceeds(uso(ALICE).delete())
+  })
+})

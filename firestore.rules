@@ -29,6 +29,32 @@ service cloud.firestore {
                    && request.resource.data.metas is map
                    && request.resource.data.refeicoes is list
                    && request.resource.data.treinos is map;
+      // Excluir a conta apaga a configuração junto (LGPD).
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // PLANO: o dono lê; só o servidor grava (cobrança futura). O app nunca
+    // consegue se dar um plano pago.
+    match /users/{userId}/conta/assinatura {
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // USO DA IA por mês (YYYY-MM): total e contagem por dia, só para cima.
+    match /users/{userId}/uso_ia/{mes} {
+      function usoValido() {
+        let d = request.resource.data;
+        return mes.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+               && d.keys().hasOnly(['total', 'porDia', 'atualizadoEm'])
+               && d.total is int
+               && d.total == (resource == null ? 1 : resource.data.total + 1)
+               && d.porDia is map
+               && d.porDia.size() <= 31;
+      }
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId && usoValido();
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // HISTORICO DE TREINOS — append-only.
@@ -72,6 +98,7 @@ service cloud.firestore {
                    || request.resource.data.usuarioId == request.auth.uid);
       }
       allow create, update: if isValidDietWrite();
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // HISTORICO CORPORAL
