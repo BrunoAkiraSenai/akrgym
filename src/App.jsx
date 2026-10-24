@@ -6,6 +6,7 @@ import { METAS_DIARIAS } from './config/dieta'
 import { UserContext } from './context/UserContext'
 import OnboardingWizard from './components/OnboardingWizard'
 import PageTransition from './components/PageTransition'
+import StartupSplash from './components/StartupSplash'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 
@@ -44,6 +45,7 @@ async function ensureUserConfig(uid) {
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [introConcluida, setIntroConcluida] = useState(false)
   const [activeTab, setActiveTab] = useState('home')
   const [initializing, setInitializing] = useState(true)
   const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
@@ -59,6 +61,12 @@ export default function App() {
   }
 
   const prevUidRef = useRef(null)
+
+  // A abertura fica só enquanto o app carrega; se passar de 1,7 s, avisa que está conectando.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIntroConcluida(true), 1700)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     let cancelado = false
@@ -106,20 +114,22 @@ export default function App() {
   if (loading || initializing) {
     return (
       <ErrorBoundary>
-        <div className="flex items-center justify-center h-full bg-[#07050c]">
-          <div className="animate-spin w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full" />
-        </div>
+        <StartupSplash
+          showWaiting={introConcluida}
+        />
       </ErrorBoundary>
     )
   }
 
   if (!user) return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login /></Suspense></ErrorBoundary>
 
+  const abrirConfiguracao = aba => { setAbaInicialConfig(aba); setActiveTab('configurar') }
+
   const renderPage = () => {
     const pageKey = user?.uid || 'guest'
     switch (activeTab) {
       case 'home':
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
       case 'dieta':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
       case 'treinar':
@@ -129,7 +139,7 @@ export default function App() {
       case 'configurar':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Configuracao abaInicial={abaInicialConfig} /></Suspense>
       default:
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
     }
   }
 

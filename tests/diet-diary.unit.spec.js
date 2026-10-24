@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition, diaryText, classificarDiaPorCalorias, comentarioDiaPorCalorias, DIET_DAY_STATUS } from '../src/utils/dietDiary.js'
+import { applyDiaryAction, normalizeDay, diaryTotals, diaryProgress, hasLegacyNutrition, diaryText, classificarDiaPorCalorias, comentarioDiaPorCalorias, contagemRefeicoes, statusDoDia, DIET_DAY_STATUS } from '../src/utils/dietDiary.js'
 
 const date = '2026-09-09'
 const breakfast = { id: 'cafe', nome: 'Café', kcal: 460, proteinas: 30, carboidratos: 50, gorduras: 15, fibras: 5 }
@@ -180,4 +180,25 @@ test('comentário do calendário usa a meta histórica e soma refeições e extr
   }
   assert.equal(comentarioDiaPorCalorias(classificarDiaPorCalorias(day, [], 2500)), '500 kcal acima')
   assert.equal(comentarioDiaPorCalorias(classificarDiaPorCalorias({ extras_globais: [{ kcal: 500 }] })), 'Sem meta')
+})
+
+test('status do dia: hoje fica em andamento até a meta; dias passados seguem a faixa', () => {
+  const c = (kcal, meta = 1970) => classificarDiaPorCalorias({ extras_globais: [{ id: 'x', nome: 'Refeição', kcal }], metas_snapshot: { kcal: meta } }, [], 0)
+  // Meio do dia: dentro da faixa, mas a meta ainda não foi atingida.
+  assert.deepEqual(statusDoDia(c(1130), true), { classe: 'em_andamento', titulo: 'Dia em andamento', detalhe: 'Faltam 840 kcal para a meta.' })
+  assert.equal(statusDoDia(c(1980), true).titulo, 'Meta do dia atingida')
+  assert.equal(statusDoDia(c(2400), true).titulo, 'Acima da meta')
+  assert.equal(statusDoDia(c(2400), true).classe, 'fora_da_dieta')
+  // Dias passados mantêm a regra de −1.000/+300.
+  assert.equal(statusDoDia(c(1130), false).titulo, 'Dia concluído')
+  assert.equal(statusDoDia(c(900), false).titulo, 'Abaixo da meta')
+  assert.equal(statusDoDia(classificarDiaPorCalorias(null, [], 1970), true).titulo, 'Nenhum registro ainda')
+  assert.equal(statusDoDia(classificarDiaPorCalorias(null, [], 1970), false).titulo, 'Dia não preenchido')
+})
+
+test('contagem separa refeições do plano de alimentos extras', () => {
+  const plano = [{ id: 'cafe' }, { id: 'almoco' }, { id: 'lanche' }, { id: 'jantar' }]
+  const dia = { refeicoes: { cafe: { status: 'limpo' }, almoco: { status: 'customizado' }, lanche: { status: 'pulado' } }, extras_globais: [{ id: 'x' }] }
+  assert.deepEqual(contagemRefeicoes(dia, plano), { feitas: 2, planejadas: 4, extras: 1 })
+  assert.deepEqual(contagemRefeicoes(null, plano), { feitas: 0, planejadas: 4, extras: 0 })
 })

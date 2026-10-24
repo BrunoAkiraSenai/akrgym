@@ -7,9 +7,10 @@ import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
 import { buildUserDataExport, formatExportFilename } from '../../utils/exportData'
-import { prepararConfigParaSalvar } from '../../utils/configValidation'
-import { dataTreinoParaDate } from '../../utils/fitness'
-import { exerciseId, garantirIdsExercicios, nomesDeExerciciosCompativeis, novoIdExercicio, reordenarExercicios, valoresDoExercicio } from '../../utils/workoutSession'
+import { LIMITE_NOTA, comNomesGravaveis, prepararConfigParaSalvar } from '../../utils/configValidation'
+import { focusTabWithArrowKey } from '../../utils/rovingTabs'
+import { dataTreinoParaDate, normalizarMetaSemanal } from '../../utils/fitness'
+import { exerciseId, garantirIdsExercicios, gerarIdRotina, moverRotina, nomesDeExerciciosCompativeis, novoIdExercicio, ordenarRotinas, reordenarExercicios, valoresDoExercicio } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 
 function gerarIdRefeicao() {
@@ -71,7 +72,6 @@ export default function Configuracao({ abaInicial }) {
   const [aba, setAba] = useState(abaInicial || 'treinos')
   const [expandedKey, setExpandedKey] = useState(null)
   const [showNewRoutine, setShowNewRoutine] = useState(false)
-  const [newKey, setNewKey] = useState('')
   const [newNome, setNewNome] = useState('')
   const [textoAlimentos, setTextoAlimentos] = useState({})
   const textoAlimentosRef = useRef(textoAlimentos)
@@ -87,6 +87,14 @@ export default function Configuracao({ abaInicial }) {
   const loadedUidRef = useRef(null)
   const loadSequenceRef = useRef(0)
   const aiSequenceRef = useRef(0)
+  // Última versão que está no banco: referência para nomes apagados no meio da digitação.
+  const salvoRef = useRef(null)
+
+  const gravarConfig = useCallback(async (novo) => {
+    const dados = prepararConfigParaSalvar(comNomesGravaveis(novo, salvoRef.current))
+    await setDoc(CONFIG_REF(user.uid), dados)
+    salvoRef.current = dados
+  }, [user.uid])
 
   useEffect(() => {
     mountedRef.current = true
@@ -135,6 +143,7 @@ export default function Configuracao({ abaInicial }) {
       if (!mountedRef.current || sequence !== loadSequenceRef.current) return
       if (snap.exists()) {
         const dados = normalizarConfigNutricional(snap.data())
+        salvoRef.current = dados
         setConfig(dados)
         const refs = dados.refeicoes || []
         const init = {}
@@ -157,30 +166,27 @@ export default function Configuracao({ abaInicial }) {
 
   const salvar = async (novo) => {
     if (loading || loadedUidRef.current !== user.uid) return
-    if (exercicioSemNome(novo)) { setErro('Há um exercício sem nome. Escolha um nome ou exclua o exercício antes de salvar.'); return }
     setSaving(true); setErro(null); setSucesso(null)
     try {
-      const sanitizado = prepararConfigParaSalvar(novo)
-      await setDoc(CONFIG_REF(user.uid), sanitizado)
+      await gravarConfig(novo)
       if (configRef.current === novo) setAlteracaoPendente(false)
-      mostrarSucesso('Alterações salvas com sucesso.')
+      mostrarSucesso(exercicioSemNome(novo) ? 'Alterações salvas. Exercício sem nome só é salvo depois de ganhar um nome.' : 'Alterações salvas com sucesso.')
     } catch (err) { setErro(err.message); setSaving(false); return }
     setSaving(false)
   }
 
   const addRoutine = async () => {
-    const key = newKey.trim()
     const nome = newNome.trim()
-    if (!key || !nome) return
-    if (config.treinos?.[key]) {
-      setErro(`Já existe uma divisão com o ID "${key}".`)
-      return
-    }
-    const n = { ...config, treinos: { ...config.treinos, [key]: { nome, exercicios: [] } } }
+    if (!nome) return
+    const key = gerarIdRotina(nome, Object.keys(config.treinos || {}))
+    // Nova divisão entra no fim da lista atual.
+    const ordem = ordenarRotinas(config.treinos).length
+    const treinosOrdenados = Object.fromEntries(ordenarRotinas(config.treinos).map(([k, rotina], i) => [k, { ...rotina, ordem: i }]))
+    const n = { ...config, treinos: { ...treinosOrdenados, [key]: { nome, exercicios: [], ordem } } }
     pendingFocusRef.current = { type: 'routine', key }
     setConfig(n)
     try {
-      await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n))
+      await gravarConfig(n)
       mostrarSucesso(`Divisão "${nome}" criada.`)
     } catch (err) {
       setConfig(config)
@@ -188,7 +194,7 @@ export default function Configuracao({ abaInicial }) {
       setErro('Erro ao salvar treino: ' + err.message)
       return
     }
-    setNewKey(''); setNewNome(''); setShowNewRoutine(false)
+    setNewNome(''); setShowNewRoutine(false)
     setExpandedKey(key)
   }
 
@@ -215,17 +221,19 @@ export default function Configuracao({ abaInicial }) {
     const n = { ...config, treinos: { ...config.treinos } }
     delete n.treinos[key]
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso(`Divisão "${config.treinos[key]?.nome || key}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await gravarConfig(n); mostrarSucesso(`Divisão "${config.treinos[key]?.nome || key}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
     if (expandedKey === key) setExpandedKey(null)
   }
 
-  const addExercise = async (key) => {
+  // Nasce em branco, com o foco no nome; vai para o banco quando ganhar nome (autosave).
+  const addExercise = (key) => {
     const n = { ...config, treinos: { ...config.treinos } }
-    const exercicios = [...(n.treinos[key].exercicios || []), { id: novoIdExercicio(), nome: 'Novo', base_top: 20, meta_reps: '8-10', descanso_segundos: 90, tem_aquecimento: false }]
+    const exercicios = [...(n.treinos[key].exercicios || []), { id: novoIdExercicio(), nome: '', base_top: '', meta_reps: '', descanso_segundos: 90, tem_aquecimento: false }]
     n.treinos[key] = { ...n.treinos[key], exercicios }
     pendingFocusRef.current = { type: 'exercise', key: `${key}:${exercicios.length - 1}` }
+    configRef.current = n
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso('Exercício adicionado.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
+    setAlteracaoPendente(true)
   }
 
   // Edição de campo salva pelo autosave (600 ms depois da última tecla), não a cada tecla.
@@ -252,8 +260,27 @@ export default function Configuracao({ abaInicial }) {
     setCampoBuscaExercicio(null)
     setConfig(n)
     try {
-      await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n))
+      await gravarConfig(n)
       mostrarSucesso(`"${atuais[idx].nome || 'Exercício'}" agora é o ${destino + 1}º exercício.`)
+    } catch (err) {
+      pendingFocusRef.current = null
+      setConfig(config)
+      setErro('Erro ao salvar a nova ordem: ' + err.message)
+    }
+  }
+
+  const moveRoutine = async (key, delta) => {
+    const treinos = moverRotina(config.treinos, key, delta)
+    if (treinos === config.treinos) return
+    const lista = ordenarRotinas(treinos)
+    const destino = lista.findIndex(([k]) => k === key)
+    const direcao = delta < 0 ? (destino === 0 ? 'down' : 'up') : (destino === lista.length - 1 ? 'up' : 'down')
+    pendingFocusRef.current = { type: 'routine', key, selector: `[data-move-rotina="${direcao}"]` }
+    const n = { ...config, treinos }
+    setConfig(n)
+    try {
+      await gravarConfig(n)
+      mostrarSucesso(`"${treinos[key].nome || key}" agora é a ${destino + 1}ª divisão.`)
     } catch (err) {
       pendingFocusRef.current = null
       setConfig(config)
@@ -325,6 +352,12 @@ export default function Configuracao({ abaInicial }) {
     if (trocou) void aplicarExercicioEscolhido(key, idx, nome)
   }
 
+  const limparNomeExercicio = (key, idx, campoId) => {
+    setCampoBuscaExercicio(campoId)
+    void updateExercise(key, idx, 'nome', '')
+    exerciseRefs.current[`${key}:${idx}`]?.querySelector('.settings-exercise-name input')?.focus()
+  }
+
   const abrirCatalogoExercicio = async (campo) => {
     setCampoBuscaExercicio(campo)
     setErroCatalogoExercicios(null)
@@ -344,7 +377,7 @@ export default function Configuracao({ abaInicial }) {
     const n = { ...config, treinos: { ...config.treinos } }
     n.treinos[key] = { ...n.treinos[key], exercicios: n.treinos[key].exercicios.filter((_, i) => i !== idx) }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso('Exercício excluído.') } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await gravarConfig(n); mostrarSucesso('Exercício excluído.') } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
   const updateMeta = (campo, valor) => {
@@ -369,16 +402,14 @@ export default function Configuracao({ abaInicial }) {
     const timer = setTimeout(async () => {
       try {
         const atual = configRef.current
-        // Nome em branco é digitação em andamento: espera o nome antes de gravar.
-        if (exercicioSemNome(atual)) return
-        await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(atual))
+        await gravarConfig(atual)
         if (mountedRef.current && configRef.current === atual) setAlteracaoPendente(false)
       } catch (err) {
         if (mountedRef.current) setErro('Erro ao salvar: ' + err.message)
       }
     }, 600)
     return () => clearTimeout(timer)
-  }, [config.treinos, config.metas, config.refeicoes, user.uid, loading, alteracaoPendente])
+  }, [config.treinos, config.metas, config.refeicoes, user.uid, loading, alteracaoPendente, gravarConfig])
 
   // Sair da tela antes dos 600 ms não pode descartar a última edição.
   useEffect(() => {
@@ -387,8 +418,7 @@ export default function Configuracao({ abaInicial }) {
       if (!pendenteRef.current) return
       pendenteRef.current = false
       const atual = configRef.current
-      if (exercicioSemNome(atual)) return
-      try { setDoc(CONFIG_REF(uid), prepararConfigParaSalvar(atual)).catch(() => {}) } catch { /* Valor inválido não é gravado. */ }
+      try { setDoc(CONFIG_REF(uid), prepararConfigParaSalvar(comNomesGravaveis(atual, salvoRef.current))).catch(() => {}) } catch { /* Valor inválido não é gravado. */ }
     }
   }, [user.uid])
 
@@ -398,7 +428,7 @@ export default function Configuracao({ abaInicial }) {
     const n = { ...config, refeicoes }
     pendingFocusRef.current = { type: 'meal', key: id }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso('Refeição adicionada.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
+    try { await gravarConfig(n); mostrarSucesso('Refeição adicionada.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
   }
 
   const deleteRefeicao = async (idx) => {
@@ -407,7 +437,7 @@ export default function Configuracao({ abaInicial }) {
     if (!window.confirm(`Deseja excluir a refeição "${ref.nome}"? Os dados históricos não serão afetados.`)) return
     const n = { ...config, refeicoes: (config.refeicoes || []).filter((_, i) => i !== idx) }
     setConfig(n)
-    try { await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n)); mostrarSucesso(`Refeição "${ref.nome}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await gravarConfig(n); mostrarSucesso(`Refeição "${ref.nome}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
   }
 
   const sincronizarMetas = async () => {
@@ -426,7 +456,7 @@ export default function Configuracao({ abaInicial }) {
     const n = { ...config, metas: total }
     setConfig(n)
     try {
-      await setDoc(CONFIG_REF(user.uid), prepararConfigParaSalvar(n))
+      await gravarConfig(n)
       mostrarSucesso(`Metas sincronizadas: ${total.kcal} kcal, ${total.proteinas}g P, ${total.carboidratos}g C, ${total.gorduras}g G e ${total.fibras}g de fibras.`)
     } catch (err) { setErro('Erro ao salvar: ' + err.message) }
     setSincronizando(false)
@@ -513,64 +543,11 @@ export default function Configuracao({ abaInicial }) {
         <div className="settings-header-mark" aria-hidden="true"><ShieldCheck size={19} /></div>
       </header>
 
-      <div className="settings-account card-premium p-4">
-        <div className="settings-account-avatar"><UserCircle size={24} /></div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-white">{user.isAnonymous ? 'Visitante' : user.email}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]">
-            <span className={`settings-status ${user.isAnonymous ? 'settings-status-warning' : 'settings-status-success'}`}>
-              <span className="settings-status-dot" /> {user.isAnonymous ? 'Conta anônima' : 'Conta sincronizada'}
-            </span>
-            <span className="font-mono text-white/30">UID {user.uid.slice(0, 8)}...</span>
-          </div>
-        </div>
-        <button type="button" onClick={() => signOut(auth)} className="settings-account-action" title="Sair da conta">
-          <LogOut size={15} /> <span className="hidden sm:inline">Sair</span>
-        </button>
-      </div>
-
-      <section className="card-premium flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="exportar-dados-heading">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="settings-account-avatar"><Download size={18} /></div>
-          <div className="min-w-0">
-            <h2 id="exportar-dados-heading" className="text-sm font-semibold text-white">Seus dados</h2>
-            <p className="mt-1 text-xs leading-relaxed text-neutral-500">Baixe uma cópia local da sua configuração, treinos, diário alimentar e medidas.</p>
-          </div>
-        </div>
-        <button type="button" onClick={exportarDados} disabled={exportando} className="settings-action settings-action-outline shrink-0 self-stretch sm:self-auto">
-          {exportando ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
-          {exportando ? 'Preparando...' : 'Exportar JSON'}
-        </button>
-      </section>
-
-      <div className="card-premium space-y-3 p-4">
-        <div className="flex items-center gap-2">
-          <Palette size={16} className="text-emerald-400" />
-          <span className="section-label">Aparência</span>
-        </div>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-          {THEMES.map((t) => (
-            <button type="button" key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name} aria-pressed={themeId === t.id}>
-              <div className="theme-swatch-preview" style={{ background: t.previewBg || t.bgDeep, color: t.mode === 'light' ? '#2b1a15' : '#ffffff', boxShadow: `inset 0 0 0 1px ${t.brand[500]}44` }}>
-                <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
-                <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
-              </div>
-              <div className="theme-swatch-dots justify-center">
-                <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
-                <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
-                <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
-              </div>
-              <span className="text-[10px] font-semibold text-neutral-300 block leading-tight">{t.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="settings-tabs" role="tablist" aria-label="Seções de configuração">
-        <button type="button" role="tab" aria-selected={aba === 'treinos'} onClick={() => setAba('treinos')} className={`settings-tab ${aba === 'treinos' ? 'settings-tab-active' : ''}`}>
+        <button id="settings-tab-treinos" type="button" role="tab" aria-controls="settings-panel-treinos" aria-selected={aba === 'treinos'} tabIndex={aba === 'treinos' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba('treinos')} className={`settings-tab ${aba === 'treinos' ? 'settings-tab-active' : ''}`}>
           <Dumbbell size={15} /> <span>Treinos</span><small>{totalTreinos}</small>
         </button>
-        <button type="button" role="tab" aria-selected={aba === 'dieta'} onClick={() => setAba('dieta')} className={`settings-tab ${aba === 'dieta' ? 'settings-tab-active' : ''}`}>
+        <button id="settings-tab-dieta" type="button" role="tab" aria-controls="settings-panel-dieta" aria-selected={aba === 'dieta'} tabIndex={aba === 'dieta' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba('dieta')} className={`settings-tab ${aba === 'dieta' ? 'settings-tab-active' : ''}`}>
           <Apple size={15} /> <span>Dieta</span><small>{totalRefeicoes}</small>
         </button>
       </div>
@@ -578,6 +555,7 @@ export default function Configuracao({ abaInicial }) {
       {erro && <div className="settings-feedback settings-feedback-error" role="alert"><AlertTriangle size={16} /><span>{erro}</span><button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso"><X size={14} /></button></div>}
       {sucesso && <div className="settings-feedback settings-feedback-success" role="status" aria-live="polite"><CheckCircle2 size={16} /><span>{sucesso}</span></div>}
 
+      <div role="tabpanel" id={aba === 'treinos' ? 'settings-panel-treinos' : 'settings-panel-dieta'} aria-labelledby={aba === 'treinos' ? 'settings-tab-treinos' : 'settings-tab-dieta'} tabIndex={0}>
       {loading ? (
         <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
       ) : !configCarregada ? (
@@ -589,14 +567,20 @@ export default function Configuracao({ abaInicial }) {
               <button type="button" onClick={() => setShowNewRoutine(true)} className="settings-action settings-action-primary"><Plus size={15} /> <span>Nova divisão</span></button>
             </div>
 
+            <label className="settings-weekly-goal card-premium">
+              <span><strong>Meta de treinos por semana</strong><small>Usada na constância da Home e da Evolução.</small></span>
+              <select value={normalizarMetaSemanal(config.metaTreinosSemana)} onChange={e => { setConfig(atual => ({ ...atual, metaTreinosSemana: Number(e.target.value) })); setAlteracaoPendente(true) }}>
+                {[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n} {n === 1 ? 'treino' : 'treinos'}</option>)}
+              </select>
+            </label>
+
             {showNewRoutine && (
               <div className="settings-form card-premium p-4">
-                <div className="settings-form-head"><div><h2 className="text-sm font-bold text-white">Criar divisão</h2><p className="mt-0.5 text-[10px] text-neutral-500">Use um identificador curto e um nome fácil de reconhecer.</p></div><button type="button" onClick={() => setShowNewRoutine(false)} className="settings-icon-button" aria-label="Fechar"><X size={16} /></button></div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[0.8fr_1.2fr]">
-                  <label className="settings-field"><span>ID interno</span><input type="text" placeholder="ex: upper_c" value={newKey} onChange={e => setNewKey(e.target.value)} autoFocus /></label>
-                  <label className="settings-field"><span>Nome da divisão</span><input type="text" placeholder="ex: UPPER C" value={newNome} onChange={e => setNewNome(e.target.value)} /></label>
+                <div className="settings-form-head"><div><h2 className="text-sm font-bold text-white">Criar divisão</h2><p className="mt-0.5 text-xs text-neutral-500">Dê um nome fácil de reconhecer, como "Upper A" ou "Pernas".</p></div><button type="button" onClick={() => setShowNewRoutine(false)} className="settings-icon-button" aria-label="Fechar"><X size={16} /></button></div>
+                <div className="mt-3">
+                  <label className="settings-field"><span>Nome da divisão</span><input type="text" placeholder="ex: Upper C" value={newNome} onChange={e => setNewNome(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addRoutine() }} autoFocus /></label>
                 </div>
-                <div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setShowNewRoutine(false)} className="settings-action settings-action-muted">Cancelar</button><button type="button" onClick={addRoutine} disabled={!newKey.trim() || !newNome.trim()} className="settings-action settings-action-primary"><Plus size={14} /> Criar divisão</button></div>
+                <div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setShowNewRoutine(false)} className="settings-action settings-action-muted">Cancelar</button><button type="button" onClick={addRoutine} disabled={!newNome.trim()} className="settings-action settings-action-primary"><Plus size={14} /> Criar divisão</button></div>
               </div>
             )}
 
@@ -605,22 +589,28 @@ export default function Configuracao({ abaInicial }) {
             <div className="settings-routines">
               {/* As refs só são lidas nos eventos (foco, saída e escolha do exercício), não ao desenhar. */}
               {/* eslint-disable-next-line react-hooks/refs */}
-              {Object.entries(config.treinos || {}).map(([key, rotina], index) => {
+              {ordenarRotinas(config.treinos).map(([key, rotina], index, lista) => {
                 const isOpen = expandedKey === key
                 const exerciseCount = (rotina.exercicios || []).length
                 return (
                   <article key={key} ref={node => { if (node) routineRefs.current[key] = node; else delete routineRefs.current[key] }} className={`settings-routine card-premium ${isOpen ? 'settings-routine-open' : ''}`}>
-                    <button type="button" onClick={() => setExpandedKey(isOpen ? null : key)} className="settings-routine-trigger" aria-expanded={isOpen}>
-                      <span className="settings-routine-index">{String(index + 1).padStart(2, '0')}</span>
-                      <span className="min-w-0 flex-1 text-left"><strong className="block truncate text-sm text-white">{rotina.nome || key}</strong><small className="mt-0.5 block truncate font-mono text-[10px] text-neutral-500">{key}</small></span>
-                      <span className="settings-routine-count">{exerciseCount} {exerciseCount === 1 ? 'exercício' : 'exercícios'}</span>
-                      {isOpen ? <ChevronDown size={16} className="text-emerald-400" /> : <ChevronRight size={16} className="text-neutral-500" />}
-                    </button>
+                    <div className="settings-routine-head">
+                      <button type="button" onClick={() => setExpandedKey(isOpen ? null : key)} className="settings-routine-trigger" aria-expanded={isOpen}>
+                        <span className="settings-routine-index">{String(index + 1).padStart(2, '0')}</span>
+                        <span className="min-w-0 flex-1 text-left"><strong className="block text-sm text-white">{rotina.nome || key}</strong><small className="settings-routine-count">{exerciseCount} {exerciseCount === 1 ? 'exercício' : 'exercícios'}</small></span>
+                        {isOpen ? <ChevronDown size={16} className="text-emerald-400" /> : <ChevronRight size={16} className="text-neutral-500" />}
+                      </button>
+                      <div className="settings-exercise-order" role="group" aria-label={`Ordem da divisão ${rotina.nome || key}`}>
+                        <button type="button" data-move-rotina="up" onClick={() => moveRoutine(key, -1)} disabled={index === 0} className="settings-icon-button" aria-label={`Mover ${rotina.nome || key} para cima`} title="Mover para cima"><ArrowUp size={15} /></button>
+                        <button type="button" data-move-rotina="down" onClick={() => moveRoutine(key, 1)} disabled={index === lista.length - 1} className="settings-icon-button" aria-label={`Mover ${rotina.nome || key} para baixo`} title="Mover para baixo"><ArrowDown size={15} /></button>
+                      </div>
+                    </div>
                     {isOpen && <div className="settings-routine-body">
                       {(rotina.exercicios || []).map((ex, idx) => (
                         (() => {
                           const campoId = `${key}:${idx}`
                           const listId = `catalogo-exercicio-${encodeURIComponent(key)}-${idx}`
+                          const inputId = `nome-exercicio-${encodeURIComponent(key)}-${idx}`
                           const buscaAtiva = campoBuscaExercicio === campoId
                           const textoBusca = String(ex.nome || '').trim()
                           const queryUtil = textoBusca && textoBusca.toLocaleLowerCase('pt-BR') !== 'novo'
@@ -633,17 +623,27 @@ export default function Configuracao({ abaInicial }) {
                           <div className="settings-exercise-top">
                             <span className="settings-exercise-number">{idx + 1}</span>
                             <div className="settings-exercise-name">
-                              <label className="settings-field settings-field-grow">
-                                <span>Exercício</span>
-                                <input type="text" value={ex.nome} role="combobox" aria-autocomplete="list"
-                                  aria-expanded={buscaAtiva} aria-controls={listId}
-                                  onFocus={() => aoFocarNomeExercicio(campoId, ex.nome)}
-                                  onBlur={() => window.setTimeout(() => {
-                                    setCampoBuscaExercicio(atual => atual === campoId ? null : atual)
-                                    aoSairDoNomeExercicio(key, idx, campoId)
-                                  }, 150)}
-                                  onChange={e => { void updateExercise(key, idx, 'nome', e.target.value) }} />
-                              </label>
+                              <div className="settings-field settings-field-grow">
+                                <label className="settings-exercise-field-label" htmlFor={inputId}>Exercício</label>
+                                <div className="settings-exercise-input-wrap">
+                                  <input id={inputId} type="text" value={ex.nome} placeholder="Digite ou escolha um exercício" role="combobox" aria-autocomplete="list"
+                                    aria-expanded={buscaAtiva} aria-controls={listId}
+                                    onFocus={() => aoFocarNomeExercicio(campoId, ex.nome)}
+                                    onBlur={() => window.setTimeout(() => {
+                                      const nomeField = exerciseRefs.current[`${key}:${idx}`]?.querySelector('.settings-exercise-name')
+                                      if (nomeField?.contains(document.activeElement)) return
+                                      setCampoBuscaExercicio(atual => atual === campoId ? null : atual)
+                                      aoSairDoNomeExercicio(key, idx, campoId)
+                                    }, 150)}
+                                    onChange={e => { void updateExercise(key, idx, 'nome', e.target.value) }} />
+                                  {ex.nome && <button type="button" className="settings-exercise-clear"
+                                    aria-label={`Limpar nome do exercício ${ex.nome}`} title="Limpar campo"
+                                    onMouseDown={e => e.preventDefault()}
+                                    onClick={() => limparNomeExercicio(key, idx, campoId)}>
+                                    <X size={13} aria-hidden="true" />
+                                  </button>}
+                                </div>
+                              </div>
                               {buscaAtiva && (
                                 <div id={listId} className="settings-exercise-catalog" role="listbox" aria-label={`Variações de ${textoBusca || 'exercício'}`}>
                                   {catalogoExerciciosCarregando && !moduloCatalogoExercicios ? (
@@ -677,13 +677,14 @@ export default function Configuracao({ abaInicial }) {
                             <label className="settings-field"><span>Base Top (kg)</span><input type="number" min="0" placeholder="Sem carga" value={ex.base_top ?? ''} onChange={e => updateExercise(key, idx, 'base_top', e.target.value === '' ? '' : Number(e.target.value))} inputMode="decimal" /></label>
                             <label className="settings-field"><span>Meta de reps</span><input type="text" placeholder="Ex.: 8-10" value={ex.meta_reps ?? ''} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label>
                             <label className="settings-field"><span className="flex items-center gap-1"><Clock3 size={11} /> Descanso</span><select value={ex.descanso_segundos ?? 90} onChange={e => updateExercise(key, idx, 'descanso_segundos', Number(e.target.value))} aria-label={`Tempo de descanso de ${ex.nome}`}>
-                              {[30, 60, 90, 120, 180, 300].map(segundos => <option key={segundos} value={segundos}>{segundos < 60 ? `${segundos}s` : `${segundos / 60} min`}</option>)}
+                              {[30, 60, 90, 120, 180, 300].map(segundos => <option key={segundos} value={segundos}>{segundos < 60 ? `${segundos}s` : segundos % 60 ? `${Math.floor(segundos / 60)} min ${segundos % 60}s` : `${segundos / 60} min`}</option>)}
                             </select></label>
                           </div>
                           <label className="settings-check">
                             <input type="checkbox" checked={Boolean(ex.tem_aquecimento)} onChange={e => updateExercise(key, idx, 'tem_aquecimento', e.target.checked)} />
                             <span>Série de aquecimento antes da preparatória</span>
                           </label>
+                          <label className="settings-field mt-2"><span>Observação (aparece no treino)</span><input type="text" maxLength={LIMITE_NOTA} placeholder="Ex.: descida lenta, pegada fechada" value={ex.nota ?? ''} onChange={e => updateExercise(key, idx, 'nota', e.target.value)} /></label>
                         </div>
                           )
                         })()
@@ -735,6 +736,63 @@ export default function Configuracao({ abaInicial }) {
           <button type="button" onClick={() => salvar(config)} disabled={saving} className="settings-save-button settings-save-button-diet"><span>{saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}</span>{saving ? 'Salvando alterações...' : 'Salvar alterações da dieta'}</button>
         </section>
       )}
+      </div>
+
+      <details className="settings-utilities card-premium">
+        <summary>Conta, dados e aparência <ChevronDown size={17} aria-hidden="true" /></summary>
+        <div className="settings-utilities-content">
+          <div className="settings-account">
+            <div className="settings-account-avatar"><UserCircle size={24} /></div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-white">{user.isAnonymous ? 'Visitante' : user.email}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span className={`settings-status ${user.isAnonymous ? 'settings-status-warning' : 'settings-status-success'}`}>
+                  <span className="settings-status-dot" /> {user.isAnonymous ? 'Conta anônima' : 'Conta sincronizada'}
+                </span>
+                <span className="font-mono text-white/50">UID {user.uid.slice(0, 8)}...</span>
+              </div>
+            </div>
+            <button type="button" onClick={() => signOut(auth)} className="settings-account-action" title="Sair da conta">
+              <LogOut size={15} /> <span className="hidden sm:inline">Sair</span>
+            </button>
+          </div>
+
+          <section className="settings-export card-premium" aria-labelledby="exportar-dados-heading">
+            <div className="settings-account-avatar"><Download size={18} /></div>
+            <div className="min-w-0 flex-1">
+              <h2 id="exportar-dados-heading" className="text-sm font-semibold text-white">Seus dados</h2>
+              <p className="mt-1 text-xs leading-relaxed text-neutral-500">Baixe uma cópia local da sua configuração, treinos, diário alimentar e medidas.</p>
+            </div>
+            <button type="button" onClick={exportarDados} disabled={exportando} className="settings-action settings-action-outline shrink-0">
+              {exportando ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+              {exportando ? 'Preparando...' : 'Exportar JSON'}
+            </button>
+          </section>
+
+          <div className="settings-appearance">
+            <div className="flex items-center gap-2">
+              <Palette size={16} className="text-emerald-400" />
+              <span className="section-label">Aparência</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {THEMES.map((t) => (
+                <button type="button" key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name} aria-pressed={themeId === t.id}>
+                  <div className="theme-swatch-preview" style={{ background: t.previewBg || t.bgDeep, color: t.mode === 'light' ? '#2b1a15' : '#ffffff', boxShadow: `inset 0 0 0 1px ${t.brand[500]}44` }}>
+                    <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
+                    <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
+                  </div>
+                  <div className="theme-swatch-dots justify-center">
+                    <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
+                    <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
+                    <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
+                  </div>
+                  <span className="text-xs font-semibold text-neutral-300 block leading-tight">{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </details>
 
       <ConfirmModal
         isOpen={confirmacao !== null}

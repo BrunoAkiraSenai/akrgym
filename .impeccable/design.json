@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-02T01:59:11Z",
+  "title": "Design System: AkrGym",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Verde esmeralda controlado",
+        "canonical": "#318468",
+        "tonalRamp": ["#112f27", "#153c31", "#194e3f", "#216650", "#318468", "#4ea485", "#aadcc5", "#e1f4eb"]
+      },
+      "accent": {
+        "role": "secondary",
+        "displayName": "Ciano petróleo",
+        "canonical": "#2f8796",
+        "tonalRamp": ["#213a44", "#244751", "#265764", "#296c7c", "#2f8796", "#42a9b9", "#a9dde3", "#e0f5f6"]
+      },
+      "highlight": {
+        "role": "tertiary",
+        "displayName": "Dourado suave",
+        "canonical": "#cab070",
+        "tonalRamp": ["#54472a", "#76643c", "#98804d", "#b99d60", "#cab070", "#d6c393", "#e5d9ba", "#f2ebdc"]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Preto esverdeado",
+        "canonical": "#050807",
+        "tonalRamp": ["#050807", "#0a120e", "#131a17", "#252b28", "#414643", "#696d6b", "#a0a3a1", "#ffffff"]
+      }
+    },
+    "typographyMeta": {
+      "display": {"displayName": "Títulos", "purpose": "Hierarquia e identificação de tela."},
+      "body": {"displayName": "Texto de interface", "purpose": "Leitura de registros, dados e instruções."},
+      "label": {"displayName": "Metadados", "purpose": "Valores compactos e referências numéricas."}
+    },
+    "shadows": [
+      {"name": "surface-low", "value": "0 4px 20px rgba(0, 0, 0, 0.4)", "purpose": "Separar cards do fundo sem competir com os dados."},
+      {"name": "surface-raised", "value": "0 12px 40px rgba(0, 0, 0, 0.5)", "purpose": "Elevação estrutural para painéis sobrepostos."}
+    ],
+    "motion": [
+      {"name": "transition-fast", "value": "150ms", "purpose": "Feedback curto em controles interativos."},
+      {"name": "transition-base", "value": "300ms", "purpose": "Mudanças de estado sem coreografia decorativa."}
+    ],
+    "breakpoints": [
+      {"name": "sm", "value": "640px"},
+      {"name": "md", "value": "768px"},
+      {"name": "lg", "value": "1024px"}
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal do contexto, com texto de alto contraste.",
+      "html": "<button class=\"ds-button-primary\">Começar treino</button>",
+      "css": ".ds-button-primary { background: var(--brand); color: #0a0a0a; padding: 0.85rem 1.9rem; border: 1px solid transparent; border-radius: var(--radius-button); font: 700 1rem var(--font-display); cursor: pointer; transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease; } .ds-button-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-glow); } .ds-button-primary:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 3px; } .ds-button-primary:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ação secundária com superfície neutra e borda discreta.",
+      "html": "<button class=\"ds-button-secondary\">Ver detalhes</button>",
+      "css": ".ds-button-secondary { background: rgba(255,255,255,0.05); color: var(--text-secondary); padding: 0.75rem 1.5rem; border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-button); font: 600 0.95rem var(--font-body); cursor: pointer; transition: transform 150ms ease, border-color 150ms ease, color 150ms ease; } .ds-button-secondary:hover { border-color: rgba(var(--brand-rgb),0.5); color: var(--text-primary); } .ds-button-secondary:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 3px; } .ds-button-secondary:active { transform: scale(0.98); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Agrupa informações relacionadas em uma superfície escura.",
+      "html": "<section class=\"ds-card\"><h2>Resumo do treino</h2><p>Dados relevantes do usuário</p></section>",
+      "css": ".ds-card { padding: 1rem; color: var(--text-primary); background: var(--bg-card-solid); border: 1px solid var(--border-subtle); border-radius: var(--radius-card); box-shadow: var(--shadow-sm); } .ds-card h2 { margin: 0 0 0.5rem; font: 700 1.125rem var(--font-display); } .ds-card p { margin: 0; color: var(--text-secondary); font: 400 0.875rem/1.6 var(--font-body); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo escuro com foco identificável e rótulo explícito.",
+      "html": "<label class=\"ds-field\">Nome do exercício<input type=\"text\" placeholder=\"Ex.: Supino\" /></label>",
+      "css": ".ds-field { display: grid; gap: 0.4rem; color: var(--text-secondary); font: 600 0.75rem var(--font-body); } .ds-field input { min-height: 2.75rem; padding: 0.6rem 0.75rem; color: var(--text-primary); background: rgba(10,8,18,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-input); font: 400 1rem var(--font-body); } .ds-field input:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; border-color: var(--brand); }"
+    },
+    {
+      "name": "Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Navegação principal rotulada com um estado ativo claro.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Navegação principal\"><button aria-current=\"page\">Home</button><button>Dieta</button><button>Treinar</button></nav>",
+      "css": ".ds-nav { display: flex; min-height: 4rem; align-items: center; justify-content: space-around; padding: 0.35rem; color: var(--text-secondary); background: rgba(23,23,23,0.7); border: 1px solid var(--border-subtle); border-radius: 1.5rem; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); } .ds-nav button { min-height: 2.75rem; padding: 0.45rem 0.75rem; color: inherit; background: transparent; border: 0; border-radius: 1rem; font: 600 0.75rem var(--font-body); } .ds-nav button[aria-current=\"page\"] { color: var(--brand-bright); background: rgba(var(--brand-rgb),0.12); } .ds-nav button:focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Painel de Performance",
+    "overview": "AkrGym é uma ferramenta de uso recorrente para organizar treino, alimentação e evolução. Sua linguagem é precisa, motivadora e contida, com base escura, verde semântico e superfícies em camadas.",
+    "keyCharacteristics": ["Painel funcional", "Verde esmeralda controlado", "Mobile-first", "Glow apenas em estados ativos"],
+    "rules": [
+      {"name": "Semantic Theme Rule", "body": "Componentes consomem variáveis semânticas e respeitam o tema ativo.", "section": "colors"},
+      {"name": "Glow-on-Action Rule", "body": "Glow aparece apenas em estados ativos ou feedbacks de ação.", "section": "elevation"}
+    ],
+    "dos": ["Do usar tokens semânticos para manter a troca de temas coerente.", "Do destacar uma ação principal por contexto."],
+    "donts": ["Don't manter shimmer, partículas, bordas animadas ou glow decorativo em repouso.", "Don't usar cor como único indicador de status."]
+  }
+}

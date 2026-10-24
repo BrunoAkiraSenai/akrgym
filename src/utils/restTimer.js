@@ -50,6 +50,22 @@ export function timerReducer(state, action) {
   }
 }
 
+// Estado guardado ao sair da aba. Descanso que acabou com a tela fechada há
+// até 1 minuto volta como concluído (avisa); depois disso volta parado.
+export function restaurarDescanso(texto, configuradoPadrao, agora = Date.now()) {
+  let salvo
+  try { salvo = JSON.parse(texto) } catch { return null }
+  if (!salvo || typeof salvo !== 'object') return null
+  const configurado = normalizarDescansoSegundos(salvo.configurado, normalizarDescansoSegundos(configuradoPadrao))
+  const parado = { configurado, restante: configurado, rodando: false, concluido: false, terminaEm: null }
+  if (salvo.rodando && Number.isFinite(salvo.terminaEm)) {
+    if (salvo.terminaEm > agora) return { ...parado, restante: calcularRestante(salvo.terminaEm, agora), rodando: true, terminaEm: salvo.terminaEm }
+    return agora - salvo.terminaEm <= 60000 ? { ...parado, restante: 0, concluido: true } : parado
+  }
+  const restante = Math.round(Number(salvo.restante))
+  return Number.isFinite(restante) && restante > 0 && restante < configurado ? { ...parado, restante } : parado
+}
+
 // Only the visible page needs second-by-second text updates. In the background,
 // keep one deadline alarm; resync with the wall clock when the page returns.
 export function acompanharDescanso(terminaEm, atualizar, ambiente = { window, document, now: Date.now }) {

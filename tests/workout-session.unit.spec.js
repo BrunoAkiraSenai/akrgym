@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, nomesDeExerciciosCompativeis, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho, reordenarExercicios, garantirIdsExercicios, exercicioUsaRegraAgachamento, valoresDoExercicio, reconciliarRascunho, chaveExercicio } from '../src/utils/workoutSession.js'
+import { exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, nomesDeExerciciosCompativeis, prepareSession, validDraft, routineFingerprint, recordedExercise, createReplacementExercise, normalizarRascunho, reordenarExercicios, garantirIdsExercicios, exercicioUsaRegraAgachamento, valoresDoExercicio, reconciliarRascunho, chaveExercicio, ordenarRotinas, moverRotina, gerarIdRotina } from '../src/utils/workoutSession.js'
 
 test('reordenar move o exercício inteiro e mantém a referência do histórico', () => {
   const exercicios = [
@@ -316,4 +316,22 @@ test('chave agrupa o mesmo exercício escrito de formas diferentes', () => {
   assert.equal(chaveExercicio('Supino reto c/ barra'), chaveExercicio('Supino reto com barra'))
   assert.notEqual(chaveExercicio('Supino reto'), chaveExercicio('Supino reto com barra'))
   assert.equal(chaveExercicio(''), '')
+})
+
+test('divisões seguem a ordem escolhida; as antigas sem ordem vêm depois, pela chave', () => {
+  const treinos = { upper_b: { nome: 'Upper B' }, lower: { nome: 'Lower' }, upper_a: { nome: 'Upper A' } }
+  assert.deepEqual(ordenarRotinas(treinos).map(([k]) => k), ['lower', 'upper_a', 'upper_b'])
+  const movido = moverRotina(treinos, 'upper_b', -2)
+  assert.deepEqual(ordenarRotinas(movido).map(([k]) => k), ['upper_b', 'lower', 'upper_a'])
+  assert.deepEqual(Object.values(movido).map(r => r.ordem).sort(), [0, 1, 2])
+  assert.equal(moverRotina(treinos, 'lower', -1), treinos)
+  assert.equal(moverRotina(treinos, 'inexistente', 1), treinos)
+  assert.deepEqual(ordenarRotinas({ b: { ordem: 1 }, a: {}, c: { ordem: 0 } }).map(([k]) => k), ['c', 'b', 'a'])
+})
+
+test('ID da divisão sai do nome, sem acento e sem repetir', () => {
+  assert.equal(gerarIdRotina('Upper A'), 'upper_a')
+  assert.equal(gerarIdRotina('💥 Pernas & Glúteos!'), 'pernas_gluteos')
+  assert.equal(gerarIdRotina('Upper A', ['upper_a', 'upper_a_2']), 'upper_a_3')
+  assert.equal(gerarIdRotina('🔥'), 'divisao')
 })

@@ -31,7 +31,25 @@ test('home publica metadados canônicos e dados estruturados válidos', () => {
   assert.ok(graph['@graph'].some((item) => item['@type'] === 'WebSite'))
   assert.ok(graph['@graph'].some((item) => item['@type'] === 'WebPage'))
   assert.ok(!graph['@graph'].some((item) => item['@type'] === 'SoftwareApplication'))
-  for (const page of ['/sobre', '/ajuda']) assert.match(html, new RegExp(`href="${page}"`))
+  for (const page of ['/sobre', '/ajuda', '/app']) assert.match(html, new RegExp(`href="${page}"`))
+  // A home é HTML de verdade: o Google lê o conteúdo sem depender do app carregar.
+  assert.doesNotMatch(html, /src="\/src\/main\.jsx"/)
+  assert.match(html, /<h1>[^<]+<\/h1>/)
+  // Quem já usa o app vai direto para /app.
+  assert.match(html, /location\.replace\('\/app'/)
+})
+
+test('o app fica em /app, fora da busca', () => {
+  const app = read('app.html')
+  assert.match(app, /<meta name="robots" content="noindex, nofollow" \/>/)
+  assert.match(app, /src="\/src\/main\.jsx"/)
+  assert.doesNotMatch(app, /rel="canonical"/)
+  assert.match(read('public/robots.txt'), /^Disallow: \/app$/m)
+  assert.match(read('src/main.jsx'), /localStorage\.setItem\('akrgym-app', '1'\)/)
+  const vite = read('vite.config.js')
+  assert.match(vite, /start_url: '\/app'/)
+  assert.match(vite, /id: '\/'/)
+  assert.match(vite, /input: \{ index: 'index\.html', app: 'app\.html' \}/)
 })
 
 test('robots e sitemap listam somente URLs públicas canônicas e acessíveis', () => {
@@ -62,6 +80,7 @@ test('páginas públicas têm canonical, navegação interna e JSON-LD válido',
     assert.match(html, /<h1>[^<]+<\/h1>/)
     assert.match(html, /href="\/ajuda"/)
     assert.match(html, /href="\/sobre"/)
+    assert.match(html, /href="\/app"/)
     const title = html.match(/<title>([^<]+)<\/title>/)?.[1]
     const description = html.match(/<meta name="description" content="([^"]+)"/i)?.[1]
     assert.ok(title && title.length >= 20 && title.length <= 60)

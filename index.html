@@ -2,10 +2,12 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <!-- Quem já usa o app vai direto para ele; visitante novo (e buscador) vê esta apresentação. -->
+    <script>try { if (localStorage.getItem('akrgym-app') || localStorage.getItem('akrgym-theme')) location.replace('/app' + location.search + location.hash) } catch (e) {}</script>
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AkrGym | Treino, dieta e evolução em um só lugar</title>
-    <meta name="description" content="AkrGym é o app fitness para registrar treinos, acompanhar cargas, organizar a dieta e visualizar sua evolução." />
+    <meta name="description" content="AkrGym é o app fitness para registrar treinos, acompanhar cargas, organizar a dieta com a tabela TACO e visualizar sua evolução." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://akrgym.web.app/" />
     <link rel="alternate" hreflang="pt-BR" href="https://akrgym.web.app/" />
@@ -20,21 +22,10 @@
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="AkrGym | Treino, dieta e evolução em um só lugar" />
     <meta name="twitter:description" content="Registre treinos, organize refeições e acompanhe sua evolução com o AkrGym." />
-    <meta name="build-version" content="3.2" />
     <meta name="google-site-verification" content="0MxCLkjvr7j4yC0BgJI575Hxwa786fC1wDGYcCfw5fc" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="AkrGym" />
     <meta name="theme-color" content="#06080f" />
-    <meta name="apple-touch-fullscreen" content="yes" />
-    <link rel="apple-touch-startup-image" href="/splash.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/seo.css" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -61,26 +52,45 @@
     </script>
   </head>
   <body>
-    <div id="root">
-      <main aria-label="AkrGym">
-        <h1>AkrGym: treinos, dieta e evolução</h1>
-        <p>Registre seus treinos, acompanhe cargas e repetições, organize sua alimentação e entenda seu progresso.</p>
-        <ul>
-          <li>Registro de treinos com progressão de cargas e repetições.</li>
-          <li>Diário de dieta com calorias, macronutrientes e fibras.</li>
-          <li>Gráficos de evolução e medidas corporais.</li>
+    <header class="seo-shell seo-header">
+      <a class="seo-brand" href="/" aria-current="page">AkrGym</a>
+      <nav class="seo-nav" aria-label="Conteúdo do AkrGym"><a href="/treinos">Treinos</a><a href="/dieta">Dieta</a><a href="/progresso">Evolução</a><a href="/sobre">Sobre</a><a href="/ajuda">Ajuda</a><a href="/app">Abrir app</a></nav>
+    </header>
+    <main class="seo-shell seo-main">
+      <p class="seo-kicker">App de treino e dieta</p>
+      <h1>AkrGym: treinos, dieta e evolução em um só lugar.</h1>
+      <p class="seo-lead">Registre séries, cargas e repetições, organize suas refeições com macronutrientes e acompanhe a constância da sua rotina sem planilhas espalhadas.</p>
+      <div class="seo-actions"><a class="seo-button" href="/app">Abrir o AkrGym</a><a class="seo-button seo-button-secondary" href="/sobre">Conhecer o app</a></div>
+
+      <section class="seo-section" aria-labelledby="recursos">
+        <h2 id="recursos">O que o AkrGym faz</h2>
+        <p class="seo-section-intro">Três áreas que conversam entre si: o treino que você fez, o que você comeu e o que mudou ao longo das semanas.</p>
+        <div class="seo-grid">
+          <article class="seo-card"><h3><a href="/treinos">Treino com histórico</a></h3><p>Monte divisões como upper, lower ou full body, registre a série principal de cada exercício e veja a carga da última vez antes de começar.</p></article>
+          <article class="seo-card"><h3><a href="/dieta">Dieta com a tabela TACO</a></h3><p>Marque as refeições do plano e descreva o que comeu fora dele: a conta usa os valores da Tabela Brasileira de Composição de Alimentos, item por item.</p></article>
+          <article class="seo-card"><h3><a href="/progresso">Evolução e constância</a></h3><p>Acompanhe semanas na meta de treinos, recordes de carga por exercício e medidas corporais em gráficos simples.</p></article>
+        </div>
+      </section>
+
+      <section class="seo-section" aria-labelledby="como-funciona">
+        <h2 id="como-funciona">Como começar</h2>
+        <ul class="seo-list">
+          <li><strong>1. Monte seu plano:</strong> crie as divisões de treino e as refeições do dia, ou parta de uma sugestão inicial.</li>
+          <li><strong>2. Registre no dia a dia:</strong> anote cargas e repetições no treino e confirme as refeições feitas.</li>
+          <li><strong>3. Acompanhe:</strong> veja quantas semanas você cumpriu a meta e como cada exercício evoluiu.</li>
         </ul>
-        <nav aria-label="Conteúdos públicos">
-          <a href="/treinos">Treino de academia e progressão de cargas</a>
-          <a href="/dieta">Dieta, refeições e macronutrientes</a>
-          <a href="/progresso">Acompanhar evolução e consistência</a>
-          <a href="/sobre">Conheça o AkrGym</a>
-          <a href="/ajuda">Ajuda e perguntas frequentes</a>
-        </nav>
-        <p>Abra o AkrGym para começar sua rotina fitness.</p>
-      </main>
-    </div>
-    <noscript>O AkrGym precisa de JavaScript ativado para registrar treinos e acompanhar sua evolução.</noscript>
-    <script type="module" src="/src/main.jsx"></script>
+      </section>
+
+      <section class="seo-section" aria-labelledby="amigos">
+        <h2 id="amigos">Dieta em dia com amigos</h2>
+        <p class="seo-section-intro">Adicione amigos por código e acompanhe juntos quantos dias cada um ficou dentro da meta de calorias. Só o resumo do dia é compartilhado, nunca o que você comeu.</p>
+      </section>
+
+      <section class="seo-section seo-note" aria-labelledby="responsabilidade">
+        <h2 id="responsabilidade">Ferramenta de acompanhamento</h2>
+        <p>O AkrGym organiza os seus registros. Ele não substitui a orientação de profissionais de educação física e nutrição. Dúvidas sobre o uso estão na <a href="/ajuda">página de ajuda</a>.</p>
+      </section>
+    </main>
+    <footer class="seo-shell seo-footer"><span>AkrGym — treino, dieta e evolução em um só lugar. Valores nutricionais: TACO (NEPA/UNICAMP, 4ª ed.).</span><nav aria-label="Links do rodapé"><a href="/app">Abrir aplicativo</a><a href="/treinos">Treinos</a><a href="/dieta">Dieta</a><a href="/progresso">Evolução</a><a href="/sobre">Sobre</a><a href="/ajuda">Ajuda</a></nav></footer>
   </body>
 </html>

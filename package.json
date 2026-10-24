@@ -9,6 +9,7 @@
     "check:production": "node scripts/verify-production-env.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
+    "lab": "node tools/lab/server.mjs",
     "test": "npm run test:unit",
     "test:unit": "node --test tests/*.unit.spec.js",
     "test:rules": "firebase emulators:exec --only firestore --project akrgym-rules-test \"node --test tests/firestore.rules.spec.js\"",

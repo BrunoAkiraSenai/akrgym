@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth'
 import { auth, db, provider } from '../../firebase'
 import { writeBatch, collection, getDocs, getDoc, doc } from 'firebase/firestore'
-import { Apple, Loader } from 'lucide-react'
+import { Loader } from 'lucide-react'
 import { METAS_DIARIAS } from '../../config/dieta'
 
 const LOGIN_LIMIT_STORAGE = 'akrgym-auth-login-limit-v1'
@@ -307,11 +307,11 @@ export default function Login() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-[#07050c] px-6">
+    <div className="login-page flex flex-col items-center justify-center h-full px-6" style={{ backgroundColor: 'var(--bg-deep)' }}>
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
-            <Apple size={32} className="text-emerald-400" />
+            <img src="/pwa-192x192.png" width="48" height="48" alt="" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">AkrGym</h1>
           <p className="text-neutral-500 text-sm">
@@ -328,7 +328,7 @@ export default function Login() {
 
         {modo !== 'recuperar' && <>
           <button onClick={signInWithGoogle} disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white/5 border border-white/10 rounded-2xl py-3 text-white font-medium hover:bg-white/10 active:scale-[0.97] transition-all disabled:opacity-30">
+            className="w-full min-h-[44px] flex items-center justify-center gap-3 bg-white/5 border border-white/10 rounded-2xl py-3 text-white font-medium hover:bg-white/10 active:scale-[0.97] transition disabled:opacity-30">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -340,7 +340,7 @@ export default function Login() {
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5" /></div>
-            <div className="relative flex justify-center"><span className="bg-[#07050c] px-3 text-[10px] text-neutral-600">ou</span></div>
+            <div className="relative flex justify-center"><span className="login-divider-label px-3 text-xs text-neutral-500" style={{ backgroundColor: 'var(--bg-deep)' }}>ou</span></div>
           </div>
         </>}
 
@@ -348,13 +348,13 @@ export default function Login() {
           <form onSubmit={handleEntrar} className="space-y-3">
             <input type="email" aria-label="E-mail" placeholder="E-mail" value={email}
               onChange={e => atualizarEmail(e.target.value)}
-              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition" />
             <input type="password" aria-label="Senha" placeholder="Senha" value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition" />
             <div className="flex justify-end -mt-1">
               <button type="button" onClick={abrirRecuperacao}
-                className="text-emerald-400 text-xs font-medium hover:text-emerald-300 transition-all">
+                className="login-action-link text-emerald-400 text-xs font-medium hover:text-emerald-300 transition">
                 Esqueci minha senha
               </button>
             </div>
@@ -365,7 +365,7 @@ export default function Login() {
             <p className="text-center text-sm text-white/50">
               Não tem conta?{' '}
               <button type="button" onClick={trocarModo}
-                className="text-emerald-400 font-medium hover:text-emerald-300 transition-all">
+                className="login-action-link text-emerald-400 font-medium hover:text-emerald-300 transition">
                 Criar conta
               </button>
             </p>
@@ -377,7 +377,7 @@ export default function Login() {
             </p>
             <input type="email" aria-label="E-mail" placeholder="E-mail" value={email}
               onChange={e => atualizarEmail(e.target.value)} autoComplete="email"
-              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition" />
             <button type="submit" disabled={loading || !email.trim() || resetRestante > 0}
               className="btn-primary w-full py-4 flex items-center justify-center gap-2">
               {loading ? <><Loader size={18} className="animate-spin" /> Enviando...</> : resetRestante > 0 ? `Reenviar em ${Math.ceil(resetRestante / 1000)}s` : 'Enviar link de recuperação'}
@@ -385,7 +385,7 @@ export default function Login() {
             <p className="text-center text-sm text-white/50">
               Lembrou a senha?{' '}
               <button type="button" onClick={voltarParaEntrar}
-                className="text-emerald-400 font-medium hover:text-emerald-300 transition-all">
+                className="login-action-link text-emerald-400 font-medium hover:text-emerald-300 transition">
                 Voltar para entrar
               </button>
             </p>
@@ -394,13 +394,13 @@ export default function Login() {
           <form onSubmit={handleCadastrar} className="space-y-3">
             <input type="email" aria-label="E-mail" placeholder="E-mail" value={email}
               onChange={e => atualizarEmail(e.target.value)}
-              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition" />
             <input type="password" aria-label="Senha" placeholder="Senha" value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition" />
             <input type="password" aria-label="Confirmar senha" placeholder="Confirmar senha" value={confirmarSenha}
               onChange={e => setConfirmarSenha(e.target.value)}
-              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all" />
+              className="w-full bg-neutral-900/50 backdrop-blur-md border border-white/5 text-white placeholder-neutral-600 p-4 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500/30 transition" />
             <button type="submit" disabled={loading || !email.trim() || !password.trim() || !confirmarSenha.trim()}
               className="btn-primary w-full py-4 flex items-center justify-center gap-2">
               {loading ? <><Loader size={18} className="animate-spin" /> Criando conta...</> : 'Criar conta'}
@@ -408,7 +408,7 @@ export default function Login() {
             <p className="text-center text-sm text-white/50">
               Já tem conta?{' '}
               <button type="button" onClick={trocarModo}
-                className="text-emerald-400 font-medium hover:text-emerald-300 transition-all">
+                className="login-action-link text-emerald-400 font-medium hover:text-emerald-300 transition">
                 Entrar
               </button>
             </p>

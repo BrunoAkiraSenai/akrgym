@@ -1,3 +1,6 @@
+import { criarIndice, resolverItens } from './nutricao.js'
+import TACO from './taco.js'
+
 const DEFAULT_PROJECT_ID = 'akrgym'
 const DEFAULT_PROJECT_NUMBER = '272661727889'
 const DEFAULT_APP_ID = '1:272661727889:web:532c4b51c35afa28d64d30'
@@ -25,15 +28,49 @@ const FOOD_CONTEXT_TERMS = [
   'brocolis', 'batata', 'azeite', 'macarrao', 'prato',
 ]
 
+// A IA separa a descrição em itens; a conta é feita pelo Worker com a tabela
+// TACO (nutricao.js). A estimativa da IA por item só vale quando o alimento
+// não está na tabela.
 const PROMPT = `Você é um assistente de nutrição de um diário alimentar usado no Brasil.
-Estime calorias e macronutrientes de qualquer alimento, bebida, prato, lanche, sobremesa ou item de restaurante ou marca, brasileiro ou internacional (exemplos: corn dog, costela barbecue, Bloomin' Onion, sushi, burrito).
-Para alimentos brasileiros, use como referência prioritária as tabelas TACO (Unicamp) e TBCA (USP). Para os demais, use tabelas como a USDA e as informações nutricionais divulgadas pelo restaurante ou fabricante; sem dado exato, estime por um prato equivalente.
-A descrição pode trazer vários itens, com quantidades, frações (1/3, 1,5 unidade) e observações entre parênteses: considere a quantidade ou fração informada de cada item e some tudo. Números soltos antes de um item são contagem de linha e devem ser ignorados. Sem quantidade, use uma porção típica.
-Alimento desconhecido, estrangeiro ou de marca NÃO é motivo para rejeitar: estime. Marque a entrada como inválida somente quando o texto não descrever nada comestível (objetos, móveis, eletrônicos, exercícios, serviços, pessoas).
-Responda SOMENTE com um objeto JSON puro (sem markdown, sem texto extra), exatamente neste formato:
-Para entrada alimentar válida: { "valido": true, "kcal": number, "p": number, "c": number, "g": number, "fibras": number }
-Para entrada inválida: { "valido": false, "kcal": 0, "p": 0, "c": 0, "g": 0, "fibras": 0 }
-Todos os valores devem ser inteiros. "fibras" representa gramas de fibra alimentar estimadas. Nunca invente macros para entradas inválidas.`
+Separe a descrição em itens de comida ou bebida, brasileiros ou internacionais (exemplos: corn dog, costela barbecue, Bloomin' Onion, sushi, burrito).
+Para cada item informe:
+- "alimento": nome curto do alimento como na tabela TACO quando existir (ex.: "arroz tipo 1", "carne bovina fraldinha", "frango peito sem pele", "feijao carioca", "banana prata"); para pratos, marcas e itens de restaurante, o nome do prato.
+- "estado": "cru", "cozido", "grelhado", "assado", "frito", "refogado", "torrado" ou "nenhum" (para o que não tem preparo, como pão, leite, queijo, iogurte, bebidas e pratos prontos).
+- "estado_informado": true somente se a pessoa escreveu o estado (cru, crua, cozido, grelhado...). O estado escrito pela pessoa é obrigatório: "fraldinha cru" é "cru", nunca "cozido". Se ela não escreveu, escolha o estado em que o alimento costuma ser pesado e comido (arroz e feijão: cozido; carnes: grelhado ou cozido; frutas, verduras cruas, aveia e castanhas: cru) e use false.
+- "gramas": o peso em gramas. Converta unidades, colheres, fatias e frações (1/3, 1,5 unidade) para gramas. Sem quantidade, use uma porção típica.
+- "gramas_estimadas": false se a pessoa deu o peso em gramas ou ml; true se você converteu ou estimou.
+- "kcal", "p", "c", "g", "fibras": sua estimativa para ESSA quantidade e ESSE estado (proteína, carboidrato, gordura e fibra em gramas). Use a TACO como referência para alimentos brasileiros e a USDA ou o fabricante para os demais.
+Números soltos antes de um item são contagem de linha e devem ser ignorados. Alimento desconhecido, estrangeiro ou de marca NÃO é motivo para rejeitar: estime.
+Use "valido": false somente quando o texto não descrever nada comestível (objetos, móveis, eletrônicos, exercícios, serviços, pessoas); nesse caso "itens" fica vazio. Nunca invente itens para entradas inválidas.`
+
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    valido: { type: 'BOOLEAN' },
+    itens: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          alimento: { type: 'STRING' },
+          estado: { type: 'STRING', enum: ['cru', 'cozido', 'grelhado', 'assado', 'frito', 'refogado', 'torrado', 'nenhum'] },
+          estado_informado: { type: 'BOOLEAN' },
+          gramas: { type: 'NUMBER' },
+          gramas_estimadas: { type: 'BOOLEAN' },
+          kcal: { type: 'NUMBER' },
+          p: { type: 'NUMBER' },
+          c: { type: 'NUMBER' },
+          g: { type: 'NUMBER' },
+          fibras: { type: 'NUMBER' },
+        },
+        required: ['alimento', 'estado', 'estado_informado', 'gramas', 'gramas_estimadas', 'kcal', 'p', 'c', 'g', 'fibras'],
+      },
+    },
+  },
+  required: ['valido', 'itens'],
+}
+
+const INDICE_TACO = criarIndice(TACO)
 
 const FALLBACK_ERROR = 'Não foi possível analisar a refeição agora. Tente novamente em alguns minutos.'
 const rateBuckets = new Map()
@@ -263,7 +300,7 @@ const MOTIVOS_RECUSA = {
   limite: 'Essa descrição soma mais do que uma análise comporta. Divida em refeições menores e analise uma de cada vez.',
 }
 
-function sanitizeModelResponse(raw, originalText) {
+export function sanitizeModelResponse(raw, originalText, indice = INDICE_TACO) {
   const match = String(raw || '').match(/\{[\s\S]*\}/)
   if (!match) return { motivo: 'formato' }
   let parsed
@@ -272,24 +309,10 @@ function sanitizeModelResponse(raw, originalText) {
   } catch {
     return { motivo: 'formato' }
   }
-  if (parsed?.valido === false) return { motivo: 'nao_alimento' }
-  if (parsed?.valido !== true) return { motivo: 'formato' }
-  const fields = [parsed.kcal, parsed.p, parsed.c, parsed.g, parsed.fibras]
-  if (!fields.every((value) => typeof value === 'number' && Number.isFinite(value))) return { motivo: 'formato' }
-  const values = fields
-  if (values.some((value) => value < 0)) return { motivo: 'formato' }
-  if (values.every((value) => value === 0)) return { motivo: 'nao_alimento' }
-  if (values[0] > 9999 || values.slice(1).some((value) => value > 999)) return { motivo: 'limite' }
-  return {
-    result: {
-      nome: originalText,
-      kcal: Math.round(values[0]),
-      proteinas: Math.round(values[1]),
-      carboidratos: Math.round(values[2]),
-      gorduras: Math.round(values[3]),
-      fibras: Math.round(values[4]),
-    },
-  }
+  const { itens, totais, motivo } = resolverItens(parsed, indice)
+  if (motivo) return { motivo }
+  // Os totais continuam no formato antigo: o app publicado lê só eles.
+  return { result: { nome: originalText, ...totais, itens, versao: 2 } }
 }
 
 // Texto colado de planilha chega com tabulações e quebras de linha; para o
@@ -309,8 +332,10 @@ async function callGemini(text, apiKey) {
         contents: [{ role: 'user', parts: [{ text: `${PROMPT}\n\nRefeição: "${textoParaPrompt(text)}"` }] }],
         generationConfig: {
           responseMimeType: 'application/json',
-          temperature: 0.2,
-          maxOutputTokens: 200,
+          responseSchema: RESPONSE_SCHEMA,
+          temperature: 0.1,
+          // Cerca de 60 tokens por item; 30 itens cabem com folga.
+          maxOutputTokens: 2_400,
           // A tarefa é uma extração curta; desativar o raciocínio evita que o
           // orçamento de saída seja consumido antes do JSON nutricional.
           thinkingConfig: { thinkingBudget: 0 },

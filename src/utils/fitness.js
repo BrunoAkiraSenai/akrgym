@@ -78,19 +78,80 @@ export function calcularSequenciaTreinos(lista = [], agora = new Date(), limiteD
   return sequencia
 }
 
-export function calcularRitmoTreino(lista = [], agora = new Date()) {
-  // Four active days in a rolling week = 100. Each point uses the same rule.
+export const META_TREINOS_SEMANA_PADRAO = 3
+
+export function normalizarMetaSemanal(valor) {
+  const numero = Math.round(Number(valor))
+  return Number.isFinite(numero) && numero >= 1 && numero <= 7 ? numero : META_TREINOS_SEMANA_PADRAO
+}
+
+function inicioDaSemana(valor) {
+  const data = inicioDoDia(valor)
+  data.setDate(data.getDate() - data.getDay())
+  return data
+}
+
+/**
+ * Constância de musculação medida em semanas, não em dias seguidos: quem
+ * treina segunda, quarta e sexta está em dia mesmo sem dois dias colados.
+ * Semana de domingo a sábado, igual à grade "Semana em movimento".
+ * A semana atual só entra na contagem quando a meta já foi batida; enquanto
+ * estiver em andamento, ela não quebra a sequência das anteriores.
+ */
+export function resumoSemanalTreinos(lista = [], agora = new Date(), meta = META_TREINOS_SEMANA_PADRAO, limiteSemanas = 52) {
+  const alvo = normalizarMetaSemanal(meta)
+  const diasPorSemana = new Map()
+  lista.forEach(treino => {
+    const data = dataTreinoParaDate(treino?.data)
+    if (!data) return
+    const semana = inicioDaSemana(data).getTime()
+    if (!diasPorSemana.has(semana)) diasPorSemana.set(semana, new Set())
+    diasPorSemana.get(semana).add(inicioDoDia(data).getTime())
+  })
+  const treinosNaSemana = inicio => diasPorSemana.get(inicio.getTime())?.size || 0
+
+  const semanaAtual = inicioDaSemana(agora)
+  const feitosSemana = treinosNaSemana(semanaAtual)
+  let semanasNaMeta = feitosSemana >= alvo ? 1 : 0
+  const cursor = new Date(semanaAtual)
+  cursor.setDate(cursor.getDate() - 7)
+  while (semanasNaMeta < limiteSemanas && treinosNaSemana(cursor) >= alvo) {
+    semanasNaMeta++
+    cursor.setDate(cursor.getDate() - 7)
+  }
+  return {
+    meta: alvo,
+    feitosSemana,
+    faltamSemana: Math.max(0, alvo - feitosSemana),
+    metaDaSemanaCumprida: feitosSemana >= alvo,
+    semanasNaMeta,
+    noLimite: semanasNaMeta >= limiteSemanas,
+  }
+}
+
+export function calcularRitmoTreino(lista = [], agora = new Date(), metaSemanal = 4) {
+  // Reaching the weekly goal in a rolling week = 100. Each point uses the same rule.
   // This is an activity indicator, not a training prescription.
+  const meta = Math.max(1, Number(metaSemanal) || 4)
   const pontos = Array.from({ length: 14 }, (_, indice) => {
     const fim = indice - 13
-    return Math.min(100, Math.round((diasAtivos(lista, agora, fim - 6, fim) / 4) * 100))
+    return Math.min(100, Math.round((diasAtivos(lista, agora, fim - 6, fim) / meta) * 100))
   })
   const recentes = diasAtivos(lista, agora, -6, 0)
   return {
     pontos,
     score: pontos.at(-1),
     diasRecentes: recentes,
-    variacao: pontos.at(-1) - pontos.at(-8),
+    // Semana atual até hoje contra o mesmo trecho da semana anterior: numa
+    // sexta de manhã, quem treinou segunda e quarta não aparece "caindo".
+    variacao: (() => {
+      const diaDaSemana = inicioDoDia(agora).getDay()
+      const atual = diasAtivos(lista, agora, -diaDaSemana, 0)
+      // O dia de hoje só entra na comparação depois que o treino dele foi feito.
+      const treinouHoje = diasAtivos(lista, agora, 0, 0) > 0
+      const anterior = diasAtivos(lista, agora, -diaDaSemana - 7, treinouHoje ? -7 : -8)
+      return Math.round(((atual - anterior) / meta) * 100)
+    })(),
   }
 }
 

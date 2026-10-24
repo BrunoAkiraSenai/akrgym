@@ -5,12 +5,20 @@ import {
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
-import { exercicioUsaRegraAgachamento, exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, prepareSession, reconciliarRascunho, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
+import { exercicioUsaRegraAgachamento, exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, ordenarRotinas, prepareSession, reconciliarRascunho, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
 
 // Sessões recentes de todas as divisões: a referência de um exercício é o
 // último treino dele, não importa em qual divisão foi feito.
 const LIMITE_HISTORICO = 200
 const SALVAMENTO_ESPERA_MS = 6000
+
+// Descansos dos exercícios ficam guardados enquanto o treino está aberto.
+function limparDescansos(uid) {
+  try {
+    const prefixo = `descanso_estado_${uid}_`
+    Object.keys(sessionStorage).filter(chave => chave.startsWith(prefixo)).forEach(chave => sessionStorage.removeItem(chave))
+  } catch { /* Sem armazenamento, nada a limpar. */ }
+}
 import ConfirmModal from '../ConfirmModal'
 import DescansoTimer from '../DescansoTimer'
 import {
@@ -134,7 +142,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     }
   }, [treinosState, STORAGE_KEY, buscarHistoricoRecente])
 
-  const keys = treinosState ? Object.keys(treinosState) : []
+  const keys = ordenarRotinas(treinosState).map(([key]) => key)
   const exerciciosSalvos = [
     ...Object.values(treinosState || {}).flatMap(treino => treino.exercicios || []).map(ex => ex.nome),
     ...historicoTreino.flatMap(sessao => (sessao.exercicios || []).map(ex => ex.nome)),
@@ -348,6 +356,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
       gravacao.catch(() => { /* Falha posterior: o Firestore desfaz a gravação local. */ })
       rascunhoPendente.current = null
       try { localStorage.removeItem(STORAGE_KEY) } catch { /* Remote record is safe. */ }
+      limparDescansos(user.uid)
       setSucesso(resultado === 'na-fila'
         ? 'Treino salvo no aparelho. Ele será enviado assim que a conexão voltar.'
         : 'Treino finalizado com sucesso!')
@@ -370,7 +379,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
           <div><p className="home-kicker">Sessão de hoje</p><h1 className="text-2xl font-bold tracking-tight text-white">Qual treino você vai fazer?</h1><p>Escolha uma divisão para começar a registrar.</p></div>
           <div className="treino-header-mark" aria-hidden="true"><Play size={18} fill="currentColor" /></div>
         </header>
-        <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} />
+        <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} chaveEstado={`descanso_estado_rapido_${user.uid}`} />
         {erro && (
           <div className="exec-feedback exec-feedback-error" role="alert">{erro}</div>
         )}
@@ -387,7 +396,6 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
             <button
               key={key}
               type="button"
-              // eslint-disable-next-line react-hooks/refs
               onClick={() => iniciarTreino(key)}
               disabled={loadingHistorico}
               className="treino-routine-card card-premium"
@@ -420,7 +428,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
         <span className="treino-progress-badge">{exerciciosPreenchidos}/{topSetData.length}</span>
       </div>
 
-      <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} />
+      <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} chaveEstado={`descanso_estado_rapido_${user.uid}`} />
 
       {recuperado && (
         <div className="exec-feedback exec-feedback-info">
@@ -583,7 +591,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                 </div>
               )}
 
-              <DescansoTimer defaultSeconds={ex.descanso_segundos} label="Descanso" exerciseName={ex.nome} compact />
+              <DescansoTimer defaultSeconds={ex.descanso_segundos} chaveEstado={`descanso_estado_${user.uid}_${rotinaKey}_${ex.id || originalIndex}`} label="Descanso" exerciseName={ex.nome} compact />
 
               <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
                 <div className="section-label mb-1.5">Protocolo</div>
