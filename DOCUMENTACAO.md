@@ -1177,7 +1177,7 @@ coloque a chave em `.env` do frontend.
 }
 ```
 
-- **Estado**: configurado mas sem builds iOS/Android geradas no repo.
+- **Estado (2026-11-02)**: removido do projeto. Nunca houve build iOS/Android, e a versão instalada tinha falha de segurança crítica. A App Store está nos planos só para muito depois; para voltar, reinstalar (`npm i -D @capacitor/cli && npm i @capacitor/core @capacitor/ios`), recriar o `capacitor.config.json` acima (com `webDir: "dist"` e o app em `/app`) e seguir os passos abaixo.
 - Para buildar iOS: `npx cap add ios && npx cap sync && npx cap open ios`.
 - Para buildar Android: `npx cap add android && npx cap sync && npx cap open android`.
 - O `webDir` aponta para `dist/` (output do `vite build`).
