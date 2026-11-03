@@ -1,4 +1,11 @@
-import './StartupSplash.css'
+// Os estilos desta tela ficam em app.html: o HTML já desenha a mesma abertura
+// antes do JavaScript carregar, e este componente só assume o lugar dela.
+
+// Quanto tempo a abertura do HTML já animou, para continuar sem reiniciar.
+function tempoDesdeAbertura() {
+  const inicio = typeof window !== 'undefined' ? window.__akrSplashT0 : undefined
+  return typeof inicio === 'number' ? Math.max(0, Math.round(performance.now() - inicio)) : 0
+}
 
 export default function StartupSplash({ animated = true, showWaiting = false }) {
   const label = showWaiting ? 'Conectando ao AkrGym' : 'Carregando AkrGym'
@@ -7,6 +14,7 @@ export default function StartupSplash({ animated = true, showWaiting = false }) 
     <div
       className="startup-splash"
       data-animated={animated}
+      style={{ '--splash-decorrido': `${tempoDesdeAbertura()}ms` }}
       role="status"
       aria-live="polite"
       aria-busy="true"

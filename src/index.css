@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+/* Fontes servidas pelo próprio site (antes vinham do Google Fonts e travavam o
+   primeiro desenho). Arquivo variável: todos os pesos num arquivo só, só latim
+   (cobre o português). Ficam no cache offline do app. */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/archivo/files/archivo-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Manrope';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
 /* ============================================================
    AETHER LUXE — Design System com temas dinâmicos
    As 5 paletas são controladas por CSS variables que
@@ -1256,7 +1276,7 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .home-session-copy { display: flex; min-width: 0; flex-direction: column; justify-content: center; }
 .home-session-copy .home-stat-label { margin-bottom: 0.2rem; }
 .home-session-copy .home-stat-session { max-width: min(14rem, 58vw); margin-top: 0.18rem; font-size: 1.02rem !important; }
-.home-session-art { width: 7.7rem; min-width: 7.7rem; margin: -0.85rem -0.9rem -0.85rem 0.6rem; border-radius: 0 1rem 1rem 0; background-image: url('/images/home-session-atlas.png'); background-repeat: no-repeat; background-size: 300% 200%; background-color: transparent; opacity: 0.72; mask-image: linear-gradient(90deg, transparent 0%, #000 24%, #000 100%); -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 24%, #000 100%); }
+.home-session-art { width: 7.7rem; min-width: 7.7rem; margin: -0.85rem -0.9rem -0.85rem 0.6rem; border-radius: 0 1rem 1rem 0; background-image: url('/images/home-session-atlas.webp'); background-repeat: no-repeat; background-size: 300% 200%; background-color: transparent; opacity: 0.72; mask-image: linear-gradient(90deg, transparent 0%, #000 24%, #000 100%); -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 24%, #000 100%); }
 .home-session-art-chest { background-position: 0 0; }
 .home-session-art-back { background-position: 50% 0; }
 .home-session-art-lower { background-position: 100% 0; }

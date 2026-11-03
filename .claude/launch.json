@@ -7,6 +7,20 @@
       "runtimeArgs": ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
       "port": 5173,
       "url": "http://127.0.0.1:5173"
+    },
+    {
+      "name": "akrgym-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--host", "127.0.0.1", "--port", "4180", "--strictPort"],
+      "port": 4180,
+      "url": "http://127.0.0.1:4180"
+    },
+    {
+      "name": "akrgym-lab",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "lab"],
+      "port": 5187,
+      "url": "http://127.0.0.1:5187"
     }
   ]
 }

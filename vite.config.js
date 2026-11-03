@@ -9,6 +9,8 @@ export default defineConfig(() => ({
       tailwindcss(),
       VitePWA({
       registerType: 'autoUpdate',
+      // Registra o service worker sem travar o primeiro desenho da página.
+      injectRegister: 'script-defer',
       includeAssets: ['favicon.svg', 'robots.txt', 'apple-touch-icon.png'],
       manifest: {
         name: 'AkrGym | Treino, dieta e evolução',
@@ -45,6 +47,9 @@ export default defineConfig(() => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,xml,txt,webmanifest}'],
+        // A splash só é lida pelo iPhone ao abrir o app instalado; não precisa
+        // ser baixada na primeira visita. Imagens .webp entram sob demanda (abaixo).
+        globIgnores: ['**/splash.png'],
         // Sem rede, só caminhos do app caem no app; "/" e as páginas públicas vêm do cache delas.
         navigateFallback: 'app.html',
         navigateFallbackAllowlist: [/^\/app(\/|$|\?)/],
@@ -62,23 +67,13 @@ export default defineConfig(() => ({
             },
           },
           {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            // Ilustrações (ex.: arte da Home): baixadas quando aparecem, depois ficam offline.
+            urlPattern: ({ sameOrigin, url }) => sameOrigin && url.pathname.startsWith('/images/'),
             handler: 'CacheFirst',
             options: {
-              cacheName: 'google-fonts-cache',
+              cacheName: 'imagens',
               expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
-              },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'gstatic-fonts-cache',
-              expiration: {
-                maxEntries: 10,
+                maxEntries: 20,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
               },
             },
