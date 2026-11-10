@@ -132,6 +132,11 @@
   /* Fontes */
   --font-display: 'Archivo', 'Manrope', system-ui, sans-serif;
   --font-body: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Trilhas de progresso e marcas vazias: claras no escuro, marrons no Claro. */
+  --trilha: rgba(255,255,255,0.10);
+  --trilha-fundo: rgba(255,255,255,0.045);
+  --trilha-borda: rgba(255,255,255,0.08);
+  --trilha-marca: rgba(255,255,255,0.26);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
@@ -190,12 +195,14 @@ body::after {
   opacity: 0.35;
 }
 
-@media (hover: hover) { .glass-card:hover, .card-premium:hover {
+/* Levantar no hover e afundar no toque só em cartão que faz algo (botão, link
+   ou .card-clickable). Cartão só de leitura não pode parecer botão. */
+@media (hover: hover) { :is(button:enabled, a, .card-clickable):is(.glass-card, .card-premium):hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 } }
 
-.glass-card:active, .card-premium:active { transform: translateY(-2px) scale(0.99); }
+:is(button, a, .card-clickable):is(.glass-card, .card-premium):active { transform: translateY(-2px) scale(0.99); }
 .card-clickable { cursor: pointer; }
 .card-clickable:active { transform: scale(0.97); }
 .card-complete-glow { animation: subtle-complete-glow 0.55s var(--ease-aether) forwards; }
@@ -534,7 +541,10 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--brand); outline-
 .theme-swatch-preview-line { width: 30px; height: 4px; border-radius: 999px; opacity: 0.8; }
 
 @layer base {
-  html { font-family: var(--font-body); -webkit-tap-highlight-color: transparent; }
+  /* Números de largura fixa onde eles mudam ou ficam em coluna (contadores
+   animados, metas, cargas, cronômetro): os dígitos não "dançam" e alinham. */
+strong, td, th, input, .diet-calendar-date, [role="timer"] { font-variant-numeric: tabular-nums; }
+html { font-family: var(--font-body); -webkit-tap-highlight-color: transparent; }
   /* Sem zoom por toque duplo, o navegador responde ao toque sem esperar. */
   a, button, input, select, textarea, label, summary, [role="tab"], [role="option"] { touch-action: manipulation; }
 }
@@ -594,7 +604,7 @@ img, svg, video, canvas { max-width: 100%; }
 }
 
 /* Hover simples como a original */
-@media (hover: hover) { [data-theme="original"] .card-premium:hover, [data-theme="original"] .glass-card:hover {
+@media (hover: hover) { [data-theme="original"] :is(button, a, .card-clickable):is(.card-premium, .glass-card):hover {
   border-color: rgba(var(--brand-rgb), 0.3);
   box-shadow: var(--shadow-md);
   transform: translateY(-2px);
@@ -874,7 +884,7 @@ img, svg, video, canvas { max-width: 100%; }
   opacity: 0.18;
 }
 
-@media (hover: hover) { [data-theme="lava"] .card-premium:hover, [data-theme="lava"] .glass-card:hover {
+@media (hover: hover) { [data-theme="lava"] :is(button, a, .card-clickable):is(.card-premium, .glass-card):hover {
   border-color: rgba(var(--brand-rgb), 0.35);
   box-shadow: 0 16px 34px rgba(83, 46, 30, 0.12), 0 0 0 3px rgba(var(--brand-rgb), 0.06);
 } }
@@ -929,6 +939,13 @@ img, svg, video, canvas { max-width: 100%; }
   color: #a58b80;
 }
 
+[data-theme="lava"] {
+  --trilha: rgba(106, 61, 43, 0.12);
+  --trilha-fundo: rgba(106, 61, 43, 0.045);
+  --trilha-borda: rgba(106, 61, 43, 0.12);
+  --trilha-marca: rgba(106, 61, 43, 0.30);
+}
+
 [data-theme="lava"] select option {
   background: #ffffff;
   color: #2b1a15;
@@ -973,8 +990,14 @@ img, svg, video, canvas { max-width: 100%; }
 [data-theme="lava"] [class~="text-neutral-500"] { color: var(--text-secondary) !important; }
 [data-theme="lava"] [class~="text-neutral-600"] { color: var(--text-secondary) !important; }
 [data-theme="lava"] [class~="text-neutral-700"] { color: #ad9489 !important; }
-[data-theme="lava"] [class~="text-emerald-400"] { color: #087f5b !important; }
-[data-theme="lava"] [class~="text-cyan-400"] { color: #087f91 !important; }
+/* emerald/cyan são a cor do tema (laranja/vermelho no Claro); no fundo claro o
+   texto usa o tom escuro (--brand-bright = 700), que passa do AA. */
+[data-theme="lava"] [class~="text-emerald-200"],
+[data-theme="lava"] [class~="text-emerald-300"],
+[data-theme="lava"] [class~="text-emerald-400"] { color: var(--brand-bright) !important; }
+[data-theme="lava"] [class~="text-cyan-200"],
+[data-theme="lava"] [class~="text-cyan-300"],
+[data-theme="lava"] [class~="text-cyan-400"] { color: var(--accent-bright) !important; }
 [data-theme="lava"] [class~="text-red-400"] { color: #b42318 !important; }
 [data-theme="lava"] [class~="text-amber-400"],
 [data-theme="lava"] [class~="text-yellow-400"] { color: #9a5a00 !important; }
@@ -1252,7 +1275,8 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .home-stat span:last-child { position: relative; z-index: 1; margin-top: 0.1rem; font-size: 0.72rem; }
 .home-rhythm-content { position: relative; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 0.5rem; }
 .home-rhythm-content > div { min-width: 4rem; }
-.home-rhythm-content > div > span { display: block; }
+/* "semanas na meta" quebra em duas linhas em vez de virar "semanas na ..." no cartão estreito. */
+.home-rhythm-content > div > span { display: block; white-space: normal; text-overflow: clip; line-height: 1.25; }
 .home-rhythm-viz { flex: 1 1 auto; min-width: 0; max-width: 11rem; margin: 0 -0.15rem -0.15rem 0; padding: 0; background: transparent; }
 .home-rhythm-viz-head, .home-rhythm-viz-scale { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.02em; line-height: 1.2; text-transform: uppercase; }
 .home-stat .home-rhythm-viz span { display: inline-flex; margin-top: 0; overflow: visible; color: inherit; font-size: inherit; white-space: nowrap; }
@@ -1267,7 +1291,7 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .home-rhythm-line { fill: none; stroke: url(#home-rhythm-line); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.8; }
 .home-rhythm-point { fill: var(--bg-card-solid); stroke: var(--brand); stroke-width: 1.7; }
 .home-rhythm-point-current { fill: var(--brand-bright); stroke: var(--bg-card-solid); stroke-width: 2.2; }
-.home-rhythm-viz-scale { padding: 0.08rem 0.14rem 0; color: var(--text-secondary); font-size: 0.7rem; letter-spacing: 0.02em; opacity: 0.9; text-transform: none; }
+.home-rhythm-viz-scale { padding: 0.08rem 0.14rem 0; color: var(--text-secondary); font-size: 0.7rem; letter-spacing: 0.02em; text-transform: none; }
 .home-rhythm-chart-loading { opacity: 0.3; }
 .home-rhythm-note { display: block; margin-top: 0.18rem !important; color: var(--text-secondary) !important; font-size: 0.7rem !important; letter-spacing: 0; }
 .home-history-card { background: linear-gradient(145deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012)); }
@@ -1288,8 +1312,8 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .home-week-count { border-color: rgba(var(--brand-rgb),0.22); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.06); }
 .home-week-grid { gap: 0.42rem; }
 .home-day { gap: 0.42rem; }
-.home-day-badge { display: grid; width: 100%; height: 2.75rem; place-items: center; border: 1px solid rgba(255,255,255,0.08); border-radius: 0.72rem; color: var(--text-secondary); background: rgba(255,255,255,0.045); }
-.home-day-empty { width: 0.85rem; height: 0.85rem; border: 2px solid rgba(255,255,255,0.26); border-radius: 999px; }
+.home-day-badge { display: grid; width: 100%; height: 2.75rem; place-items: center; border: 1px solid var(--trilha-borda); border-radius: 0.72rem; color: var(--text-secondary); background: var(--trilha-fundo); }
+.home-day-empty { width: 0.85rem; height: 0.85rem; border: 2px solid var(--trilha-marca); border-radius: 999px; }
 .home-day-active .home-day-badge { border-color: rgba(var(--brand-rgb),0.55); color: #07120e; background: var(--brand); box-shadow: 0 7px 16px rgba(var(--brand-rgb),0.2), inset 0 1px 0 rgba(255,255,255,0.26); }
 .home-day-active .home-day-label { color: var(--brand-bright); }
 .home-panel-foot { margin-top: 0.05rem; padding-top: 0.7rem; }
@@ -1402,7 +1426,8 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .exec-field input::placeholder { color: var(--text-secondary); opacity: 0.7; }
 .exec-field input:focus { border-color: rgba(var(--brand-rgb),0.60); background: rgba(var(--brand-rgb),0.08); box-shadow: 0 0 0 3px rgba(var(--brand-rgb),0.14); }
 .exec-field input::-webkit-inner-spin-button { appearance: none; }
-.treino-footer { position: sticky; bottom: calc(4rem + env(safe-area-inset-bottom, 0px)); z-index: 20; margin: 0 -0.5rem; border-top: 1px solid rgba(var(--brand-rgb),0.20); border-radius: 0.9rem 0.9rem 0 0; padding: 0.8rem 0.5rem 0; background: var(--bg-deep); box-shadow: 0 -8px 18px rgba(0,0,0,0.18); }
+/* bottom negativo compensa o pb-6 do <main> (Layout.jsx): o rodapé encosta na barra de navegação. */
+.treino-footer { position: sticky; bottom: -1.5rem; z-index: 20; margin: 0 -0.5rem; border-top: 1px solid rgba(var(--brand-rgb),0.20); border-radius: 0.9rem 0.9rem 0 0; padding: 0.8rem 0.5rem 0; background: var(--bg-deep); box-shadow: 0 -8px 18px rgba(0,0,0,0.18); }
 .treino-footer-status { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-bottom: 0.55rem; color: var(--text-secondary); font-size: 0.7rem; }
 .treino-footer-status strong { color: var(--brand-bright); font-size: 0.7rem; }
 
@@ -1481,8 +1506,8 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .diet-meal-foods { color: var(--text-secondary); font-size: 0.78rem; line-height: 1.45; }
 @media (max-width: 360px) { .diet-register-actions { grid-template-columns: 1fr; } }
 .diet-summary-body { display: grid; grid-template-columns: minmax(8.5rem, 0.85fr) minmax(0, 1.7fr); align-items: center; gap: 1rem; }
-.diet-kcal-ring { display: grid; width: min(9rem, 100%); aspect-ratio: 1; place-items: center; border-radius: 50%; background: conic-gradient(var(--accent-bright) var(--diet-kcal-pct), rgba(255,255,255,0.10) 0); transform: rotate(-22deg); }
-.diet-kcal-ring::before { width: calc(100% - 0.78rem); height: calc(100% - 0.78rem); border-radius: inherit; background: var(--surface-elevated, #111); content: ''; }
+.diet-kcal-ring { display: grid; width: min(9rem, 100%); aspect-ratio: 1; place-items: center; border-radius: 50%; background: conic-gradient(var(--accent-bright) var(--diet-kcal-pct), var(--trilha) 0); transform: rotate(-22deg); }
+.diet-kcal-ring::before { width: calc(100% - 0.78rem); height: calc(100% - 0.78rem); border-radius: inherit; background: var(--bg-card-solid); content: ''; }
 .diet-kcal-ring > div { position: absolute; display: flex; flex-direction: column; align-items: center; transform: rotate(22deg); }
 .diet-kcal-ring strong { color: var(--text-primary); font-size: 1.3rem; line-height: 1.1; }
 .diet-kcal-ring span { color: var(--text-secondary); font-size: 0.62rem; }
@@ -1494,7 +1519,7 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .diet-macro-item-head i, .diet-macro-item-icon { display: grid; width: 1.4rem; height: 1.4rem; flex-shrink: 0; place-items: center; border: 1px solid rgba(var(--accent-rgb),0.20); border-radius: 0.45rem; color: var(--accent-bright); background: rgba(var(--accent-rgb),0.08); font-size: 0.5rem; font-style: normal; font-weight: 800; }
 .diet-macro-item-head strong { color: var(--text-primary); font-family: var(--font-mono); font-size: 0.68rem; white-space: nowrap; }
 .diet-macro-item-head small { color: var(--text-secondary); font-size: 0.55rem; font-weight: 500; }
-.diet-macro-track { height: 0.36rem; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,0.10); }
+.diet-macro-track { height: 0.36rem; overflow: hidden; border-radius: 999px; background: var(--trilha); }
 .diet-macro-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent-bright), var(--brand-bright)); transition: width 600ms cubic-bezier(0.2,0.7,0.2,1); }
 .diet-meal-card { position: relative; display: flex; flex-direction: column; gap: 0.55rem; overflow: hidden; border-radius: 1.25rem; padding: 0.85rem 0.9rem !important; background: linear-gradient(135deg, rgba(255,255,255,0.045), rgba(var(--accent-rgb),0.035)); }
 .diet-meal-card > .flex.items-center.gap-2 { flex-wrap: wrap; }
@@ -1589,7 +1614,7 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .diet-extra-action-delete { color: rgb(248 113 113 / 0.78); background: rgb(239 68 68 / 0.05); }
 @media (hover: hover) { .diet-extra-action-delete:hover { border-color: rgb(239 68 68 / 0.34); color: rgb(252 165 165); background: rgb(239 68 68 / 0.11); } }
 .diet-legend-dot { display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.15rem; border-radius: 999px; vertical-align: middle; }
-.diet-legend-good { background: #34d399; }
+.diet-legend-good { background: var(--brand-bright); }
 .diet-legend-warn { background: #fbbf24; }
 .diet-legend-danger { background: #f87171; }
 
@@ -1597,7 +1622,8 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .diet-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.25rem; }
 .diet-calendar-weekday { padding: 0.35rem 0; color: var(--text-secondary); font-size: 0.65rem; font-weight: 600; text-align: center; }
 .diet-calendar-day { display: flex; min-width: 0; min-height: 5.5rem; flex-direction: column; align-items: center; gap: 0.45rem; padding: 0.55rem 0.125rem; border: 1px solid var(--border-subtle); border-radius: 0.55rem; color: var(--text-secondary); background: var(--bg-card-solid); text-align: center; cursor: pointer; }
-.diet-calendar-day[data-status="concluido"] { color: #a7f3d0; border-color: rgb(52 211 153 / 0.28); background: rgb(34 197 94 / 0.13); }
+/* "Concluído" usa a cor do tema, como a legenda e a barra de aderência acima. */
+.diet-calendar-day[data-status="concluido"] { color: var(--brand-bright); border-color: rgba(var(--brand-rgb),0.34); background: rgba(var(--brand-rgb),0.14); }
 .diet-calendar-day[data-status="fora_da_dieta"] { color: #fecaca; border-color: rgb(248 113 113 / 0.3); background: rgb(248 113 113 / 0.13); }
 .diet-calendar-day[data-status="nao_preenchido"] { color: #fde68a; border-color: rgb(251 191 36 / 0.26); background: rgb(251 191 36 / 0.10); }
 @media (hover: hover) { .diet-calendar-day:enabled:hover { border-color: currentColor; } }
@@ -1608,7 +1634,6 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .diet-calendar-comment { width: 100%; font-size: 0.6875rem; font-weight: 500; line-height: 1.3; letter-spacing: 0; overflow-wrap: anywhere; }
 .diet-calendar-comment-compact { display: none; }
 .diet-calendar-note { margin: 0.75rem 0 0; color: var(--text-secondary); font-size: 0.65rem; line-height: 1.5; }
-[data-theme="lava"] .diet-calendar-day[data-status="concluido"] { color: #065f46; }
 [data-theme="lava"] .diet-calendar-day[data-status="fora_da_dieta"] { color: #991b1b; }
 [data-theme="lava"] .diet-calendar-day[data-status="nao_preenchido"] { color: #854d0e; }
 @media (max-width: 480px) {

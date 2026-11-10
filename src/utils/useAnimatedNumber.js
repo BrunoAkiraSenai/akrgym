@@ -30,7 +30,9 @@ export function useAnimatedNumber(target, duration = 600) {
 
     const tick = (now) => {
       const elapsed = now - startTime
-      const t = Math.min(elapsed / duration, 1)
+      // O horário do quadro (now) pode vir antes de startTime; sem o piso em 0
+      // o começo da animação passava por números negativos.
+      const t = Math.min(Math.max(elapsed / duration, 0), 1)
       const eased = 1 - Math.pow(1 - t, 3)
       const value = startValue + (target - startValue) * eased
       setDisplayed(value)
