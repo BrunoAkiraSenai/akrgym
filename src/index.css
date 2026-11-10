@@ -982,7 +982,13 @@ img, svg, video, canvas { max-width: 100%; }
    para o modo escuro original. */
 [data-theme="lava"] [class~="text-white"] { color: var(--text-primary) !important; }
 [data-theme="lava"] [class~="text-white/60"] { color: rgba(43, 26, 21, 0.64) !important; }
-[data-theme="lava"] [class~="text-white/50"] { color: rgba(43, 26, 21, 0.54) !important; }
+[data-theme="lava"] [class~="text-white/50"] { color: rgba(43, 26, 21, 0.7) !important; }
+/* Ações de perigo e edição em tons escuros no fundo claro (o vermelho/âmbar 400 ficava em ~2:1). */
+[data-theme="lava"] .settings-logout,
+[data-theme="lava"] .settings-action-danger,
+[data-theme="lava"] .diet-extra-action-delete { color: #b42318; }
+[data-theme="lava"] .diet-extra-action-edit { color: #9a5a00; }
+[data-theme="lava"] .settings-tab-active small { color: var(--text-primary); }
 [data-theme="lava"] [class~="text-white/30"] { color: rgba(43, 26, 21, 0.38) !important; }
 [data-theme="lava"] [class~="text-neutral-200"] { color: #3d2921 !important; }
 [data-theme="lava"] [class~="text-neutral-300"] { color: #513a30 !important; }

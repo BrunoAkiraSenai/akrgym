@@ -112,7 +112,17 @@ export async function signInAnonymously() { throw Object.assign(new Error('desat
 export async function signOut() { auth.currentUser = null; for (const cb of listeners) cb(null) }
 export const getRedirectResult = async () => null
 const falha = async () => { await delay(400); throw Object.assign(new Error('fixture'), { code: 'auth/invalid-credential' }) }
-export const signInWithEmailAndPassword = falha
+// Login simulado: só a senha de teste do laboratório entra (testes de tela).
+export const SENHA_LAB = 'senha-do-laboratorio'
+export async function signInWithEmailAndPassword(_, email, senha) {
+  if (senha !== SENHA_LAB) return falha()
+  await delay(200)
+  auth.currentUser = { uid: UID, email, displayName: 'Bruno Teste', isAnonymous: false, metadata: { lastSignInTime: new Date().toUTCString() }, getIdToken: async () => 'fixture' }
+  for (const cb of listeners) cb(auth.currentUser)
+  return { user: auth.currentUser }
+}
+// Testes de tela leem o "banco" falso para conferir o que foi gravado.
+window.__labDocs = docs
 export const createUserWithEmailAndPassword = falha
 export const sendPasswordResetEmail = async () => {}
 export const signInWithPopup = falha

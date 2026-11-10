@@ -321,7 +321,7 @@ export default function Login({ onVoltar }) {
         </div>
 
         {erro && (
-          <div className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
+          <div role="alert" className="bg-red-500/10 backdrop-blur-md border border-red-500/20 rounded-2xl p-3 text-red-400 text-xs">{erro}</div>
         )}
         {sucesso && (
           <div className="bg-emerald-500/10 backdrop-blur-md border border-emerald-500/20 rounded-2xl p-3 text-emerald-300 text-xs">{sucesso}</div>

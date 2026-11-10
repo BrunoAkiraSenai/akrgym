@@ -26,6 +26,14 @@ const blend = (top, bot) => {
   const a = top[3]
   return [top[0] * a + bot[0] * (1 - a), top[1] * a + bot[1] * (1 - a), top[2] * a + bot[2] * (1 - a), 1]
 }
+function fundoComGradiente(el) {
+  for (let p = el; p; p = p.parentElement) {
+    const cs = getComputedStyle(p)
+    if (cs.backgroundImage.includes('gradient') && !(parse(cs.backgroundColor)[3] >= 1)) return true
+    if (parse(cs.backgroundColor)[3] >= 1) return false
+  }
+  return false
+}
 function fundo(el) {
   const camadas = []
   for (let p = el; p; p = p.parentElement) {
@@ -55,6 +63,10 @@ window.__contraste = function () {
     if (op === 0) return
     // Botão desativado não precisa de contraste mínimo (WCAG 1.4.3).
     if (el.closest('button:disabled, [aria-disabled="true"]')) return
+    // Texto pintado por gradiente (background-clip: text): a cor do texto é transparente de propósito.
+    if (cs.webkitBackgroundClip === 'text' || cs.backgroundClip === 'text' || parse(cs.color)[3] === 0) return
+    // Fundo em gradiente (botões principais) não tem uma cor só: fica fora da conta.
+    if (fundoComGradiente(el)) return
     const bg = fundo(el)
     let fg = parse(cs.color)
     fg = blend([fg[0], fg[1], fg[2], fg[3] * op], bg)
