@@ -1,4 +1,4 @@
-import { memo, useEffect, useReducer, useState } from 'react'
+import { memo, useEffect, useReducer, useRef, useState } from 'react'
 import {
   Check, Clock3, Minus, Pause, Play, Plus, RotateCcw, Settings2, SkipForward, X,
 } from 'lucide-react'
@@ -43,10 +43,21 @@ function DescansoTimer({
   label = 'Descanso rápido',
   exerciseName = '',
   compact = false,
+  // Cada vez que muda (e é > 0), o descanso recomeça do início: botão "Série feita".
+  sinalInicio = 0,
 }) {
   const [timer, dispatch] = useReducer(timerReducer, { defaultSeconds, storageKey, chaveEstado }, criarEstadoInicial)
   const [aberto, setAberto] = useState(false)
   const { configurado, restante, rodando, concluido, terminaEm } = timer
+
+  // Só reage a uma mudança do sinal; ao montar de novo (trocar de exercício) não recomeça.
+  const ultimoSinal = useRef(sinalInicio)
+  useEffect(() => {
+    if (!sinalInicio || sinalInicio === ultimoSinal.current) return
+    ultimoSinal.current = sinalInicio
+    void solicitarPermissaoNotificacao()
+    dispatch({ type: 'restart', now: Date.now() })
+  }, [sinalInicio])
 
   useEffect(() => {
     if (!storageKey) return

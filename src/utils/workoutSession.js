@@ -145,6 +145,24 @@ export function ordenarRotinas(treinos) {
   })
 }
 
+// Próxima divisão pela ordem do plano, depois da última que a pessoa treinou.
+// historico vem do mais recente para o mais antigo; sessões de divisões que
+// saíram do plano são ignoradas. Sem histórico, sugere a primeira.
+export function sugerirProximaDivisao(treinos, historico = []) {
+  const ordem = ordenarRotinas(treinos).map(([chave]) => chave)
+  if (!ordem.length) return null
+  const ultima = (historico || []).find(sessao => ordem.includes(sessao?.rotina_id))
+  if (!ultima) return { chave: ordem[0], depoisDe: null, sessao: null }
+  const indice = ordem.indexOf(ultima.rotina_id)
+  return { chave: ordem[(indice + 1) % ordem.length], depoisDe: ultima.rotina_id, sessao: ultima }
+}
+
+// Exercício para abrir no modo foco: o primeiro ainda sem carga e repetições.
+export function primeiroExercicioPendente(exercicios = []) {
+  const indice = exercicios.findIndex(ex => !ex?.pulado && !exercicioPreenchido(ex))
+  return indice >= 0 ? indice : 0
+}
+
 export function moverRotina(treinos, chave, delta) {
   const lista = ordenarRotinas(treinos)
   const de = lista.findIndex(([k]) => k === chave)

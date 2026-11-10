@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
@@ -51,6 +51,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [initializing, setInitializing] = useState(true)
   const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
+  // Divisão escolhida na Home ("Hoje: UPPER A"): o Treinar já abre nela.
+  const [rotinaInicial, setRotinaInicial] = useState(null)
+  const limparRotinaInicial = useCallback(() => setRotinaInicial(null), [])
   const [mostrarOnboarding, setMostrarOnboarding] = useState(true)
   const conta = useConta(user?.uid)
   // Visitante que tocou em "Criar conta": o login abre sem sair da sessão,
@@ -138,17 +141,17 @@ export default function App() {
     const pageKey = user?.uid || 'guest'
     switch (activeTab) {
       case 'home':
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={chave => { setRotinaInicial(typeof chave === 'string' ? chave : null); setActiveTab('treinar') }} onIrParaConfig={abrirConfiguracao} /></Suspense>
       case 'dieta':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
       case 'treinar':
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} onIrParaConfig={() => { setAbaInicialConfig('treinos'); setActiveTab('configurar') }} activeTab={activeTab} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} onIrParaConfig={() => { setAbaInicialConfig('treinos'); setActiveTab('configurar') }} activeTab={activeTab} rotinaInicial={rotinaInicial} onRotinaInicialUsada={limparRotinaInicial} /></Suspense>
       case 'evolucao':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Evolucao /></Suspense>
       case 'configurar':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Configuracao abaInicial={abaInicialConfig} /></Suspense>
       default:
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={chave => { setRotinaInicial(typeof chave === 'string' ? chave : null); setActiveTab('treinar') }} onIrParaConfig={abrirConfiguracao} /></Suspense>
     }
   }
 

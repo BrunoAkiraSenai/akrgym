@@ -1187,6 +1187,9 @@ img, svg, video, canvas { max-width: 100%; }
 .home-start-copy { display: flex; min-width: 0; flex-direction: column; gap: 0.18rem; }
 .home-start-copy strong { font-size: 0.92rem; font-weight: 800; letter-spacing: -0.01em; }
 .home-start-copy small { overflow: hidden; color: var(--text-secondary); font-size: 0.72rem; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+/* Link discreto abaixo do cartão sugerido: abre a lista de divisões. */
+.home-start-other { align-self: flex-end; min-height: 2.75rem; margin: -0.6rem 0 -0.4rem; padding: 0 0.25rem; color: var(--text-secondary); font-size: 0.74rem; font-weight: 700; text-decoration: underline; text-underline-offset: 0.2rem; cursor: pointer; }
+@media (hover: hover) { .home-start-other:hover { color: var(--text-primary); } }
 .home-start-action { display: inline-flex; align-items: center; gap: 0.1rem; flex-shrink: 0; color: var(--brand-bright); font-size: 0.74rem; font-weight: 800; }
 .home-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
 .home-stat { min-width: 0; border: 1px solid var(--home-border); border-radius: 0.95rem; padding: 0.8rem; background: rgba(255,255,255,0.025); }
@@ -1369,6 +1372,27 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 .treino-back-button { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 1px solid var(--border-subtle); border-radius: 0.8rem; color: var(--text-secondary); background: rgba(255,255,255,0.035); cursor: pointer; transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast); }
 @media (hover: hover) { .treino-back-button:hover { border-color: rgba(var(--brand-rgb),0.30); color: var(--text-primary); background: rgba(var(--brand-rgb),0.08); } }
 .treino-progress-badge { min-width: 2.45rem; border: 1px solid rgba(var(--brand-rgb),0.25); border-radius: 0.6rem; padding: 0.35rem 0.45rem; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.08); font-family: var(--font-mono); font-size: 0.64rem; font-weight: 800; text-align: center; }
+/* Modo foco do treino (um exercício por vez) */
+.exec-modo { display: flex; justify-content: flex-end; margin-top: -0.25rem; }
+.exec-modo-toggle { display: inline-flex; flex-shrink: 0; min-height: 2.75rem; align-items: center; white-space: nowrap; gap: 0.4rem; border: 1px solid var(--border-subtle); border-radius: 0.65rem; padding: 0.35rem 0.8rem; color: var(--text-secondary); background: var(--trilha-fundo); font-size: 0.72rem; font-weight: 800; cursor: pointer; transition: color var(--transition-fast), border-color var(--transition-fast); }
+@media (hover: hover) { .exec-modo-toggle:hover { color: var(--text-primary); border-color: rgba(var(--brand-rgb),0.35); } }
+.exec-foco { display: flex; flex-direction: column; gap: 0.6rem; scroll-margin-top: 0.75rem; }
+.exec-foco-trilha { display: flex; flex-direction: column; gap: 0.45rem; }
+.exec-foco-trilha ol { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.exec-foco-trilha ol button { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 1px solid var(--trilha-borda); border-radius: 0.65rem; color: var(--text-secondary); background: var(--trilha-fundo); font-family: var(--font-mono); font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast); }
+.exec-foco-trilha ol button[data-estado="feito"] { border-color: rgba(var(--brand-rgb),0.4); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.12); }
+.exec-foco-trilha ol button[data-estado="pulado"] { border-style: dashed; color: var(--text-secondary); }
+.exec-foco-trilha ol button[aria-current="step"] { border-color: var(--brand-bright); color: var(--text-primary); box-shadow: 0 0 0 2px rgba(var(--brand-rgb),0.25); }
+.exec-foco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.exec-foco-posicao { color: var(--text-secondary); font-size: 0.72rem; font-weight: 700; }
+.exec-foco-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.exec-foco-nav button { display: inline-flex; min-height: 3rem; align-items: center; justify-content: center; gap: 0.35rem; font-size: 0.82rem; }
+.exec-foco-nav button:disabled { opacity: 0.45; cursor: default; }
+.exec-rest-row { display: flex; align-items: stretch; gap: 0.45rem; }
+.exec-rest-row .rest-timer { flex: 1 1 auto; min-width: 0; }
+.exec-set-done { display: inline-flex; min-height: 2.75rem; flex: 0 0 auto; align-items: center; gap: 0.35rem; border: 1px solid rgba(var(--brand-rgb),0.45); border-radius: 0.78rem; padding: 0.4rem 0.8rem; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.12); font-size: 0.74rem; font-weight: 800; white-space: nowrap; cursor: pointer; transition: background var(--transition-fast), transform var(--transition-fast); }
+.exec-set-done:active { transform: scale(0.97); }
+@media (hover: hover) { .exec-set-done:hover { background: rgba(var(--brand-rgb),0.2); } }
 .exec-search { display: flex; align-items: center; min-height: 2.8rem; border: 1px solid var(--border-subtle); border-radius: 0.78rem; padding-left: 0.75rem; color: var(--text-secondary); background: rgba(255,255,255,0.035); }
 .exec-search:focus-within { border-color: rgba(var(--brand-rgb),0.45); box-shadow: 0 0 0 3px rgba(var(--brand-rgb),0.12); }
 .exec-search input { min-width: 0; border: 0 !important; background: transparent !important; padding: 0.7rem 0.55rem !important; color: var(--text-primary) !important; font-size: 0.74rem !important; outline: none !important; box-shadow: none !important; }

@@ -8,6 +8,7 @@ import { useUser } from '../../context/UserContext'
 import { calcularRitmoTreino, classificarSessaoTreino, dataTreinoParaDate, normalizarMetaSemanal, resumoSemanalTreinos } from '../../utils/fitness'
 import { Activity, ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCircle2, ChevronRight, Dumbbell, Flame, Minus, Play, Trophy } from 'lucide-react'
 import DescansoTimer from '../DescansoTimer'
+import { exercicioPreenchido, sugerirProximaDivisao } from '../../utils/workoutSession'
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -221,6 +222,21 @@ export default function Home({ onStartWorkout, onIrParaConfig }) {
   const ritmo = useMemo(() => calcularRitmoTreino(treinos, hoje, metaSemanal), [treinos, hoje, metaSemanal])
   const precisaMontarPlano = plano.carregado && (!plano.temTreino || !plano.temDieta)
   const sessao = useMemo(() => routineData(ultimoTreino, treinosConfig), [ultimoTreino, treinosConfig])
+  // Próxima divisão pela ordem do plano, depois da última treinada.
+  const sugestao = useMemo(() => (loading ? null : sugerirProximaDivisao(treinosConfig, [ultimoTreino, ...treinos].filter(Boolean))), [loading, treinosConfig, ultimoTreino, treinos])
+  const nomeRotina = chave => treinosConfig?.[chave]?.nome || chave
+  // Treino em andamento (rascunho salvo no aparelho) vem antes da sugestão:
+  // o Treinar sempre retoma o rascunho primeiro.
+  const emAndamento = useMemo(() => {
+    if (loading) return null
+    try {
+      const rascunho = JSON.parse(localStorage.getItem(`rascunho_treino_${user.uid}`) || 'null')
+      if (!rascunho?.rotinaKey || !treinosConfig?.[rascunho.rotinaKey] || !rascunho.topSetData?.length) return null
+      const feitos = rascunho.topSetData.filter(ex => !ex.pulado && exercicioPreenchido(ex)).length
+      return { chave: rascunho.rotinaKey, feitos, total: rascunho.topSetData.length }
+    } catch { return null }
+  }, [loading, treinosConfig, user.uid])
+  const treinouHoje = Boolean(dataTreino) && dataTreino.toDateString() === hoje.toDateString()
 
   return (
     <div className="home-page flex flex-col gap-4 pt-2 pb-4">
@@ -241,11 +257,18 @@ export default function Home({ onStartWorkout, onIrParaConfig }) {
 
       {precisaMontarPlano && <PrimeirosPassos plano={plano} onIrParaConfig={onIrParaConfig} />}
 
-      <button type="button" onClick={onStartWorkout} className="home-start-card">
+      <button type="button" onClick={() => onStartWorkout(emAndamento ? emAndamento.chave : sugestao?.chave)} className="home-start-card">
         <span className="home-start-icon"><Play size={18} fill="currentColor" aria-hidden="true" /></span>
-        <span className="home-start-copy"><strong>Começar treino</strong><small>Escolha sua divisão e registre as séries</small></span>
-        <span className="home-start-action">Treinar <ChevronRight size={17} aria-hidden="true" /></span>
+        {emAndamento ? (
+          <span className="home-start-copy"><strong>Continuar: {nomeRotina(emAndamento.chave)}</strong><small>Treino em andamento · {emAndamento.feitos} de {emAndamento.total} exercícios preenchidos</small></span>
+        ) : sugestao ? (
+          <span className="home-start-copy"><strong>{treinouHoje ? 'Próximo treino' : 'Hoje'}: {nomeRotina(sugestao.chave)}</strong><small>{sugestao.depoisDe ? `Na sua ordem, depois de ${nomeRotina(sugestao.depoisDe)}` : 'Primeira divisão do seu plano'}</small></span>
+        ) : (
+          <span className="home-start-copy"><strong>Começar treino</strong><small>Escolha sua divisão e registre as séries</small></span>
+        )}
+        <span className="home-start-action">{emAndamento ? 'Continuar' : sugestao ? 'Começar' : 'Treinar'} <ChevronRight size={17} aria-hidden="true" /></span>
       </button>
+      {sugestao && !emAndamento && <button type="button" className="home-start-other" onClick={() => onStartWorkout()}>Escolher outra divisão</button>}
 
       <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} />
 
