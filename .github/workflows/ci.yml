@@ -42,6 +42,10 @@ jobs:
       - name: Firestore rules tests
         run: npm run test:rules
 
+      # Fluxos e acessibilidade no app real com Firebase falso (Chrome já vem na máquina do GitHub).
+      - name: Screen tests (lab)
+        run: npm run test:e2e
+
       # Só o que vai para o site; ferramentas de desenvolvimento ficam de fora.
       - name: Security audit (production dependencies)
         run: npm audit --omit=dev --audit-level=high
