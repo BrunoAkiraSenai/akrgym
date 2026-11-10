@@ -91,8 +91,16 @@ service cloud.firestore {
                // A validação completa de dias por mês continua sendo responsabilidade
                // do cliente/servidor, pois as regras não possuem um parser de datas.
                && request.resource.data.data.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+               // O app grava cada dia no documento com o nome da própria data.
+               && request.resource.data.data == docId
+               && request.resource.data.refeicoes.size() <= 30
                && request.resource.data.extras_globais is list
                && request.resource.data.extras_globais.size() < 100
+               // Campos que o app sempre gravou com este tipo. Campos antigos desconhecidos
+               // continuam aceitos: o app os preserva ao regravar o dia.
+               && (!('planejadas' in request.resource.data)
+                   || (request.resource.data.planejadas is list && request.resource.data.planejadas.size() <= 30))
+               && (!('metas_snapshot' in request.resource.data) || request.resource.data.metas_snapshot is map)
                // Defesa em profundidade: se o documento incluir usuarioId, ele deve ser o dono.
                && (!('usuarioId' in request.resource.data)
                    || request.resource.data.usuarioId == request.auth.uid);

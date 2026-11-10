@@ -281,6 +281,35 @@ describe('AkrGym Firestore Rules', () => {
       }))
     })
 
+    it('data diferente do nome do documento é rejeitada', async () => {
+      const db = authedDb(ALICE)
+      await assertFails(db.doc(`users/${ALICE}/diario_dieta/2025-01-15`).set({
+        data: '2025-01-16',
+        refeicoes: {},
+        extras_globais: [],
+      }))
+    })
+
+    it('planejadas e metas_snapshot com tipo errado são rejeitados', async () => {
+      const db = authedDb(ALICE)
+      const base = { data: '2025-01-15', refeicoes: {}, extras_globais: [] }
+      await assertFails(db.doc(`users/${ALICE}/diario_dieta/2025-01-15`).set({ ...base, planejadas: 'cafe' }))
+      await assertFails(db.doc(`users/${ALICE}/diario_dieta/2025-01-15`).set({ ...base, metas_snapshot: 2000 }))
+      await assertFails(db.doc(`users/${ALICE}/diario_dieta/2025-01-15`).set({ ...base, planejadas: Array.from({ length: 31 }, (_, i) => `r${i}`) }))
+    })
+
+    it('dia completo gravado pelo app (planejadas, metas e campo antigo) passa', async () => {
+      const db = authedDb(ALICE)
+      const plan = [{ id: 'cafe', nome: 'Café', kcal: 100, proteinas: 5, carboidratos: 10, gorduras: 2, fibras: 1 }]
+      const acao = { type: 'meal', id: 'cafe', status: 'limpo', food: plan[0], revision: 'r1' }
+      const novo = applyDiaryAction(null, '2025-01-17', acao, plan, { kcal: 2000, proteinas: 150, carboidratos: 200, gorduras: 60, fibras: 30 })
+      assert.ok(Array.isArray(novo.planejadas))
+      await assertSucceeds(db.doc(`users/${ALICE}/diario_dieta/2025-01-17`).set(novo))
+      // Dia antigo com campo que o app atual não usa: continua gravável.
+      const legado = { data: '2025-01-18', refeicoes: {}, extras_globais: [{ nome: 'antigo', kcal: 50 }], totais_antigos: { kcal: 50 } }
+      await assertSucceeds(db.doc(`users/${ALICE}/diario_dieta/2025-01-18`).set(applyDiaryAction(legado, '2025-01-18', acao, plan)))
+    })
+
     it('usuarioId correto passa (defesa em profundidade)', async () => {
       const db = authedDb(ALICE)
       await assertSucceeds(db.doc(`users/${ALICE}/diario_dieta/2025-01-15`).set({
