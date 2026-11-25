@@ -326,7 +326,8 @@ export async function somarUsoDiarioIA(kv, uid, usados, agora = new Date()) {
 }
 
 export function mensagemLimiteDiario(limite) {
-  return `Você usou as ${limite} análises de IA de hoje. O limite renova à meia-noite; até lá, digite os valores.`
+  // O app já acrescenta "Se preferir, use Digitar valores".
+  return `Você usou as ${limite} análises de IA de hoje. O limite renova à meia-noite.`
 }
 
 // Cada recusa tem um motivo próprio: a pessoa precisa saber se deve reescrever
