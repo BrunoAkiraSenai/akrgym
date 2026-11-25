@@ -64,6 +64,8 @@ export async function calcularMacrosIA(textoAlimentos) {
         ...FALLBACK,
         nome: texto,
         _erro: payload._erro || 'Limite da API de IA atingido. Aguarde a renovação da cota e tente novamente.',
+        // Limite diário da pessoa (servidor): a Dieta mostra o aviso de limite.
+        ...(payload._motivo === 'limite' ? { _motivo: 'limite' } : {}),
       }
     }
     // 422 é uma recusa explicada pelo backend (não é alimento, soma grande demais...):
@@ -83,7 +85,7 @@ export async function calcularMacrosIA(textoAlimentos) {
     }
     const erroNutricional = validarResultadoMacros(parsed)
     if (erroNutricional) return { ...FALLBACK, nome: texto, _erro: erroNutricional }
-    // Análise concluída conta no uso do mês (sem limite por enquanto).
+    // Análise concluída conta no uso do dia e do mês (o app avisa antes do limite).
     void registrarUsoIA(usuario.uid)
 
     return {
