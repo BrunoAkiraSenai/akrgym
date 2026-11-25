@@ -13,6 +13,12 @@ FIREBASE_PROJECT_NUMBER = "272661727889"
 FIREBASE_APP_ID = "1:272661727889:web:532c4b51c35afa28d64d30"
 ALLOWED_ORIGINS = "https://akrgym.web.app,https://akrgym.firebaseapp.com"
 ALLOW_LOCAL_ORIGIN = "false"
+# Análises de IA por pessoa por dia (horário de Brasília). Contagem no KV USO_IA.
+LIMITE_IA_DIA = "20"
+
+[[kv_namespaces]]
+binding = "USO_IA"
+id = "eb6268e74a294c4499abf641802d009e"
 
 # Ambiente separado para testar a integração pelo localhost sem abrir o Worker
 # de produção para origens locais.
@@ -31,3 +37,8 @@ FIREBASE_PROJECT_NUMBER = "272661727889"
 FIREBASE_APP_ID = "1:272661727889:web:532c4b51c35afa28d64d30"
 ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 ALLOW_LOCAL_ORIGIN = "true"
+LIMITE_IA_DIA = "20"
+
+[[env.staging.kv_namespaces]]
+binding = "USO_IA"
+id = "2fa22a1b41974e58bcbe78d0c0122908"

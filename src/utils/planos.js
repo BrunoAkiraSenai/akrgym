@@ -11,7 +11,8 @@ export const PLANOS = {
     nome: 'Grátis',
     descricao: 'Todos os recursos liberados.',
     recursos: { ia: true, amigos: true, evolucaoAvancada: true },
-    limites: { iaPorDia: null, iaPorMes: null },
+    // Mesmo número do Worker (LIMITE_IA_DIA_PADRAO); o servidor é quem garante.
+    limites: { iaPorDia: 20, iaPorMes: null },
   },
   pro: {
     id: 'pro',
@@ -64,7 +65,7 @@ export function podeUsar(plano, recurso, { anonimo = false, usoHoje = 0, usoMes 
 export const MENSAGENS_BLOQUEIO = {
   conta: 'Crie uma conta para usar a análise por IA. Você pode continuar digitando os valores.',
   plano: 'Este recurso não faz parte do seu plano.',
-  limite: 'Você usou todas as análises de IA disponíveis por agora.',
+  limite: 'Você usou as análises de IA de hoje. O limite renova à meia-noite; até lá, digite os valores.',
 }
 
 // O Firebase só exclui a conta de quem entrou há poucos minutos.

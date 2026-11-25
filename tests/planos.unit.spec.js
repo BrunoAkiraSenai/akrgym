@@ -12,10 +12,10 @@ test('sem assinatura, vencida, cancelada ou desconhecida: vale o Grátis', () =>
   assert.equal(planoEmVigor({ plano: 'pro', status: 'ativa', expiraEm: { toDate: () => new Date(2026, 11, 1) } }, agora).id, 'pro')
 })
 
-test('hoje tudo é liberado e sem limite para conta de verdade', () => {
+test('hoje tudo é liberado para conta de verdade; a IA tem 20 análises por dia (decisão de 2026-11-25)', () => {
   for (const recurso of ['ia', 'amigos', 'evolucaoAvancada']) assert.equal(podeUsar(PLANOS.gratis, recurso).permitido, true)
-  assert.equal(podeUsar(PLANOS.gratis, 'ia', { usoHoje: 500, usoMes: 9000 }).permitido, true)
-  assert.equal(PLANOS.gratis.limites.iaPorDia, null)
+  assert.equal(PLANOS.gratis.limites.iaPorDia, 20)
+  assert.equal(PLANOS.gratis.limites.iaPorMes, null)
 })
 
 test('visitante anônimo não usa a IA nem amigos', () => {

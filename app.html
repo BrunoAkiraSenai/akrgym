@@ -70,7 +70,28 @@
     </style>
   </head>
   <body>
-    <div id="root"><script>window.__akrSplashT0 = performance.now()</script><div class="startup-splash" data-animated="true" role="status" aria-live="polite" aria-busy="true" aria-label="Carregando AkrGym"><div class="startup-splash__brand" aria-hidden="true"><div class="startup-splash__mark"><img src="/pwa-192x192.png" width="192" height="192" alt="" /></div><div class="startup-splash__wordmark">AkrGym</div><p class="startup-splash__tagline">Treino, dieta e evolução</p></div></div></div>
+    <div id="root"><script>window.__akrSplashT0 = performance.now()</script><div class="startup-splash" data-estatico="true" data-animated="true" role="status" aria-live="polite" aria-busy="true" aria-label="Carregando AkrGym"><div class="startup-splash__brand" aria-hidden="true"><div class="startup-splash__mark"><img src="/pwa-192x192.png" width="192" height="192" alt="" /></div><div class="startup-splash__wordmark">AkrGym</div><p class="startup-splash__tagline">Treino, dieta e evolução</p></div></div></div>
+    <script>
+      // Se o JavaScript do app não carregar (internet ruim, versão antiga em cache),
+      // a abertura do HTML ficaria para sempre: depois de 20 s, oferece recarregar.
+      // A abertura do React não tem data-estatico, então carregamento lento normal não dispara isto.
+      setTimeout(function () {
+        var abertura = document.querySelector('#root > .startup-splash[data-estatico]')
+        if (!abertura || abertura.querySelector('.startup-splash__waiting')) return
+        var aviso = document.createElement('div')
+        aviso.className = 'startup-splash__waiting'
+        aviso.setAttribute('role', 'alert')
+        aviso.style.cssText = 'display:grid;gap:10px;justify-items:center;text-align:center'
+        aviso.innerHTML = '<span>Não foi possível abrir o AkrGym. Confira a internet e tente de novo.</span>'
+        var botao = document.createElement('button')
+        botao.type = 'button'
+        botao.textContent = 'Recarregar'
+        botao.style.cssText = 'min-height:44px;padding:0 20px;border-radius:12px;border:1px solid rgba(var(--brand-rgb,49,132,104),.5);background:rgba(var(--brand-rgb,49,132,104),.15);color:var(--text-primary,#fff);font:600 14px Manrope,system-ui,sans-serif;cursor:pointer'
+        botao.onclick = function () { location.reload() }
+        aviso.appendChild(botao)
+        abertura.appendChild(aviso)
+      }, 20000)
+    </script>
     <noscript>O AkrGym precisa de JavaScript ativado para registrar treinos e acompanhar sua evolução.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>

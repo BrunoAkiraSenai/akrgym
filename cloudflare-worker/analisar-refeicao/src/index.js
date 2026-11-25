@@ -296,6 +296,40 @@ function releaseRateLimit(uid) {
   if (current) current.active = false
 }
 
+// Limite diário por pessoa, guardado no KV (USO_IA): vale entre todas as cópias
+// do Worker, ao contrário do contador por minuto acima, que fica só na memória.
+// O dia segue o horário de Brasília. Cada chamada ao Gemini conta, inclusive
+// as recusadas, porque todas custam.
+export const LIMITE_IA_DIA_PADRAO = 20
+
+export function limiteIADia(env) {
+  const valor = Number(env?.LIMITE_IA_DIA)
+  return Number.isInteger(valor) && valor > 0 ? valor : LIMITE_IA_DIA_PADRAO
+}
+
+export function diaBrasilia(agora = new Date()) {
+  // en-CA formata como AAAA-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(agora)
+}
+
+const chaveUsoDiario = (uid, agora) => `ia:${uid}:${diaBrasilia(agora)}`
+
+export async function usoDiarioIA(kv, uid, agora = new Date()) {
+  if (!kv) return null
+  return Number(await kv.get(chaveUsoDiario(uid, agora))) || 0
+}
+
+export async function somarUsoDiarioIA(kv, uid, usados, agora = new Date()) {
+  if (!kv) return
+  // Some sozinho depois de 2 dias.
+  await kv.put(chaveUsoDiario(uid, agora), String(usados + 1), { expirationTtl: 2 * 24 * 60 * 60 })
+}
+
+export function mensagemLimiteDiario(limite) {
+  // O app já acrescenta "Se preferir, use Digitar valores".
+  return `Você usou as ${limite} análises de IA de hoje. O limite renova à meia-noite.`
+}
+
 // Cada recusa tem um motivo próprio: a pessoa precisa saber se deve reescrever
 // o texto, dividir a refeição ou só tentar de novo.
 const MOTIVOS_RECUSA = {
@@ -400,6 +434,19 @@ export default {
     const rateError = rateLimit(authPayload.sub)
     if (rateError) return json({ _erro: rateError }, 429, origin)
     try {
+      const limite = limiteIADia(env)
+      let usados = null
+      try {
+        usados = await usoDiarioIA(env.USO_IA, authPayload.sub)
+      } catch (error) {
+        // KV fora do ar não derruba a análise; fica registrado no log.
+        console.warn('analisarRefeicao uso diario indisponivel:', String(error?.message || error).slice(0, 120))
+      }
+      if (!env.USO_IA) console.warn('analisarRefeicao: KV USO_IA ausente, limite diario desligado')
+      if (usados !== null && usados >= limite) {
+        return json({ _erro: mensagemLimiteDiario(limite), _motivo: 'limite', _limite: limite }, 429, origin)
+      }
+      if (usados !== null) await somarUsoDiarioIA(env.USO_IA, authPayload.sub, usados).catch(() => {})
       const { result, motivo } = sanitizeModelResponse(await callGemini(text, env.GEMINI_API_KEY), text)
       if (!result) {
         // Só o motivo vai para o log; a descrição da refeição não é registrada.
