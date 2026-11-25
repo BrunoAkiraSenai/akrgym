@@ -166,6 +166,10 @@ function verifyAuthToken(token, projectId) {
   ))
 }
 
+export function contaAnonima(payload) {
+  return payload?.firebase?.sign_in_provider === 'anonymous'
+}
+
 function verifyAppCheckToken(token, projectNumber, appId) {
   return verifyJwt(token, APP_CHECK_JWKS_URL, (payload) => (
     payload.iss === `https://firebaseappcheck.googleapis.com/${projectNumber}`
@@ -368,6 +372,10 @@ export default {
       await verifyAppCheckToken(appCheckToken, config.projectNumber, config.appId)
     } catch {
       return json({ _erro: 'Sessão ou origem inválida.' }, 401, origin)
+    }
+    // A IA tem custo por análise: só conta de verdade usa (visitante anônimo não).
+    if (contaAnonima(authPayload)) {
+      return json({ _erro: 'Crie uma conta para usar a análise por IA.', _motivo: 'conta' }, 403, origin)
     }
 
     let body

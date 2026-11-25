@@ -192,6 +192,14 @@ function themeToVars(theme) {
   vars['--text-accent'] = theme.textAccent || theme.brand[400]
   vars['--text-gold'] = theme.textGold || theme.highlightHex
   vars['--color-scheme'] = theme.mode === 'light' ? 'light' : 'dark'
+  // Fundo claro: o tom "bright" (400) some no branco (2,6:1). Texto e ícones de
+  // destaque usam o 700, que passa do mínimo AA (4,5:1) no fundo e nos cartões.
+  if (theme.mode === 'light') {
+    vars['--brand-bright'] = theme.brand[700]
+    vars['--accent-bright'] = theme.accent[700]
+    vars['--emerald-bright'] = theme.brand[700]
+    vars['--cyan-bright'] = theme.accent[700]
+  }
   const shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
   shades.forEach((s) => {
     vars[`--color-emerald-${s}`] = theme.brand[s]

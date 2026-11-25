@@ -41,6 +41,9 @@ export function timerReducer(state, action) {
         ? { ...state, restante: 0, rodando: false, concluido: true, terminaEm: null }
         : { ...state, restante }
     }
+    // "Série feita": recomeça o descanso inteiro, esteja parado, rodando ou concluído.
+    case 'restart':
+      return { ...state, restante: state.configurado, rodando: true, concluido: false, terminaEm: action.now + state.configurado * 1000 }
     case 'reset':
       return { ...state, restante: state.configurado, rodando: false, concluido: false, terminaEm: null }
     case 'skip':

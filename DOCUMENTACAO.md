@@ -107,7 +107,7 @@ AkrGym é um **aplicativo pessoal de academia e nutrição** focado em simplicid
 | Backend BaaS | **Firebase** | 12.14.0 | Auth + Firestore + Hosting |
 | Admin (scripts) | **firebase-admin** | 13.10.0 | Migração de dados |
 | IA | **@google/generative-ai** | 0.24.1 | SDK direto do Gemini 2.5 Flash |
-| Fonts | Inter (400-800) + Syne (600-800) | Google Fonts | Tipografia |
+| Fonts | Archivo + Manrope (variáveis, só latim) | `@fontsource-variable`, servidas pelo próprio site | Tipografia |
 | PWA | **vite-plugin-pwa** (Workbox) | 1.3.0 | Service Worker + manifest |
 
 ### Dev
@@ -1070,8 +1070,7 @@ Em `index.html`:
 | Pattern | Estratégia | Cache | Validade | Limite |
 |---|---|---|---|---|
 | `https://firestore.googleapis.com/*` | NetworkFirst | `firestore-cache` | 24 h | 50 entries |
-| `https://fonts.googleapis.com/*` | CacheFirst | `google-fonts-cache` | 30 dias | 10 entries |
-| `https://fonts.gstatic.com/*` | CacheFirst | `gstatic-fonts-cache` | 30 dias | 10 entries |
+| `/images/*` (mesma origem) | CacheFirst | `imagens` | 30 dias | 20 entries |
 
 ### Headers customizados (`firebase.json`)
 
@@ -1177,7 +1176,7 @@ coloque a chave em `.env` do frontend.
 }
 ```
 
-- **Estado**: configurado mas sem builds iOS/Android geradas no repo.
+- **Estado (2026-11-02)**: removido do projeto. Nunca houve build iOS/Android, e a versão instalada tinha falha de segurança crítica. A App Store está nos planos só para muito depois; para voltar, reinstalar (`npm i -D @capacitor/cli && npm i @capacitor/core @capacitor/ios`), recriar o `capacitor.config.json` acima (com `webDir: "dist"` e o app em `/app`) e seguir os passos abaixo.
 - Para buildar iOS: `npx cap add ios && npx cap sync && npx cap open ios`.
 - Para buildar Android: `npx cap add android && npx cap sync && npx cap open android`.
 - O `webDir` aponta para `dist/` (output do `vite build`).
@@ -1221,7 +1220,7 @@ O Search Console é verificado pela meta `google-site-verification` no `index.ht
 - `<meta name="build-version" content="3.2" />`.
 - `<meta name="google-site-verification" content="0MxCLkjvr7j4yC0BgJI575Hxwa786fC1wDGYcCfw5fc" />` — token do Search Console.
 - `<link rel="manifest" href="/manifest.webmanifest" />`.
-- `<link rel="preconnect" href="https://fonts.googleapis.com" />` + `preconnect` para `fonts.gstatic.com` — acelera carregamento de fontes.
+- Fontes servidas pelo próprio site (desde 2026-11-02); a abertura (logo) é desenhada no próprio `app.html`, antes do JavaScript.
 - `<link href="...Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />`.
 - `<link href="...Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />`.
 
@@ -1673,7 +1672,7 @@ Cada página define seus próprios `useCallback` para queries e `useEffect` para
 
 - **Precache** de todos os assets do `dist/`.
 - **NetworkFirst** para Firestore (com fallback para cache se falhar).
-- **CacheFirst** para Google Fonts (economia de banda).
+- **CacheFirst** para as ilustrações de `/images/` (baixadas quando aparecem).
 
 ### localStorage
 
@@ -1704,7 +1703,7 @@ Chaves usadas:
 - ✅ **Code splitting** por página (lazy).
 - ✅ **Tree shaking** de ícones Lucide.
 - ✅ **Cache offline** Firestore + Service Worker.
-- ✅ **Preconnect** para Google Fonts.
+- ✅ Fontes no próprio site, arquivos de `/assets/` com cache de 1 ano (nome com hash).
 - ✅ **Manual chunks** para `react-vendor` e `firebase-vendor` (cache-friendly).
 - ✅ **CSS-in-CSS** sem framework runtime (apenas Tailwind compilado).
 - ✅ **Sem realtime listeners** — apenas pull-on-demand.

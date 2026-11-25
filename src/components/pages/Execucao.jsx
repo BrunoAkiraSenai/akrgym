@@ -5,7 +5,7 @@ import {
 import { useUser } from '../../context/UserContext'
 import { db } from '../../firebase'
 import { METAS_DIARIAS } from '../../config/dieta'
-import { exercicioUsaRegraAgachamento, exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, ordenarRotinas, prepareSession, reconciliarRascunho, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
+import { exercicioUsaRegraAgachamento, exercicioPreenchido, encontrarExercicioAnterior, encontrarNomeExercicioExistente, ordenarRotinas, prepareSession, primeiroExercicioPendente, reconciliarRascunho, routineFingerprint, recordedExercise, createReplacementExercise } from '../../utils/workoutSession'
 
 // Sessões recentes de todas as divisões: a referência de um exercício é o
 // último treino dele, não importa em qual divisão foi feito.
@@ -22,13 +22,27 @@ function limparDescansos(uid) {
 import ConfirmModal from '../ConfirmModal'
 import DescansoTimer from '../DescansoTimer'
 import {
-  Play, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
-  ArrowLeftRight, Flame, Info, RefreshCw, Search, Zap, SkipForward, Dumbbell,
+  Play, Check, CheckCircle, Loader, ChevronLeft, ChevronRight, X,
+  ArrowLeftRight, Flame, Info, RefreshCw, Search, Zap, SkipForward, Dumbbell, List, Target,
 } from 'lucide-react'
 
-export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
+// Modo foco (um exercício por vez) é o padrão; a escolha fica no aparelho.
+const MODO_TREINO_KEY = 'akrgym-treino-modo'
+function lerModoTreino() {
+  try { return localStorage.getItem(MODO_TREINO_KEY) === 'lista' ? 'lista' : 'foco' } catch { return 'foco' }
+}
+
+export default function Execucao({ onFinish, onIrParaConfig, activeTab, rotinaInicial = null, onRotinaInicialUsada }) {
   const user = useUser()
   const STORAGE_KEY = `rascunho_treino_${user.uid}`
+  const [modo, setModoState] = useState(lerModoTreino)
+  const [atual, setAtual] = useState(0)
+  // Contador por exercício: cada "Série feita" soma 1 e recomeça o descanso dele.
+  const [sinaisDescanso, setSinaisDescanso] = useState({})
+  const setModo = novo => {
+    setModoState(novo)
+    try { localStorage.setItem(MODO_TREINO_KEY, novo) } catch { /* Vale só nesta tela. */ }
+  }
   const [step, setStep] = useState('select')
   const [rotinaKey, setRotinaKey] = useState(null)
   const [topSetData, setTopSetData] = useState([])
@@ -126,6 +140,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRotinaKey(draft.rotinaKey)
     setTopSetData(ajustado.topSetData)
+    setAtual(primeiroExercicioPendente(ajustado.topSetData))
     setStep('active')
     setRecuperado(true)
     if (ajustado.alterado) {
@@ -189,6 +204,8 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     setHistoricoGlobalCarregado(false)
     setRotinaKey(key)
     setStep('active')
+    setAtual(0)
+    setSinaisDescanso({})
     setTrocaAberta(null)
     setBuscaTroca('')
     setErroTroca(null)
@@ -211,6 +228,20 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
     }
     setLoadingHistorico(false)
   }, [buscarHistoricoRecente, loadingHistorico, treinosState])
+
+  // Veio da Home com a divisão sugerida: começa direto. Treino em andamento
+  // (rascunho) tem prioridade e continua de onde parou.
+  const rotinaInicialTratada = useRef(null)
+  useEffect(() => {
+    if (!rotinaInicial || !treinosState || rotinaInicialTratada.current === rotinaInicial) return
+    rotinaInicialTratada.current = rotinaInicial
+    onRotinaInicialUsada?.()
+    let temRascunho = false
+    try { temRascunho = Boolean(localStorage.getItem(STORAGE_KEY)) } catch { /* Sem armazenamento, sem rascunho. */ }
+    if (!temRascunho && treinosState[rotinaInicial]) iniciarTreino(rotinaInicial)
+  }, [rotinaInicial, treinosState, STORAGE_KEY, iniciarTreino, onRotinaInicialUsada])
+
+  const marcarSerieFeita = exIdx => setSinaisDescanso(prev => ({ ...prev, [exIdx]: (prev[exIdx] || 0) + 1 }))
 
   const atualizar = (exIdx, campo, valor) => {
     setTopSetData(prev => prev.map((ex, i) => i === exIdx ? { ...ex, [campo]: valor, pulado: false } : { ...ex }))
@@ -428,7 +459,16 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
         <span className="treino-progress-badge">{exerciciosPreenchidos}/{topSetData.length}</span>
       </div>
 
-      <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} chaveEstado={`descanso_estado_rapido_${user.uid}`} />
+      {modo === 'lista' && (
+        <div className="exec-modo">
+          <button type="button" className="exec-modo-toggle" onClick={() => setModo('foco')}>
+            <Target size={14} aria-hidden="true" /> Modo foco
+          </button>
+        </div>
+      )}
+
+      {/* No modo foco o único cronômetro é o do exercício (com "Série feita"). */}
+      {modo === 'lista' && <DescansoTimer storageKey={`descanso_rapido_${user.uid}`} chaveEstado={`descanso_estado_rapido_${user.uid}`} />}
 
       {recuperado && (
         <div className="exec-feedback exec-feedback-info">
@@ -475,7 +515,7 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
             className="w-full" />
           {filtroBusca && <button type="button" onClick={() => setFiltroBusca('')} aria-label="Limpar busca"><X size={14} /></button>}
         </div>)
-        const cards = exercicios.map(({ ex, originalIndex }) => {
+        const cardDe = ({ ex, originalIndex }) => {
           // A regra acompanha o nome do exercício, não a posição em que ele foi criado.
           const isAgachamento = exercicioUsaRegraAgachamento(ex)
           const refKg = Number(ex.ref) > 0 ? Number(ex.ref) : null
@@ -591,7 +631,12 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
                 </div>
               )}
 
-              <DescansoTimer defaultSeconds={ex.descanso_segundos} chaveEstado={`descanso_estado_${user.uid}_${rotinaKey}_${ex.id || originalIndex}`} label="Descanso" exerciseName={ex.nome} compact />
+              <div className="exec-rest-row">
+                <DescansoTimer defaultSeconds={ex.descanso_segundos} chaveEstado={`descanso_estado_${user.uid}_${rotinaKey}_${ex.id || originalIndex}`} label="Descanso" exerciseName={ex.nome} compact sinalInicio={sinaisDescanso[originalIndex] || 0} />
+                <button type="button" className="exec-set-done" onClick={() => marcarSerieFeita(originalIndex)}>
+                  <Check size={15} strokeWidth={2.5} aria-hidden="true" /> Série feita
+                </button>
+              </div>
 
               <div className="bg-black/30 rounded-xl p-3 space-y-1.5 border border-white/5">
                 <div className="section-label mb-1.5">Protocolo</div>
@@ -655,12 +700,57 @@ export default function Execucao({ onFinish, onIrParaConfig, activeTab }) {
               </>}
             </div>
           )
-        })
+        }
+        if (modo === 'lista') return (
+          <div className="flex flex-col gap-2">
+            {busca}
+            {exercicios.map(cardDe)}
+          </div>
+        )
+        // Modo foco: um exercício por vez, com a trilha de progresso para pular entre eles.
+        const indice = Math.min(atual, topSetData.length - 1)
+        const exAtual = topSetData[indice]
+        const atualResolvido = exAtual.pulado || exercicioPreenchido(exAtual)
+        const irPara = i => {
+          setAtual(i)
+          fecharTroca()
+          const reduzir = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+          document.querySelector('.exec-foco')?.scrollIntoView({ block: 'start', behavior: reduzir ? 'auto' : 'smooth' })
+        }
         return (
-        <div className="flex flex-col gap-2">
-          {busca}
-          {cards}
-        </div>
+          <div className="exec-foco">
+            <nav className="exec-foco-trilha" aria-label="Exercícios do treino">
+              <div className="exec-foco-cabeca">
+                <span className="exec-foco-posicao">Exercício {indice + 1} de {topSetData.length}</span>
+                <button type="button" className="exec-modo-toggle" onClick={() => setModo('lista')}>
+                  <List size={14} aria-hidden="true" /> Ver lista
+                </button>
+              </div>
+              <ol>
+                {topSetData.map((item, i) => {
+                  const estado = item.pulado ? 'pulado' : exercicioPreenchido(item) ? 'feito' : 'pendente'
+                  return (
+                    <li key={`${i}-${item.nome}`}>
+                      <button type="button" onClick={() => irPara(i)} data-estado={estado}
+                        aria-current={i === indice ? 'step' : undefined}
+                        aria-label={`${i + 1}. ${item.nome}: ${estado === 'feito' ? 'preenchido' : estado === 'pulado' ? 'pulado' : 'a fazer'}`}>
+                        {estado === 'feito' ? <Check size={13} strokeWidth={3} aria-hidden="true" /> : estado === 'pulado' ? <SkipForward size={12} aria-hidden="true" /> : i + 1}
+                      </button>
+                    </li>
+                  )
+                })}
+              </ol>
+            </nav>
+            {cardDe({ ex: exAtual, originalIndex: indice })}
+            <div className="exec-foco-nav">
+              <button type="button" className="btn-secondary" onClick={() => irPara(indice - 1)} disabled={indice === 0}>
+                <ChevronLeft size={16} aria-hidden="true" /> Anterior
+              </button>
+              <button type="button" className={atualResolvido ? 'btn-primary' : 'btn-secondary'} onClick={() => irPara(indice + 1)} disabled={indice >= topSetData.length - 1}>
+                Próximo <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         )
       })()}
 

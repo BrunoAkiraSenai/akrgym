@@ -29,6 +29,32 @@ service cloud.firestore {
                    && request.resource.data.metas is map
                    && request.resource.data.refeicoes is list
                    && request.resource.data.treinos is map;
+      // Excluir a conta apaga a configuração junto (LGPD).
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // PLANO: o dono lê; só o servidor grava (cobrança futura). O app nunca
+    // consegue se dar um plano pago.
+    match /users/{userId}/conta/assinatura {
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // USO DA IA por mês (YYYY-MM): total e contagem por dia, só para cima.
+    match /users/{userId}/uso_ia/{mes} {
+      function usoValido() {
+        let d = request.resource.data;
+        return mes.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+               && d.keys().hasOnly(['total', 'porDia', 'atualizadoEm'])
+               && d.total is int
+               && d.total == (resource == null ? 1 : resource.data.total + 1)
+               && d.porDia is map
+               && d.porDia.size() <= 31;
+      }
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId && usoValido();
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // HISTORICO DE TREINOS — append-only.
@@ -65,13 +91,22 @@ service cloud.firestore {
                // A validação completa de dias por mês continua sendo responsabilidade
                // do cliente/servidor, pois as regras não possuem um parser de datas.
                && request.resource.data.data.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')
+               // O app grava cada dia no documento com o nome da própria data.
+               && request.resource.data.data == docId
+               && request.resource.data.refeicoes.size() <= 30
                && request.resource.data.extras_globais is list
                && request.resource.data.extras_globais.size() < 100
+               // Campos que o app sempre gravou com este tipo. Campos antigos desconhecidos
+               // continuam aceitos: o app os preserva ao regravar o dia.
+               && (!('planejadas' in request.resource.data)
+                   || (request.resource.data.planejadas is list && request.resource.data.planejadas.size() <= 30))
+               && (!('metas_snapshot' in request.resource.data) || request.resource.data.metas_snapshot is map)
                // Defesa em profundidade: se o documento incluir usuarioId, ele deve ser o dono.
                && (!('usuarioId' in request.resource.data)
                    || request.resource.data.usuarioId == request.auth.uid);
       }
       allow create, update: if isValidDietWrite();
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     // HISTORICO CORPORAL

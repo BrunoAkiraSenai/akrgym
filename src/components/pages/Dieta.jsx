@@ -9,6 +9,8 @@ import { useAnimatedNumber } from '../../utils/useAnimatedNumber'
 import { LIMITS, normalizarNomeAlimentoExtra, sanitizarTexto } from '../../utils/validation'
 import ConfirmModal from '../ConfirmModal'
 import ItensAnalise from '../dieta/ItensAnalise'
+import { useContaAtual } from '../../context/ContaContext'
+import { MENSAGENS_BLOQUEIO, podeUsar } from '../../utils/planos'
 import { mudarGramas, removerItem, totaisDosItens } from '../../utils/itensIA'
 import { focusTabWithArrowKey } from '../../utils/rovingTabs'
 import { Apple, Beef, CalendarDays, Check, ChevronLeft, ChevronRight, CircleCheck, CircleX, Copy, Droplets, Dumbbell, Flame, Leaf, Loader, Moon, Pencil, Plus, Settings, SkipForward, Sparkles, Sun, Utensils, Wheat, X } from 'lucide-react'
@@ -107,6 +109,8 @@ async function copiarTexto(texto) {
 
 export default function Dieta({ onIrParaConfig }) {
   const user = useUser()
+  const conta = useContaAtual()
+  const acessoIA = podeUsar(conta.plano, 'ia', { anonimo: user.isAnonymous, usoHoje: conta.uso.hoje, usoMes: conta.uso.mes })
   const [aba, setAba] = useState('diario')
   const [dataAtiva, setDataAtiva] = useState(hojeId())
   const [hoje, setHoje] = useState(null)
@@ -683,7 +687,7 @@ export default function Dieta({ onIrParaConfig }) {
                 value={aiInput} onChange={e => { ++formVersion.current; setAiInput(sanitizarTexto(e.target.value).slice(0, LIMITS.textoIA)) }}
                 className="w-full bg-neutral-800 text-white placeholder-neutral-600 p-3 rounded-xl text-sm outline-none focus:ring-2 focus:ring-cyan-400/30 resize-none" />
               <div className="diet-register-actions">
-                <button type="button" onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading} aria-busy={aiLoading}
+                <button type="button" onClick={analisarComIA} disabled={!aiInput.trim() || aiLoading || !acessoIA.permitido} aria-busy={aiLoading}
                   className="diet-ai-submit flex items-center justify-center gap-2 font-semibold py-3 rounded-xl text-sm transition active:scale-[0.97]">
                   {aiLoading ? <><Loader size={15} className="animate-spin" aria-hidden="true" /> Analisando...</> : <><Sparkles size={15} aria-hidden="true" /> Analisar com IA</>}
                 </button>
@@ -691,6 +695,12 @@ export default function Dieta({ onIrParaConfig }) {
                   <Pencil size={14} aria-hidden="true" /> Digitar valores
                 </button>
               </div>
+              {!acessoIA.permitido && (
+                <div className="diet-ai-bloqueio" role="note">
+                  <p>{MENSAGENS_BLOQUEIO[acessoIA.motivo]}</p>
+                  {acessoIA.motivo === 'conta' && conta.abrirLogin && <button type="button" onClick={conta.abrirLogin} className="btn-secondary diet-ai-bloqueio-acao">Criar conta ou entrar</button>}
+                </div>
+              )}
               {erroIA && (
                 <div role="alert" className="flex items-start justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-xs text-red-300">
                   <span>{erroIA} Se preferir, use "Digitar valores".</span>

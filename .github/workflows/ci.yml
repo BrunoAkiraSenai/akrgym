@@ -2,9 +2,10 @@ name: AkrGym CI
 
 on:
   push:
-    branches: [main, dev]
+    # QA é onde o trabalho é feito; PRD é o que está no ar.
+    branches: [QA, PRD]
   pull_request:
-    branches: [main]
+    branches: [PRD]
 
 permissions:
   contents: read
@@ -22,11 +23,12 @@ jobs:
           node-version: 22
           cache: npm
 
+      # O emulador do Firestore (firebase-tools 15) exige Java 21.
       - name: Setup Java for Firebase Emulator
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Install dependencies
         run: npm ci
@@ -39,6 +41,14 @@ jobs:
 
       - name: Firestore rules tests
         run: npm run test:rules
+
+      # Fluxos e acessibilidade no app real com Firebase falso (Chrome já vem na máquina do GitHub).
+      - name: Screen tests (lab)
+        run: npm run test:e2e
+
+      # Só o que vai para o site; ferramentas de desenvolvimento ficam de fora.
+      - name: Security audit (production dependencies)
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Production build
         run: npm run build

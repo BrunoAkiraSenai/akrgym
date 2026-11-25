@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth'
 import { auth, db } from './firebase'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { METAS_DIARIAS } from './config/dieta'
 import { UserContext } from './context/UserContext'
+import { ContaContext } from './context/ContaContext'
+import { useConta } from './utils/contaStore'
 import OnboardingWizard from './components/OnboardingWizard'
 import PageTransition from './components/PageTransition'
 import StartupSplash from './components/StartupSplash'
@@ -49,13 +51,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [initializing, setInitializing] = useState(true)
   const [abaInicialConfig, setAbaInicialConfig] = useState('treinos')
+  // Divisão escolhida na Home ("Hoje: UPPER A"): o Treinar já abre nela.
+  const [rotinaInicial, setRotinaInicial] = useState(null)
+  const limparRotinaInicial = useCallback(() => setRotinaInicial(null), [])
   const [mostrarOnboarding, setMostrarOnboarding] = useState(true)
+  const conta = useConta(user?.uid)
+  // Visitante que tocou em "Criar conta": o login abre sem sair da sessão,
+  // para o Login migrar os dados do visitante para a conta nova.
+  const [visitanteEntrando, setVisitanteEntrando] = useState(false)
 
   // Reseta o estado da UI quando o usuário muda (login/logout)
   const resetUIState = () => {
     setActiveTab('home')
     setAbaInicialConfig('treinos')
     setMostrarOnboarding(true)
+    setVisitanteEntrando(false)
     setLoading(true)
     setInitializing(true)
   }
@@ -121,7 +131,9 @@ export default function App() {
     )
   }
 
-  if (!user) return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login /></Suspense></ErrorBoundary>
+  if (!user || (user.isAnonymous && visitanteEntrando)) {
+    return <ErrorBoundary><Suspense fallback={<div className="skeleton skeleton-card" />}><Login onVoltar={user ? () => setVisitanteEntrando(false) : undefined} /></Suspense></ErrorBoundary>
+  }
 
   const abrirConfiguracao = aba => { setAbaInicialConfig(aba); setActiveTab('configurar') }
 
@@ -129,22 +141,23 @@ export default function App() {
     const pageKey = user?.uid || 'guest'
     switch (activeTab) {
       case 'home':
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={chave => { setRotinaInicial(typeof chave === 'string' ? chave : null); setActiveTab('treinar') }} onIrParaConfig={abrirConfiguracao} /></Suspense>
       case 'dieta':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Dieta onIrParaConfig={() => { setAbaInicialConfig('dieta'); setActiveTab('configurar') }} /></Suspense>
       case 'treinar':
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} onIrParaConfig={() => { setAbaInicialConfig('treinos'); setActiveTab('configurar') }} activeTab={activeTab} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Execucao onFinish={() => setActiveTab('home')} onIrParaConfig={() => { setAbaInicialConfig('treinos'); setActiveTab('configurar') }} activeTab={activeTab} rotinaInicial={rotinaInicial} onRotinaInicialUsada={limparRotinaInicial} /></Suspense>
       case 'evolucao':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Evolucao /></Suspense>
       case 'configurar':
         return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Configuracao abaInicial={abaInicialConfig} /></Suspense>
       default:
-        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={() => setActiveTab('treinar')} onIrParaConfig={abrirConfiguracao} /></Suspense>
+        return <Suspense key={pageKey} fallback={<div className="skeleton skeleton-card" />}><Home onStartWorkout={chave => { setRotinaInicial(typeof chave === 'string' ? chave : null); setActiveTab('treinar') }} onIrParaConfig={abrirConfiguracao} /></Suspense>
     }
   }
 
   return (
     <UserContext.Provider value={user}>
+      <ContaContext.Provider value={{ ...conta, abrirLogin: () => setVisitanteEntrando(true) }}>
       {mostrarOnboarding ? (
         <ErrorBoundary>
           <OnboardingWizard onComplete={() => setMostrarOnboarding(false)} />
@@ -158,6 +171,7 @@ export default function App() {
           </ErrorBoundary>
         </Layout>
       )}
+      </ContaContext.Provider>
     </UserContext.Provider>
   )
 }

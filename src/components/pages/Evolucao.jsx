@@ -574,7 +574,7 @@ export default function Evolucao() {
 
               {rotinasDisponiveis.length > 1 && (
                 <div className="relative">
-                  <select value={rotinaFiltro} onChange={e => { setRotinaFiltro(e.target.value); setTooltip(null) }}
+                  <select aria-label="Filtrar por divisão de treino" value={rotinaFiltro} onChange={e => { setRotinaFiltro(e.target.value); setTooltip(null) }}
                     className="w-full color-scheme-dark bg-neutral-900/70 backdrop-blur-md border border-white/10 text-white p-3 rounded-2xl text-sm appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition">
                     <option value="todas">Todas as rotinas</option>
                     {rotinasDisponiveis.map(id => <option key={id} value={id}>{nomeRotina(id)}</option>)}
@@ -653,7 +653,7 @@ export default function Evolucao() {
                         </button>
                       ))}
                     </div>
-                    <select value={janelaGrafico} onChange={event => { setJanelaGrafico(event.target.value); setTooltip(null) }}
+                    <select aria-label="Período do gráfico" value={janelaGrafico} onChange={event => { setJanelaGrafico(event.target.value); setTooltip(null) }}
                       className="color-scheme-dark rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-[10px] text-neutral-300 outline-none focus:border-[var(--brand)]/50">
                       <option value="todos">Todos os registros</option>
                       <option value="6">Últimos 6</option>
@@ -901,7 +901,7 @@ export default function Evolucao() {
                 <Activity size={12} className="text-cyan-400" /> Evolução Gráfica
               </span>
               <div className="relative mb-2">
-                <select value={medidaGrafico} onChange={e => setMedidaGrafico(e.target.value)}
+                <select aria-label="Medida exibida no gráfico" value={medidaGrafico} onChange={e => setMedidaGrafico(e.target.value)}
                   className="w-full bg-neutral-800 text-white p-3 rounded-xl text-xs appearance-none outline-none focus:ring-2 focus:ring-cyan-400/30 transition">
                   {CAMPOS_MEDIDA.map(c => <option key={c.key} value={c.key}>{c.label} ({c.unidade})</option>)}
                 </select>

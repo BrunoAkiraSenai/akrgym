@@ -17,13 +17,60 @@
     <meta name="theme-color" content="#050807" />
     <meta name="apple-touch-fullscreen" content="yes" />
     <link rel="apple-touch-startup-image" href="/splash.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <!--
+      Tela de abertura desenhada pelo próprio HTML, antes do JavaScript carregar
+      (antes ficava ~3 s em branco no celular). O React troca pela mesma tela
+      (StartupSplash.jsx) e a animação continua de onde parou.
+      Estilos da abertura moram só aqui; cores por tema espelham src/utils/themes.js
+      (teste: tests/splash-inicial.unit.spec.js).
+    -->
+    <script>
+      (function () {
+        var cores = {"roxo-suave":["#07050c","#ffffff","#a89db5","157,106,205"],"esmeralda":["#050807","#ffffff","#9ca3af","49,132,104"],"oceano":["#050709","#ffffff","#9ca3af","86,129,199"],"lava":["#f4f5f3","#2b1a15","#765c50","191,113,60"],"original":["#050505","#ffffff","#a3a3a3","16,185,129"]};
+        var tema = 'esmeralda';
+        try { var salvo = localStorage.getItem('akrgym-theme'); if (cores[salvo]) tema = salvo } catch (e) { /* sem armazenamento: tema padrão */ }
+        var c = cores[tema], s = document.documentElement.style;
+        s.setProperty('--bg-deep', c[0]); s.setProperty('--text-primary', c[1]);
+        s.setProperty('--text-secondary', c[2]); s.setProperty('--brand-rgb', c[3]);
+        s.colorScheme = tema === 'lava' ? 'light' : 'dark';
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', c[0]);
+      })();
+    </script>
+    <style>
+      html, body { margin: 0; background: var(--bg-deep, #050807); }
+      .startup-splash { position: fixed; inset: 0; z-index: 1100; display: grid; min-height: 100dvh; place-items: center; box-sizing: border-box; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); overflow: hidden; background: var(--bg-deep, #050807); color: var(--text-primary, #fff); font-family: 'Archivo', system-ui, sans-serif; }
+      .startup-splash__brand { display: grid; justify-items: center; text-align: center; }
+      .startup-splash__mark { width: clamp(96px, 24vw, 132px); aspect-ratio: 1; overflow: hidden; border: 1px solid rgba(var(--brand-rgb, 49, 132, 104), 0.2); border-radius: 25%; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24); }
+      .startup-splash__mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
+      .startup-splash__wordmark { margin-top: 22px; font-size: clamp(1.35rem, 5vw, 1.65rem); font-weight: 700; letter-spacing: 0.14em; }
+      .startup-splash__tagline { margin: 6px 0 0; color: var(--text-secondary, #9ca3af); font-family: 'Manrope', system-ui, sans-serif; font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; }
+      .startup-splash__waiting { position: absolute; bottom: max(32px, env(safe-area-inset-bottom)); margin: 0; color: var(--text-secondary, #9ca3af); font-family: 'Manrope', system-ui, sans-serif; font-size: 0.75rem; letter-spacing: 0.04em; }
+      .startup-splash__waiting::before { display: inline-block; width: 24px; height: 1px; margin: 0 9px 3px 0; background: var(--brand-bright, rgb(var(--brand-rgb, 49, 132, 104))); content: ''; transform-origin: left center; animation: startup-wait-line 1.1s ease-in-out infinite alternate; }
+      /* --splash-decorrido: tempo desde que o HTML desenhou a abertura; o React usa para não reiniciar a animação. */
+      .startup-splash[data-animated='true'] .startup-splash__mark { clip-path: circle(0% at 50% 50%); animation: startup-mark-reveal 820ms cubic-bezier(0.16, 1, 0.3, 1) calc(80ms - var(--splash-decorrido, 0ms)) forwards; }
+      .startup-splash[data-animated='true'] .startup-splash__wordmark { opacity: 0; transform: translateY(10px); animation: startup-wordmark-reveal 520ms cubic-bezier(0.16, 1, 0.3, 1) calc(620ms - var(--splash-decorrido, 0ms)) forwards; }
+      .startup-splash[data-animated='true'] .startup-splash__tagline { opacity: 0; transform: translateY(7px); animation: startup-tagline-reveal 420ms cubic-bezier(0.16, 1, 0.3, 1) calc(920ms - var(--splash-decorrido, 0ms)) forwards; }
+      @keyframes startup-mark-reveal {
+        0% { clip-path: circle(0% at 50% 50%); opacity: 0; transform: scale(0.78) rotate(-5deg); filter: blur(5px); }
+        72% { clip-path: circle(60% at 50% 50%); opacity: 1; filter: blur(0); }
+        100% { clip-path: circle(75% at 50% 50%); opacity: 1; transform: scale(1) rotate(0); filter: blur(0); }
+      }
+      @keyframes startup-wordmark-reveal { to { opacity: 1; transform: translateY(0); } }
+      @keyframes startup-tagline-reveal { to { opacity: 1; transform: translateY(0); } }
+      @keyframes startup-wait-line { from { transform: scaleX(0.35); opacity: 0.45; } to { transform: scaleX(1); opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        .startup-splash[data-animated='true'] .startup-splash__mark,
+        .startup-splash[data-animated='true'] .startup-splash__wordmark,
+        .startup-splash[data-animated='true'] .startup-splash__tagline,
+        .startup-splash__waiting::before { animation: none; }
+        .startup-splash[data-animated='true'] .startup-splash__mark { clip-path: circle(75% at 50% 50%); opacity: 1; transform: none; filter: none; }
+        .startup-splash[data-animated='true'] .startup-splash__wordmark,
+        .startup-splash[data-animated='true'] .startup-splash__tagline { opacity: 1; transform: none; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><script>window.__akrSplashT0 = performance.now()</script><div class="startup-splash" data-animated="true" role="status" aria-live="polite" aria-busy="true" aria-label="Carregando AkrGym"><div class="startup-splash__brand" aria-hidden="true"><div class="startup-splash__mark"><img src="/pwa-192x192.png" width="192" height="192" alt="" /></div><div class="startup-splash__wordmark">AkrGym</div><p class="startup-splash__tagline">Treino, dieta e evolução</p></div></div></div>
     <noscript>O AkrGym precisa de JavaScript ativado para registrar treinos e acompanhar sua evolução.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>

@@ -18,6 +18,17 @@ test('Worker mantém a chave Gemini no ambiente e valida os tokens Firebase', ()
   assert.match(worker, /JWKS_TIMEOUT_MS = 8_000/)
 })
 
+test('Worker recusa visitante anônimo antes de gastar a IA', async () => {
+  const { contaAnonima } = await import('../cloudflare-worker/analisar-refeicao/src/index.js')
+  assert.equal(contaAnonima({ firebase: { sign_in_provider: 'anonymous' } }), true)
+  assert.equal(contaAnonima({ firebase: { sign_in_provider: 'google.com' } }), false)
+  assert.equal(contaAnonima({ firebase: { sign_in_provider: 'password' } }), false)
+  const worker = read('cloudflare-worker/analisar-refeicao/src/index.js')
+  // O bloqueio vem antes do limite de requisições e da chamada ao Gemini.
+  assert.ok(worker.indexOf('contaAnonima(authPayload)') < worker.indexOf('rateLimit(authPayload.sub)'))
+  assert.match(read('src/utils/gemini.js'), /response\.status === 403 && payload\._motivo === 'conta'/)
+})
+
 test('Worker devolve totais no formato antigo e o detalhe por item', async () => {
   const { sanitizeModelResponse } = await import('../cloudflare-worker/analisar-refeicao/src/index.js')
   const resposta = JSON.stringify({ valido: true, itens: [{ alimento: 'feijao carioca', estado: 'cozido', estado_informado: true, gramas: 100, gramas_estimadas: false, kcal: 90, p: 6, c: 15, g: 1, fibras: 7 }] })

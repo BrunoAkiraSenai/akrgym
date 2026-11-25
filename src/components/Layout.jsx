@@ -45,14 +45,16 @@ export default function Layout({ activeTab, onTabChange, children }) {
 
   return (
     <div className="flex flex-col h-full max-w-full md:max-w-2xl lg:max-w-4xl mx-auto md:my-4 md:h-[calc(100vh-2rem)] relative">
-      <main className="flex-1 overflow-y-auto px-4 sm:px-6 pt-6 pb-28 scrollbar-thin"
-        style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))', paddingBottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}>
+      {/* A barra ocupa a própria linha abaixo do conteúdo (.aether-nav é position: relative),
+          então o conteúdo não passa por trás dela e não precisa de espaço extra no fim. */}
+      <main className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 pt-6 pb-6 scrollbar-thin"
+        style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top, 1.5rem))' }}>
         {children}
       </main>
 
       <nav
         ref={navRef}
-        className="aether-nav fixed bottom-0 left-0 right-0 md:absolute md:bottom-4 md:left-4 md:right-4 rounded-3xl h-16 flex items-center justify-around px-2 mx-3 md:mx-auto md:max-w-2xl lg:max-w-4xl mb-0 md:mb-4 z-50"
+        className="aether-nav shrink-0 rounded-3xl h-16 flex items-center justify-around px-2 mx-3 md:mx-auto md:max-w-2xl lg:max-w-4xl mb-0 md:mt-2 z-50"
         aria-label="Navegação principal"
         style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom, 0px))', paddingTop: '6px', height: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
       >
