@@ -25,9 +25,12 @@ test('cores da abertura em app.html acompanham os temas do app', () => {
 })
 
 test('abertura aparece no HTML antes do JavaScript', () => {
-  const root = html.match(/<div id="root">([\s\S]*?)<\/div>\s*<noscript>/)
-  assert.ok(root, 'app.html deve ter #root antes do noscript')
+  const root = html.match(/<div id="root">([\s\S]*?)<\/div>\s*<(?:script|noscript)>/)
+  assert.ok(root, 'app.html deve ter #root antes dos scripts finais')
   assert.match(root[1], /class="startup-splash"/)
   assert.match(root[1], /__akrSplashT0/)
   assert.doesNotMatch(html, /fonts\.googleapis\.com/, 'fontes vêm do próprio site')
+  // Se o app não carregar, a abertura do HTML oferece recarregar.
+  assert.match(root[1], /data-estatico="true"/)
+  assert.match(html, /Não foi possível abrir o AkrGym[\s\S]*location\.reload\(\)/)
 })
