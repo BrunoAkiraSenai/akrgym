@@ -181,7 +181,7 @@ function verifyAppCheckToken(token, projectNumber, appId) {
 }
 
 function allowedOrigins(env) {
-  return String(env.ALLOWED_ORIGINS || 'https://akrgym.web.app,https://akrgym.firebaseapp.com')
+  return String(env.ALLOWED_ORIGINS || 'https://akrgym.com,https://www.akrgym.com,https://akrgym.web.app,https://akrgym.firebaseapp.com')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean)

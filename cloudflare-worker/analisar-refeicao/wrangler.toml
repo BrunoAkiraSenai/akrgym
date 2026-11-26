@@ -11,7 +11,7 @@ head_sampling_rate = 0.1
 FIREBASE_PROJECT_ID = "akrgym"
 FIREBASE_PROJECT_NUMBER = "272661727889"
 FIREBASE_APP_ID = "1:272661727889:web:532c4b51c35afa28d64d30"
-ALLOWED_ORIGINS = "https://akrgym.web.app,https://akrgym.firebaseapp.com"
+ALLOWED_ORIGINS = "https://akrgym.com,https://www.akrgym.com,https://akrgym.web.app,https://akrgym.firebaseapp.com"
 ALLOW_LOCAL_ORIGIN = "false"
 # Análises de IA por pessoa por dia (horário de Brasília). Contagem no KV USO_IA.
 LIMITE_IA_DIA = "20"
