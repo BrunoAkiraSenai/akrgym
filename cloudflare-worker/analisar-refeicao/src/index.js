@@ -5,6 +5,8 @@ const DEFAULT_PROJECT_ID = 'akrgym'
 const DEFAULT_PROJECT_NUMBER = '272661727889'
 const DEFAULT_APP_ID = '1:272661727889:web:532c4b51c35afa28d64d30'
 const MODEL_NAME = 'gemini-2.5-flash'
+// Modelo reserva, usado só quando o principal está sobrecarregado (503) ou sem cota (429).
+const FALLBACK_MODEL_NAME = 'gemini-2.5-flash-lite'
 const AUTH_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 const APP_CHECK_JWKS_URL = 'https://firebaseappcheck.googleapis.com/v1/jwks'
 const MAX_TEXT_CHARS = 500
@@ -359,11 +361,45 @@ function textoParaPrompt(text) {
   return text.replace(/\t+/g, ' ').replace(/\s*[\r\n]+\s*/g, '; ').replace(/ {2,}/g, ' ').replace(/"/g, "'").trim()
 }
 
-async function callGemini(text, apiKey) {
+// Falhas passageiras do Gemini: sobrecarga (503 é a mais comum), erro interno e gateway.
+const STATUS_TEMPORARIOS = new Set([500, 502, 503, 504])
+const espera = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+// Tenta o modelo principal até 2 vezes (pausa curta entre elas) e, se ele seguir
+// sobrecarregado ou sem cota, o modelo reserva uma vez. Erro do pedido (400,
+// 403...) não se repete. Tudo dentro do mesmo prazo total de REQUEST_TIMEOUT_MS.
+export async function callGemini(text, apiKey, { fetcher = fetch, aguardar = espera, modelos = [MODEL_NAME, MODEL_NAME, FALLBACK_MODEL_NAME], pausas = [700, 1200] } = {}) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  let ultimoErro
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`, {
+    for (const [i, modelo] of modelos.entries()) {
+      if (i > 0) {
+        const anterior = ultimoErro?.status
+        const mesmoModelo = modelo === modelos[i - 1]
+        // Sem cota (429) não adianta repetir o mesmo modelo; só o reserva.
+        if (anterior === 429 && mesmoModelo) continue
+        if (anterior !== 429 && !STATUS_TEMPORARIOS.has(anterior) && !ultimoErro?.rede) break
+        if (mesmoModelo) await aguardar(pausas[Math.min(i - 1, pausas.length - 1)])
+      }
+      try {
+        return await chamarModelo(modelo, text, apiKey, controller.signal, fetcher)
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error
+        ultimoErro = error
+        console.warn('analisarRefeicao tentativa falhou:', modelo, String(error?.message || error).slice(0, 80))
+      }
+    }
+    throw ultimoErro
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function chamarModelo(modelo, text, apiKey, signal, fetcher) {
+  let response
+  try {
+    response = await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
@@ -379,14 +415,16 @@ async function callGemini(text, apiKey) {
           thinkingConfig: { thinkingBudget: 0 },
         },
       }),
-      signal: controller.signal,
+      signal,
     })
-    if (!response.ok) throw new Error(`Gemini HTTP ${response.status}`)
-    const body = await response.json()
-    return body?.candidates?.[0]?.content?.parts?.[0]?.text
-  } finally {
-    clearTimeout(timeout)
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error
+    // Falha de rede entre o Worker e o Google: vale tentar de novo.
+    throw Object.assign(new Error('Gemini rede'), { rede: true })
   }
+  if (!response.ok) throw Object.assign(new Error(`Gemini HTTP ${response.status}`), { status: response.status })
+  const body = await response.json()
+  return body?.candidates?.[0]?.content?.parts?.[0]?.text
 }
 
 export default {
@@ -446,8 +484,10 @@ export default {
       if (usados !== null && usados >= limite) {
         return json({ _erro: mensagemLimiteDiario(limite), _motivo: 'limite', _limite: limite }, 429, origin)
       }
+      const resposta = await callGemini(text, env.GEMINI_API_KEY)
+      // Só conta no limite do dia quando o Gemini respondeu; falha do Google não gasta análise.
       if (usados !== null) await somarUsoDiarioIA(env.USO_IA, authPayload.sub, usados).catch(() => {})
-      const { result, motivo } = sanitizeModelResponse(await callGemini(text, env.GEMINI_API_KEY), text)
+      const { result, motivo } = sanitizeModelResponse(resposta, text)
       if (!result) {
         // Só o motivo vai para o log; a descrição da refeição não é registrada.
         console.warn('analisarRefeicao recusado:', motivo)
@@ -459,7 +499,7 @@ export default {
         ? 'timeout'
         : String(error?.message || 'upstream').slice(0, 160)
       console.warn('analisarRefeicao erro:', detalheErro)
-      if (/^Gemini HTTP 429$/.test(String(error?.message || ''))) {
+      if (error?.status === 429) {
         return json({ _erro: 'Limite da API de IA atingido. Aguarde a renovação da cota e tente novamente.' }, 429, origin)
       }
       return json({ _erro: FALLBACK_ERROR }, error?.name === 'AbortError' ? 504 : 502, origin)
