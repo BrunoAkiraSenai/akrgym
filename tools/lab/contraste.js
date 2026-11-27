@@ -86,7 +86,7 @@ window.__contraste = function () {
 
 // Percorre as telas principais clicando na navegação (1º rótulo) e nas abas
 // internas (demais rótulos), e junta o resultado. Ex.: await __varrer()
-const TELAS = [[], ['Dieta'], ['Dieta', 'Estat'], ['Dieta', 'Amigos'], ['Treinar'], ['Evolu'], ['Evolu', 'Medidas'], ['Configurar'], ['Configurar', 'Dieta']]
+const TELAS = [[], ['Dieta'], ['Dieta', 'Estat'], ['Dieta', 'Amigos'], ['Treinar'], ['Evolu'], ['Evolu', 'Medidas'], ['Configurar'], ['Configurar', 'Editar'], ['Configurar', 'Dieta'], ['Configurar', 'Conta']]
 const espera = (ms) => new Promise((r) => setTimeout(r, ms))
 const semAcento = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
 function clicar(rotulo, dentro) {

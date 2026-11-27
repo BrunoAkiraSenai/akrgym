@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../../firebase'
-import { ArrowDown, ArrowUp, Save, Plus, AlertTriangle, Loader, ChevronDown, ChevronRight, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, ShieldCheck, Download, Clock3 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, AlertTriangle, Loader, ChevronDown, X, Trash, LogOut, UserCircle, Sparkles, RefreshCw, Palette, Dumbbell, Apple, CheckCircle2, Download, Clock3, Copy, Pencil, Check, CircleDot, Timer, Settings2, NotebookPen, Flame } from 'lucide-react'
 import { useUser } from '../../context/UserContext'
 import { calcularMacrosIA } from '../../utils/gemini'
 import { THEMES, useTheme } from '../../utils/themes'
@@ -11,7 +11,7 @@ import { LIMITE_NOTA, comNomesGravaveis, prepararConfigParaSalvar } from '../../
 import ContaPlano, { ExcluirConta } from '../conta/ContaPlano'
 import { focusTabWithArrowKey } from '../../utils/rovingTabs'
 import { dataTreinoParaDate, normalizarMetaSemanal } from '../../utils/fitness'
-import { exerciseId, garantirIdsExercicios, gerarIdRotina, moverRotina, nomesDeExerciciosCompativeis, novoIdExercicio, ordenarRotinas, reordenarExercicios, valoresDoExercicio } from '../../utils/workoutSession'
+import { duplicarRotina, estimarDuracaoMinutos, exerciseId, garantirIdsExercicios, gerarIdRotina, moverRotina, nomesDeExerciciosCompativeis, novoIdExercicio, ordenarRotinas, reordenarExercicios, sugerirProximaDivisao, valoresDoExercicio } from '../../utils/workoutSession'
 import ConfirmModal from '../ConfirmModal'
 
 function gerarIdRefeicao() {
@@ -65,13 +65,15 @@ export default function Configuracao({ abaInicial }) {
   const [campoBuscaExercicio, setCampoBuscaExercicio] = useState(null)
   const [erroCatalogoExercicios, setErroCatalogoExercicios] = useState(null)
   const [alteracaoPendente, setAlteracaoPendente] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [erro, setErro] = useState(null)
   const [sucesso, setSucesso] = useState(null)
   const [sincronizando, setSincronizando] = useState(false)
   const [exportando, setExportando] = useState(false)
   const [aba, setAba] = useState(abaInicial || 'treinos')
   const [expandedKey, setExpandedKey] = useState(null)
+  const [expandedMeal, setExpandedMeal] = useState(null)
+  // Divisão que a Home sugere como próxima (pela ordem e pelo último treino).
+  const [proximaChave, setProximaChave] = useState(null)
   const [showNewRoutine, setShowNewRoutine] = useState(false)
   const [newNome, setNewNome] = useState('')
   const [textoAlimentos, setTextoAlimentos] = useState({})
@@ -90,11 +92,26 @@ export default function Configuracao({ abaInicial }) {
   const aiSequenceRef = useRef(0)
   // Última versão que está no banco: referência para nomes apagados no meio da digitação.
   const salvoRef = useRef(null)
+  // Indicador do cabeçalho: só mostra "salvo" depois que o banco confirmou a gravação,
+  // com o horário dessa confirmação (ou o do último salvamento guardado no plano).
+  const [salvamento, setSalvamento] = useState({ estado: 'salvo', em: null })
+  const gravacoesRef = useRef(0)
 
   const gravarConfig = useCallback(async (novo) => {
-    const dados = prepararConfigParaSalvar(comNomesGravaveis(novo, salvoRef.current))
-    await setDoc(CONFIG_REF(user.uid), dados)
-    salvoRef.current = dados
+    gravacoesRef.current += 1
+    setSalvamento(atual => ({ ...atual, estado: 'salvando' }))
+    try {
+      const agora = new Date()
+      const dados = { ...prepararConfigParaSalvar(comNomesGravaveis(novo, salvoRef.current)), atualizadoEm: agora }
+      await setDoc(CONFIG_REF(user.uid), dados)
+      salvoRef.current = dados
+      gravacoesRef.current -= 1
+      if (mountedRef.current) setSalvamento(atual => (gravacoesRef.current > 0 ? atual : { estado: 'salvo', em: agora }))
+    } catch (err) {
+      gravacoesRef.current -= 1
+      if (mountedRef.current) setSalvamento(atual => ({ estado: 'erro', em: atual.em }))
+      throw err
+    }
   }, [user.uid])
 
   useEffect(() => {
@@ -151,6 +168,7 @@ export default function Configuracao({ abaInicial }) {
         refs.forEach(r => { init[r.id] = (r.alimentos || []).join(', ') })
         setTextoAlimentos(init)
         setAlteracaoPendente(false)
+        setSalvamento({ estado: 'salvo', em: dataTreinoParaDate(snap.data().atualizadoEm) })
         loadedUidRef.current = user.uid
         setConfigCarregada(true)
       }
@@ -164,16 +182,28 @@ export default function Configuracao({ abaInicial }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { carregar() }, [carregar])
 
+  // Últimos treinos (só 10 leituras) para marcar a próxima divisão da ordem.
+  const ultimosTreinosRef = useRef(null)
+  useEffect(() => {
+    if (!configCarregada) return
+    let ativo = true
+    ultimosTreinosRef.current ||= getDocs(query(collection(db, 'users', user.uid, 'historico_treinos'), orderBy('data', 'desc'), limit(10)))
+      .then(snap => snap.docs.map(item => item.data()))
+      .catch(() => [])
+    ultimosTreinosRef.current.then(historico => { if (ativo) setProximaChave(sugerirProximaDivisao(config.treinos, historico)?.chave ?? null) })
+    return () => { ativo = false }
+  }, [configCarregada, config.treinos, user.uid])
 
+
+  // "Tentar de novo" do indicador: grava o que está na tela agora.
   const salvar = async (novo) => {
     if (loading || loadedUidRef.current !== user.uid) return
-    setSaving(true); setErro(null); setSucesso(null)
+    setErro(null); setSucesso(null)
     try {
       await gravarConfig(novo)
       if (configRef.current === novo) setAlteracaoPendente(false)
-      mostrarSucesso(exercicioSemNome(novo) ? 'Alterações salvas. Exercício sem nome só é salvo depois de ganhar um nome.' : 'Alterações salvas com sucesso.')
-    } catch (err) { setErro(err.message); setSaving(false); return }
-    setSaving(false)
+      if (exercicioSemNome(novo)) mostrarSucesso('Salvo. Exercício sem nome só é salvo depois de ganhar um nome.')
+    } catch (err) { setErro(err.message) }
   }
 
   const addRoutine = async () => {
@@ -218,12 +248,56 @@ export default function Configuracao({ abaInicial }) {
     })
   }
 
+  // Exclusões: se o banco recusar, a tela volta ao que estava (antes sumia só da tela).
   const deleteRoutine = async (key) => {
-    const n = { ...config, treinos: { ...config.treinos } }
+    const anterior = configRef.current
+    const n = { ...anterior, treinos: { ...anterior.treinos } }
     delete n.treinos[key]
+    configRef.current = n
     setConfig(n)
-    try { await gravarConfig(n); mostrarSucesso(`Divisão "${config.treinos[key]?.nome || key}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await gravarConfig(n); mostrarSucesso(`Divisão "${anterior.treinos[key]?.nome || key}" excluída.`) } catch (err) {
+      configRef.current = anterior
+      setConfig(anterior)
+      setErro('Não foi possível excluir: ' + err.message)
+      return
+    }
     if (expandedKey === key) setExpandedKey(null)
+  }
+
+  const duplicarDivisao = async (key) => {
+    const anterior = configRef.current
+    const { treinos, chave } = duplicarRotina(anterior.treinos, key)
+    if (!chave) return
+    const n = { ...anterior, treinos }
+    pendingFocusRef.current = { type: 'routine', key: chave }
+    configRef.current = n
+    setConfig(n)
+    try {
+      await gravarConfig(n)
+      mostrarSucesso(`"${treinos[chave].nome}" criada. Renomeie e ajuste como quiser.`)
+      setExpandedKey(chave)
+    } catch (err) {
+      pendingFocusRef.current = null
+      configRef.current = anterior
+      setConfig(anterior)
+      setErro('Não foi possível duplicar: ' + err.message)
+    }
+  }
+
+  const renomearDivisao = (key, nome) => {
+    const n = { ...config, treinos: { ...config.treinos, [key]: { ...config.treinos[key], nome } } }
+    configRef.current = n
+    setConfig(n)
+    setAlteracaoPendente(true)
+  }
+
+  // "Concluir": grava agora o que ainda estiver pendente e fecha o editor.
+  const concluirEdicao = async () => {
+    if (alteracaoPendente) {
+      try { await gravarConfig(configRef.current); setAlteracaoPendente(false) } catch (err) { setErro('Erro ao salvar: ' + err.message); return }
+    }
+    setExpandedKey(null)
+    setExpandedMeal(null)
   }
 
   // Nasce em branco, com o foco no nome; vai para o banco quando ganhar nome (autosave).
@@ -375,10 +449,16 @@ export default function Configuracao({ abaInicial }) {
   }
 
   const deleteExercise = async (key, idx) => {
-    const n = { ...config, treinos: { ...config.treinos } }
+    const anterior = configRef.current
+    const n = { ...anterior, treinos: { ...anterior.treinos } }
     n.treinos[key] = { ...n.treinos[key], exercicios: n.treinos[key].exercicios.filter((_, i) => i !== idx) }
+    configRef.current = n
     setConfig(n)
-    try { await gravarConfig(n); mostrarSucesso('Exercício excluído.') } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await gravarConfig(n); mostrarSucesso('Exercício excluído.') } catch (err) {
+      configRef.current = anterior
+      setConfig(anterior)
+      setErro('Não foi possível excluir: ' + err.message)
+    }
   }
 
   const updateMeta = (campo, valor) => {
@@ -424,21 +504,41 @@ export default function Configuracao({ abaInicial }) {
   }, [user.uid])
 
   const addRefeicao = async () => {
+    const anterior = configRef.current
     const id = gerarIdRefeicao()
-    const refeicoes = [...(config.refeicoes || []), { id, nome: 'Nova Refeição', horario: '00:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 }]
-    const n = { ...config, refeicoes }
+    const refeicoes = [...(anterior.refeicoes || []), { id, nome: 'Nova refeição', horario: '12:00', alimentos: [], kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 }]
+    const n = { ...anterior, refeicoes }
     pendingFocusRef.current = { type: 'meal', key: id }
     setConfig(n)
-    try { await gravarConfig(n); mostrarSucesso('Refeição adicionada.') } catch (err) { pendingFocusRef.current = null; setErro('Erro ao salvar: ' + err.message) }
+    setExpandedMeal(id)
+    try { await gravarConfig(n); mostrarSucesso('Refeição adicionada.') } catch (err) {
+      pendingFocusRef.current = null
+      setConfig(anterior)
+      setErro('Não foi possível adicionar: ' + err.message)
+    }
   }
 
-  const deleteRefeicao = async (idx) => {
+  // Mesma confirmação do app usada nas divisões (window.confirm é bloqueado em alguns celulares).
+  const pedirExclusaoRefeicao = (idx) => {
     const ref = (config.refeicoes || [])[idx]
     if (!ref) return
-    if (!window.confirm(`Deseja excluir a refeição "${ref.nome}"? Os dados históricos não serão afetados.`)) return
-    const n = { ...config, refeicoes: (config.refeicoes || []).filter((_, i) => i !== idx) }
+    setConfirmacao({
+      title: 'Excluir refeição?',
+      message: `"${ref.nome || 'Esta refeição'}" sai do seu plano. Os dias já registrados no diário continuam como estão.`,
+      onConfirm: () => deleteRefeicao(ref.id),
+    })
+  }
+
+  const deleteRefeicao = async (id) => {
+    const anterior = configRef.current
+    const ref = (anterior.refeicoes || []).find(r => r.id === id)
+    if (!ref) return
+    const n = { ...anterior, refeicoes: (anterior.refeicoes || []).filter(r => r.id !== id) }
     setConfig(n)
-    try { await gravarConfig(n); mostrarSucesso(`Refeição "${ref.nome}" excluída.`) } catch (err) { setErro('Erro ao salvar: ' + err.message) }
+    try { await gravarConfig(n); mostrarSucesso(`Refeição "${ref.nome}" excluída.`) } catch (err) {
+      setConfig(anterior)
+      setErro('Não foi possível excluir: ' + err.message)
+    }
   }
 
   const sincronizarMetas = async () => {
@@ -533,39 +633,124 @@ export default function Configuracao({ abaInicial }) {
   const nomesExerciciosConfig = (campoIgnorado) => Object.entries(config.treinos || {})
     .flatMap(([key, treino]) => (treino?.exercicios || []).map((exercicio, idx) => `${key}:${idx}` === campoIgnorado ? null : exercicio?.nome).filter(Boolean))
 
+  const formatarDescanso = segundos => (segundos < 60 ? `${segundos}s` : segundos % 60 ? `${Math.floor(segundos / 60)} min ${segundos % 60}s` : `${segundos / 60} min`)
+  const horaDoSalvamento = em => {
+    if (!(em instanceof Date) || Number.isNaN(em.getTime())) return null
+    const hora = em.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    return em.toDateString() === new Date().toDateString() ? `Hoje às ${hora}` : `${em.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${hora}`
+  }
+  // O que o indicador mostra: gravação em andamento e erro vencem; depois, edição ainda não enviada.
+  const estadoVisivel = salvamento.estado === 'salvando' ? 'salvando' : salvamento.estado === 'erro' ? 'erro' : alteracaoPendente ? 'pendente' : 'salvo'
+  const textoSalvamento = {
+    salvo: { titulo: 'Tudo salvo', detalhe: horaDoSalvamento(salvamento.em) || 'Na sua conta', Icone: CheckCircle2 },
+    salvando: { titulo: 'Salvando...', detalhe: 'Enviando para a sua conta', Icone: Loader },
+    pendente: { titulo: 'Alterações pendentes', detalhe: 'Salvando em instantes', Icone: CircleDot },
+    erro: { titulo: 'Erro ao salvar', detalhe: 'As últimas alterações não foram salvas', Icone: AlertTriangle },
+  }[estadoVisivel]
+  const somaRefeicoes = (config.refeicoes || []).reduce((acc, r) => ({ kcal: acc.kcal + numeroNutricional(r.kcal), proteinas: acc.proteinas + numeroNutricional(r.proteinas), carboidratos: acc.carboidratos + numeroNutricional(r.carboidratos), gorduras: acc.gorduras + numeroNutricional(r.gorduras), fibras: acc.fibras + numeroNutricional(r.fibras) }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 })
+  const diferencaKcal = Math.round(somaRefeicoes.kcal - numeroNutricional(config.metas?.kcal))
+  const abas = [
+    { id: 'treinos', rotulo: 'Treinos', Icone: Dumbbell, total: totalTreinos },
+    { id: 'dieta', rotulo: 'Dieta', Icone: Apple, total: totalRefeicoes },
+    { id: 'conta', rotulo: 'Conta', Icone: Settings2, total: null },
+  ]
+
   return (
     <div className="settings-page flex flex-col gap-4 pt-2 pb-6">
-      <header className="settings-header">
-        <div>
-          <p className="settings-kicker">Painel de controle</p>
+      <header className="cfg-header">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-white">Configurações</h1>
-          <p className="mt-1 max-w-[38rem] text-xs leading-relaxed text-neutral-500">Ajuste seu plano, suas metas e a forma como o AkrGym acompanha sua rotina.</p>
+          <p className="mt-1 text-xs leading-relaxed text-neutral-500">Monte seus treinos, organize sua dieta e ajuste sua conta.</p>
         </div>
-        <div className="settings-header-mark" aria-hidden="true"><ShieldCheck size={19} /></div>
+        {configCarregada && (
+          <div className={`cfg-save-status is-${estadoVisivel}`} role="status" aria-live="polite">
+            <textoSalvamento.Icone size={18} aria-hidden="true" className={estadoVisivel === 'salvando' ? 'animate-spin' : ''} />
+            <span><strong>{textoSalvamento.titulo}</strong><small>{textoSalvamento.detalhe}</small></span>
+            {estadoVisivel === 'erro' && <button type="button" onClick={() => salvar(configRef.current)} className="cfg-save-retry">Tentar de novo</button>}
+          </div>
+        )}
       </header>
 
-      <div className="settings-tabs" role="tablist" aria-label="Seções de configuração">
-        <button id="settings-tab-treinos" type="button" role="tab" aria-controls="settings-panel-treinos" aria-selected={aba === 'treinos'} tabIndex={aba === 'treinos' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba('treinos')} className={`settings-tab ${aba === 'treinos' ? 'settings-tab-active' : ''}`}>
-          <Dumbbell size={15} /> <span>Treinos</span><small>{totalTreinos}</small>
-        </button>
-        <button id="settings-tab-dieta" type="button" role="tab" aria-controls="settings-panel-dieta" aria-selected={aba === 'dieta'} tabIndex={aba === 'dieta' ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba('dieta')} className={`settings-tab ${aba === 'dieta' ? 'settings-tab-active' : ''}`}>
-          <Apple size={15} /> <span>Dieta</span><small>{totalRefeicoes}</small>
-        </button>
+      <div className="settings-tabs cfg-tabs" role="tablist" aria-label="Seções de configuração">
+        {abas.map(({ id, rotulo, Icone, total }) => (
+          <button key={id} id={`settings-tab-${id}`} type="button" role="tab" aria-controls={`settings-panel-${id}`} aria-selected={aba === id} tabIndex={aba === id ? 0 : -1} onKeyDown={focusTabWithArrowKey} onClick={() => setAba(id)} className={`settings-tab ${aba === id ? 'settings-tab-active' : ''}`}>
+            <Icone size={15} aria-hidden="true" /> <span>{rotulo}</span>{total !== null && <small>{total}</small>}
+          </button>
+        ))}
       </div>
 
       {erro && <div className="settings-feedback settings-feedback-error" role="alert"><AlertTriangle size={16} /><span>{erro}</span><button type="button" onClick={() => setErro(null)} aria-label="Fechar aviso"><X size={14} /></button></div>}
       {sucesso && <div className="settings-feedback settings-feedback-success" role="status" aria-live="polite"><CheckCircle2 size={16} /><span>{sucesso}</span></div>}
 
-      <div role="tabpanel" id={aba === 'treinos' ? 'settings-panel-treinos' : 'settings-panel-dieta'} aria-labelledby={aba === 'treinos' ? 'settings-tab-treinos' : 'settings-tab-dieta'} tabIndex={0}>
-      {loading ? (
+      <div role="tabpanel" id={`settings-panel-${aba}`} aria-labelledby={`settings-tab-${aba}`} tabIndex={0}>
+      {aba === 'conta' ? (
+        <section className="cfg-section" aria-labelledby="conta-heading">
+          <div className="cfg-section-head"><div><h2 id="conta-heading" className="cfg-title">Conta</h2><p className="cfg-subtitle">Seu acesso, seus dados e a aparência do app.</p></div></div>
+          <div className="settings-account card-premium">
+            <div className="settings-account-avatar"><UserCircle size={24} /></div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-white">{user.isAnonymous ? 'Visitante' : user.email}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span className={`settings-status ${user.isAnonymous ? 'settings-status-warning' : 'settings-status-success'}`}>
+                  <span className="settings-status-dot" /> {user.isAnonymous ? 'Conta anônima' : 'Conta sincronizada'}
+                </span>
+                <span className="font-mono text-white/50">UID {user.uid.slice(0, 8)}...</span>
+              </div>
+            </div>
+            <button type="button" onClick={() => signOut(auth)} className="settings-account-action" title="Sair da conta">
+              <LogOut size={15} /> <span className="hidden sm:inline">Sair</span>
+            </button>
+          </div>
+
+          <ContaPlano user={user} />
+
+          <div className="settings-appearance card-premium cfg-block">
+            <div className="flex items-center gap-2">
+              <Palette size={16} className="text-emerald-400" aria-hidden="true" />
+              <h3 className="cfg-block-title">Aparência</h3>
+            </div>
+            <p className="cfg-subtitle">A cor escolhida fica salva neste aparelho.</p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {THEMES.map((t) => (
+                <button type="button" key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name} aria-pressed={themeId === t.id}>
+                  <div className="theme-swatch-preview" style={{ background: t.previewBg || t.bgDeep, color: t.mode === 'light' ? '#2b1a15' : '#ffffff', boxShadow: `inset 0 0 0 1px ${t.brand[500]}44` }}>
+                    <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
+                    <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
+                  </div>
+                  <div className="theme-swatch-dots justify-center">
+                    <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
+                    <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
+                    <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
+                  </div>
+                  <span className="text-xs font-semibold text-neutral-300 block leading-tight">{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <section className="settings-export card-premium" aria-labelledby="exportar-dados-heading">
+            <div className="settings-account-avatar"><Download size={18} /></div>
+            <div className="min-w-0 flex-1">
+              <h3 id="exportar-dados-heading" className="text-sm font-semibold text-white">Seus dados</h3>
+              <p className="mt-1 text-xs leading-relaxed text-neutral-500">Baixe uma cópia da sua configuração, treinos, diário alimentar e medidas.</p>
+            </div>
+            <button type="button" onClick={exportarDados} disabled={exportando} className="settings-action settings-action-outline shrink-0">
+              {exportando ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+              {exportando ? 'Preparando...' : 'Exportar JSON'}
+            </button>
+          </section>
+
+          <ExcluirConta user={user} />
+        </section>
+      ) : loading ? (
         <div className="space-y-2"><div className="skeleton skeleton-card" /><div className="skeleton skeleton-card" /></div>
       ) : !configCarregada ? (
-        <div role="status"><p>Não foi possível carregar seu plano com segurança.</p><button type="button" onClick={carregar} className="settings-action settings-action-outline">Tentar novamente</button></div>
+        <div role="status" className="cfg-empty card-premium"><p>Não foi possível carregar seu plano com segurança.</p><button type="button" onClick={carregar} className="settings-action settings-action-outline">Tentar novamente</button></div>
       ) : aba === 'treinos' ? (
-          <section className="settings-section" aria-labelledby="treinos-heading">
-            <div className="settings-section-head">
-              <div><span className="section-label" id="treinos-heading">Divisões de treino</span><p className="mt-1 text-xs text-neutral-500">Organize exercícios, carga inicial e meta de repetições.</p></div>
-              <button type="button" onClick={() => setShowNewRoutine(true)} className="settings-action settings-action-primary"><Plus size={15} /> <span>Nova divisão</span></button>
+          <section className="cfg-section" aria-labelledby="treinos-heading">
+            <div className="cfg-section-head">
+              <div><h2 id="treinos-heading" className="cfg-title">Meus treinos</h2><p className="cfg-subtitle">Suas divisões na ordem em que você treina. Toque em Editar para mudar exercícios, cargas e descanso.</p></div>
+              <button type="button" onClick={() => setShowNewRoutine(true)} className="cfg-btn cfg-btn-primary"><Plus size={16} aria-hidden="true" /> Nova divisão</button>
             </div>
 
             <label className="settings-weekly-goal card-premium">
@@ -576,37 +761,59 @@ export default function Configuracao({ abaInicial }) {
             </label>
 
             {showNewRoutine && (
-              <div className="settings-form card-premium p-4">
-                <div className="settings-form-head"><div><h2 className="text-sm font-bold text-white">Criar divisão</h2><p className="mt-0.5 text-xs text-neutral-500">Dê um nome fácil de reconhecer, como "Upper A" ou "Pernas".</p></div><button type="button" onClick={() => setShowNewRoutine(false)} className="settings-icon-button" aria-label="Fechar"><X size={16} /></button></div>
-                <div className="mt-3">
-                  <label className="settings-field"><span>Nome da divisão</span><input type="text" placeholder="ex: Upper C" value={newNome} onChange={e => setNewNome(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addRoutine() }} autoFocus /></label>
-                </div>
-                <div className="mt-3 flex justify-end gap-2"><button type="button" onClick={() => setShowNewRoutine(false)} className="settings-action settings-action-muted">Cancelar</button><button type="button" onClick={addRoutine} disabled={!newNome.trim()} className="settings-action settings-action-primary"><Plus size={14} /> Criar divisão</button></div>
+              <div className="cfg-card card-premium cfg-new">
+                <label className="settings-field"><span>Nome da nova divisão</span><input type="text" maxLength={60} placeholder="Ex.: Upper A, Pernas, Push" value={newNome} onChange={e => setNewNome(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addRoutine() }} autoFocus /></label>
+                <div className="cfg-actions-end"><button type="button" onClick={() => { setShowNewRoutine(false); setNewNome('') }} className="cfg-btn cfg-btn-ghost">Cancelar</button><button type="button" onClick={addRoutine} disabled={!newNome.trim()} className="cfg-btn cfg-btn-primary"><Plus size={16} aria-hidden="true" /> Criar divisão</button></div>
               </div>
             )}
 
-            {Object.entries(config.treinos || {}).length === 0 && <div className="settings-empty card-premium"><Dumbbell size={22} /><h2>Nenhuma divisão criada</h2><p>Crie sua primeira divisão para começar a montar o treino.</p></div>}
+            {Object.entries(config.treinos || {}).length === 0 && !showNewRoutine && <div className="settings-empty card-premium"><Dumbbell size={22} /><h2>Nenhuma divisão criada</h2><p>Crie sua primeira divisão para começar a montar o treino.</p></div>}
 
-            <div className="settings-routines">
+            <div className="cfg-list">
               {/* As refs só são lidas nos eventos (foco, saída e escolha do exercício), não ao desenhar. */}
               {/* eslint-disable-next-line react-hooks/refs */}
               {ordenarRotinas(config.treinos).map(([key, rotina], index, lista) => {
                 const isOpen = expandedKey === key
                 const exerciseCount = (rotina.exercicios || []).length
+                const duracao = estimarDuracaoMinutos(rotina.exercicios)
+                const nomeRotina = rotina.nome || key
                 return (
-                  <article key={key} ref={node => { if (node) routineRefs.current[key] = node; else delete routineRefs.current[key] }} className={`settings-routine card-premium ${isOpen ? 'settings-routine-open' : ''}`}>
-                    <div className="settings-routine-head">
-                      <button type="button" onClick={() => setExpandedKey(isOpen ? null : key)} className="settings-routine-trigger" aria-expanded={isOpen}>
-                        <span className="settings-routine-index">{String(index + 1).padStart(2, '0')}</span>
-                        <span className="min-w-0 flex-1 text-left"><strong className="block text-sm text-white">{rotina.nome || key}</strong><small className="settings-routine-count">{exerciseCount} {exerciseCount === 1 ? 'exercício' : 'exercícios'}</small></span>
-                        {isOpen ? <ChevronDown size={16} className="text-emerald-400" /> : <ChevronRight size={16} className="text-neutral-500" />}
-                      </button>
-                      <div className="settings-exercise-order" role="group" aria-label={`Ordem da divisão ${rotina.nome || key}`}>
-                        <button type="button" data-move-rotina="up" onClick={() => moveRoutine(key, -1)} disabled={index === 0} className="settings-icon-button" aria-label={`Mover ${rotina.nome || key} para cima`} title="Mover para cima"><ArrowUp size={15} /></button>
-                        <button type="button" data-move-rotina="down" onClick={() => moveRoutine(key, 1)} disabled={index === lista.length - 1} className="settings-icon-button" aria-label={`Mover ${rotina.nome || key} para baixo`} title="Mover para baixo"><ArrowDown size={15} /></button>
+                  <article key={key} ref={node => { if (node) routineRefs.current[key] = node; else delete routineRefs.current[key] }} className={`cfg-card card-premium ${isOpen ? 'is-open' : ''}`}>
+                    <div className="cfg-card-head">
+                      <span className="cfg-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                      <div className="cfg-card-info">
+                        <strong>{nomeRotina}</strong>
+                        <small>{exerciseCount} {exerciseCount === 1 ? 'exercício' : 'exercícios'}{duracao ? ` · ≈ ${duracao} min` : ''}</small>
+                      </div>
+                      {proximaChave === key && <span className="cfg-badge" title="A Home sugere esta divisão no próximo treino">Próximo</span>}
+                      <div className="cfg-card-actions">
+                        <button type="button" onClick={() => setExpandedKey(isOpen ? null : key)} className={`cfg-btn ${isOpen ? 'cfg-btn-ghost' : 'cfg-btn-outline'}`} aria-expanded={isOpen}>
+                          {isOpen ? <><ChevronDown size={16} aria-hidden="true" className="rotate-180" /> Fechar</> : <><Pencil size={15} aria-hidden="true" /> Editar</>}
+                        </button>
+                        <button type="button" onClick={() => duplicarDivisao(key)} className="cfg-icon-btn" aria-label={`Duplicar ${nomeRotina}`} title="Duplicar divisão"><Copy size={16} aria-hidden="true" /></button>
+                        <button type="button" onClick={() => pedirExclusaoRotina(key)} className="cfg-icon-btn cfg-icon-danger" aria-label={`Excluir ${nomeRotina}`} title="Excluir divisão"><Trash size={16} aria-hidden="true" /></button>
                       </div>
                     </div>
-                    {isOpen && <div className="settings-routine-body">
+
+                    {isOpen && <div className="cfg-editor">
+                      <div className="cfg-editor-row">
+                        <label className="settings-field settings-field-grow"><span>Nome da divisão</span><input type="text" maxLength={60} value={rotina.nome ?? ''} onChange={e => renomearDivisao(key, e.target.value)} onBlur={e => { if (!e.target.value.trim()) renomearDivisao(key, salvoRef.current?.treinos?.[key]?.nome || key) }} /></label>
+                        <div className="cfg-order" role="group" aria-label={`Posição de ${nomeRotina} na ordem`}>
+                          <span className="cfg-order-label">Ordem</span>
+                          <div>
+                            <button type="button" data-move-rotina="up" onClick={() => moveRoutine(key, -1)} disabled={index === 0} className="cfg-icon-btn" aria-label={`Mover ${nomeRotina} para cima`} title="Mover para cima"><ArrowUp size={16} aria-hidden="true" /></button>
+                            <button type="button" data-move-rotina="down" onClick={() => moveRoutine(key, 1)} disabled={index === lista.length - 1} className="cfg-icon-btn" aria-label={`Mover ${nomeRotina} para baixo`} title="Mover para baixo"><ArrowDown size={16} aria-hidden="true" /></button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="cfg-subhead">
+                        <div><h3 className="cfg-block-title">Exercícios</h3><p className="cfg-subtitle">A carga inicial vale até o primeiro registro; depois o treino usa a sua última sessão.</p></div>
+                        <button type="button" onClick={() => addExercise(key)} className="cfg-btn cfg-btn-outline"><Plus size={16} aria-hidden="true" /> Adicionar exercício</button>
+                      </div>
+
+                      {exerciseCount === 0 && <p className="cfg-hint">Nenhum exercício ainda. Toque em "Adicionar exercício" para começar.</p>}
+
                       {(rotina.exercicios || []).map((ex, idx) => (
                         (() => {
                           const campoId = `${key}:${idx}`
@@ -618,17 +825,18 @@ export default function Configuracao({ abaInicial }) {
                           const opcoes = buscaAtiva && queryUtil && moduloCatalogoExercicios
                             ? moduloCatalogoExercicios.buscarExercicios(textoBusca, nomesExerciciosConfig(campoId))
                             : []
+                          const rotuloEx = ex.nome || `exercício ${idx + 1}`
 
                           return (
-                        <div key={exerciseId(ex, idx)} ref={node => { const refKey = `${key}:${idx}`; if (node) exerciseRefs.current[refKey] = node; else delete exerciseRefs.current[refKey] }} className="settings-exercise">
-                          <div className="settings-exercise-top">
-                            <span className="settings-exercise-number">{idx + 1}</span>
+                        <div key={exerciseId(ex, idx)} ref={node => { const refKey = `${key}:${idx}`; if (node) exerciseRefs.current[refKey] = node; else delete exerciseRefs.current[refKey] }} className="settings-exercise cfg-exercise">
+                          <div className="cfg-exercise-top">
+                            <span className="cfg-number" aria-hidden="true">{idx + 1}</span>
                             <div className="settings-exercise-name">
                               <div className="settings-field settings-field-grow">
-                                <label className="settings-exercise-field-label" htmlFor={inputId}>Exercício</label>
+                                <label className="sr-only" htmlFor={inputId}>Nome do exercício {idx + 1}</label>
                                 <div className="settings-exercise-input-wrap">
                                   <input id={inputId} type="text" value={ex.nome} placeholder="Digite ou escolha um exercício" role="combobox" aria-autocomplete="list"
-                                    aria-expanded={buscaAtiva} aria-controls={listId}
+                                    aria-expanded={buscaAtiva} aria-controls={listId} className="cfg-exercise-name-input"
                                     onFocus={() => aoFocarNomeExercicio(campoId, ex.nome)}
                                     onBlur={() => window.setTimeout(() => {
                                       const nomeField = exerciseRefs.current[`${key}:${idx}`]?.querySelector('.settings-exercise-name')
@@ -668,43 +876,46 @@ export default function Configuracao({ abaInicial }) {
                                 </div>
                               )}
                             </div>
-                            <div className="settings-exercise-order" role="group" aria-label={`Ordem de ${ex.nome || 'exercício'}`}>
-                              <button type="button" data-move="up" onClick={() => moveExercise(key, idx, -1)} disabled={idx === 0} className="settings-icon-button" aria-label={`Mover ${ex.nome || 'exercício'} para cima`} title="Mover para cima"><ArrowUp size={15} /></button>
-                              <button type="button" data-move="down" onClick={() => moveExercise(key, idx, 1)} disabled={idx === exerciseCount - 1} className="settings-icon-button" aria-label={`Mover ${ex.nome || 'exercício'} para baixo`} title="Mover para baixo"><ArrowDown size={15} /></button>
+                            <div className="cfg-exercise-tools" role="group" aria-label={`Ações de ${rotuloEx}`}>
+                              <button type="button" data-move="up" onClick={() => moveExercise(key, idx, -1)} disabled={idx === 0} className="cfg-icon-btn" aria-label={`Mover ${rotuloEx} para cima`} title="Mover para cima"><ArrowUp size={16} aria-hidden="true" /></button>
+                              <button type="button" data-move="down" onClick={() => moveExercise(key, idx, 1)} disabled={idx === exerciseCount - 1} className="cfg-icon-btn" aria-label={`Mover ${rotuloEx} para baixo`} title="Mover para baixo"><ArrowDown size={16} aria-hidden="true" /></button>
+                              <button type="button" onClick={() => pedirExclusaoExercicio(key, idx)} className="cfg-icon-btn cfg-icon-danger" aria-label={`Excluir ${rotuloEx}`} title="Excluir exercício"><Trash size={16} aria-hidden="true" /></button>
                             </div>
-                            <button type="button" onClick={() => pedirExclusaoExercicio(key, idx)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ex.nome || 'exercício'}`}><Trash size={15} /></button>
                           </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                            <label className="settings-field"><span>Base Top (kg)</span><input type="number" min="0" placeholder="Sem carga" value={ex.base_top ?? ''} onChange={e => updateExercise(key, idx, 'base_top', e.target.value === '' ? '' : Number(e.target.value))} inputMode="decimal" /></label>
-                            <label className="settings-field"><span>Meta de reps</span><input type="text" placeholder="Ex.: 8-10" value={ex.meta_reps ?? ''} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label>
-                            <label className="settings-field"><span className="flex items-center gap-1"><Clock3 size={11} /> Descanso</span><select value={ex.descanso_segundos ?? 90} onChange={e => updateExercise(key, idx, 'descanso_segundos', Number(e.target.value))} aria-label={`Tempo de descanso de ${ex.nome}`}>
-                              {[30, 60, 90, 120, 180, 300].map(segundos => <option key={segundos} value={segundos}>{segundos < 60 ? `${segundos}s` : segundos % 60 ? `${Math.floor(segundos / 60)} min ${segundos % 60}s` : `${segundos / 60} min`}</option>)}
+                          <div className="cfg-fields">
+                            <label className="settings-field"><span><Dumbbell size={12} aria-hidden="true" /> Carga (kg)</span><input type="number" min="0" placeholder="Sem carga" value={ex.base_top ?? ''} onChange={e => updateExercise(key, idx, 'base_top', e.target.value === '' ? '' : Number(e.target.value))} inputMode="decimal" /></label>
+                            <label className="settings-field"><span><RefreshCw size={12} aria-hidden="true" /> Repetições</span><input type="text" placeholder="Ex.: 8-10" value={ex.meta_reps ?? ''} onChange={e => updateExercise(key, idx, 'meta_reps', e.target.value)} /></label>
+                            <label className="settings-field"><span><Clock3 size={12} aria-hidden="true" /> Descanso</span><select value={ex.descanso_segundos ?? 90} onChange={e => updateExercise(key, idx, 'descanso_segundos', Number(e.target.value))}>
+                              {[30, 60, 90, 120, 180, 300].map(segundos => <option key={segundos} value={segundos}>{formatarDescanso(segundos)}</option>)}
                             </select></label>
                           </div>
-                          <label className="settings-check">
+                          <label className="cfg-check">
                             <input type="checkbox" checked={Boolean(ex.tem_aquecimento)} onChange={e => updateExercise(key, idx, 'tem_aquecimento', e.target.checked)} />
-                            <span>Série de aquecimento antes da preparatória</span>
+                            <span><strong><Flame size={13} aria-hidden="true" /> Série de aquecimento</strong><small>Uma série leve antes da preparatória.</small></span>
                           </label>
-                          <label className="settings-field mt-2"><span>Observação (aparece no treino)</span><input type="text" maxLength={LIMITE_NOTA} placeholder="Ex.: descida lenta, pegada fechada" value={ex.nota ?? ''} onChange={e => updateExercise(key, idx, 'nota', e.target.value)} /></label>
+                          <label className="settings-field"><span><NotebookPen size={12} aria-hidden="true" /> Observação</span><input type="text" maxLength={LIMITE_NOTA} placeholder="Ex.: descida lenta, pegada fechada" value={ex.nota ?? ''} onChange={e => updateExercise(key, idx, 'nota', e.target.value)} /><small className="cfg-help">Aparece durante o treino, neste exercício.</small></label>
                         </div>
                           )
                         })()
                       ))}
-                      <div className="settings-routine-actions"><button type="button" onClick={() => addExercise(key)} className="settings-action settings-action-muted"><Plus size={14} /> Adicionar exercício</button><button type="button" onClick={() => pedirExclusaoRotina(key)} className="settings-action settings-action-danger"><Trash size={14} /> Excluir divisão</button></div>
+
+                      <div className="cfg-editor-foot">
+                        {exerciseCount > 0 && <button type="button" onClick={() => addExercise(key)} className="cfg-btn cfg-btn-ghost"><Plus size={16} aria-hidden="true" /> Adicionar exercício</button>}
+                        <button type="button" onClick={concluirEdicao} className="cfg-btn cfg-btn-solid"><Check size={16} aria-hidden="true" /> Concluir</button>
+                      </div>
                     </div>}
                   </article>
                 )
               })}
             </div>
-            <button type="button" onClick={() => salvar(config)} disabled={saving} className="settings-save-button"><span>{saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}</span>{saving ? 'Salvando alterações...' : 'Salvar alterações de treino'}</button>
           </section>
       ) : (
-        <section className="settings-section" aria-labelledby="dieta-heading">
-          <div className="settings-section-head"><div><span className="section-label" id="dieta-heading">Plano alimentar</span><p className="mt-1 text-xs text-neutral-500">Defina suas metas e deixe cada refeição pronta para o dia.</p></div><span className="settings-count-badge">{totalRefeicoes} refeições</span></div>
+        <section className="cfg-section" aria-labelledby="dieta-heading">
+          <div className="cfg-section-head"><div><h2 id="dieta-heading" className="cfg-title">Plano alimentar</h2><p className="cfg-subtitle">Suas metas do dia e as refeições que aparecem no Diário.</p></div></div>
 
-          <div className="settings-goals card-premium p-4">
-            <div className="settings-form-head"><div><h2 className="text-sm font-bold text-white">Metas diárias</h2><p className="mt-0.5 text-[10px] text-neutral-500">Esses valores orientam o progresso mostrado no Diário.</p></div><RefreshCw size={17} className="text-cyan-400" /></div>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="settings-goals card-premium cfg-block">
+            <div><h3 className="cfg-block-title">Metas diárias</h3><p className="cfg-subtitle">Orientam o progresso mostrado no Diário.</p></div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {[
                 { key: 'kcal', label: 'Calorias', unit: 'kcal', val: config.metas?.kcal ?? 1970 },
                 { key: 'proteinas', label: 'Proteínas', unit: 'g', val: config.metas?.proteinas ?? 165 },
@@ -713,91 +924,63 @@ export default function Configuracao({ abaInicial }) {
                 { key: 'fibras', label: 'Fibras', unit: 'g', val: config.metas?.fibras ?? 30 },
               ].map(c => <label key={c.key} className="settings-goal"><span>{c.label}</span><div><input type="text" inputMode="numeric" value={c.val} onChange={e => updateMeta(c.key, e.target.value)} aria-label={`Meta de ${c.label}`} /><small>{c.unit}</small></div></label>)}
             </div>
-            {(() => {
-              const somaRefeicoes = (config.refeicoes || []).reduce((acc, r) => ({ kcal: acc.kcal + numeroNutricional(r.kcal), proteinas: acc.proteinas + numeroNutricional(r.proteinas), carboidratos: acc.carboidratos + numeroNutricional(r.carboidratos), gorduras: acc.gorduras + numeroNutricional(r.gorduras), fibras: acc.fibras + numeroNutricional(r.fibras) }), { kcal: 0, proteinas: 0, carboidratos: 0, gorduras: 0, fibras: 0 })
-              return <div className="settings-goals-footer"><span>Total das refeições</span><strong>{somaRefeicoes.kcal} kcal · {somaRefeicoes.proteinas}g P · {somaRefeicoes.carboidratos}g C · {somaRefeicoes.gorduras}g G · {somaRefeicoes.fibras}g fibras</strong><button type="button" onClick={sincronizarMetas} disabled={sincronizando} className="settings-action settings-action-outline"><RefreshCw size={13} className={sincronizando ? 'animate-spin' : ''} /> {sincronizando ? 'Sincronizando...' : 'Sincronizar metas'}</button></div>
-            })()}
-          </div>
-
-          <div className="settings-meals card-premium p-4">
-            <div className="settings-section-head"><div><span className="section-label">Refeições</span><p className="mt-1 text-xs text-neutral-500">Edite horários, alimentos e macros. A IA pode preencher os valores.</p></div><button type="button" onClick={addRefeicao} className="settings-action settings-action-primary"><Plus size={14} /> Nova refeição</button></div>
-            {(config.refeicoes || []).length === 0 && <div className="settings-empty settings-empty-small"><Apple size={21} /><p>Nenhuma refeição configurada.</p></div>}
-            <div className="settings-meal-list">
-              {(config.refeicoes || []).map((ref, i) => (
-                <article key={ref.id || i} ref={node => { const refKey = ref.id || String(i); if (node) mealRefs.current[refKey] = node; else delete mealRefs.current[refKey] }} className="settings-meal">
-                  <div className="settings-meal-head"><span className="settings-meal-index">{String(i + 1).padStart(2, '0')}</span><label className="settings-field settings-field-grow"><span>Nome da refeição</span><input type="text" value={ref.nome || ''} onChange={e => updateRefeicao(i, 'nome', e.target.value)} /></label><label className="settings-field settings-time"><span>Horário</span><input type="text" value={ref.horario || ''} onChange={e => updateRefeicao(i, 'horario', e.target.value)} /></label><button type="button" onClick={() => deleteRefeicao(i)} className="settings-icon-button settings-icon-danger" aria-label={`Excluir ${ref.nome || 'refeição'}`}><Trash size={15} /></button></div>
-                      <div className="settings-food-row"><label className="settings-field settings-field-grow"><span>Alimentos</span><input type="text" value={textoAlimentos[ref.id] ?? (ref.alimentos || []).join(', ')} onChange={e => setTextoAlimentos(p => ({ ...p, [ref.id]: e.target.value }))} onBlur={e => updateRefeicao(i, 'alimentos', normalizarListaAlimentos(e.target.value))} placeholder="Ex: arroz, frango, salada" /></label><button type="button" onClick={() => calcularMacrosRefeicao(i)} disabled={!textoAlimentos[ref.id]?.trim() || aiLoadingIdx === i} className="settings-ai-button" title="Calcular macros com IA"><Sparkles size={15} /> <span>{aiLoadingIdx === i ? 'Analisando' : 'Calcular IA'}</span></button></div>
-                  <div className="settings-macro-grid">
-                    {[{ key: 'kcal', label: 'Calorias', unit: 'kcal' }, { key: 'proteinas', label: 'Proteínas', unit: 'g' }, { key: 'carboidratos', label: 'Carboidratos', unit: 'g' }, { key: 'gorduras', label: 'Gorduras', unit: 'g' }, { key: 'fibras', label: 'Fibras', unit: 'g' }].map(c => <label key={c.key} className="settings-field"><span>{c.label} ({c.unit})</span><input type="text" inputMode="decimal" value={ref[c.key] ?? 0} onChange={e => updateRefeicao(i, c.key, e.target.value)} aria-label={`${c.label} da refeição`} /></label>)}
-                  </div>
-                </article>
-              ))}
+            <div className="cfg-goals-compare">
+              <div>
+                <span>Soma das refeições</span>
+                <strong>{Math.round(somaRefeicoes.kcal)} kcal · {Math.round(somaRefeicoes.proteinas)}g P · {Math.round(somaRefeicoes.carboidratos)}g C · {Math.round(somaRefeicoes.gorduras)}g G · {Math.round(somaRefeicoes.fibras)}g fibras</strong>
+                <small className={diferencaKcal === 0 ? '' : 'cfg-diff'}>{diferencaKcal === 0 ? 'Igual à meta de calorias.' : diferencaKcal < 0 ? `${Math.abs(diferencaKcal)} kcal abaixo da meta.` : `${diferencaKcal} kcal acima da meta.`}</small>
+              </div>
+              <button type="button" onClick={sincronizarMetas} disabled={sincronizando} className="cfg-btn cfg-btn-outline"><RefreshCw size={15} aria-hidden="true" className={sincronizando ? 'animate-spin' : ''} /> {sincronizando ? 'Aplicando...' : 'Usar a soma como meta'}</button>
             </div>
           </div>
-          <button type="button" onClick={() => salvar(config)} disabled={saving} className="settings-save-button settings-save-button-diet"><span>{saving ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}</span>{saving ? 'Salvando alterações...' : 'Salvar alterações da dieta'}</button>
+
+          <div className="cfg-subhead">
+            <div><h3 className="cfg-block-title">Refeições</h3><p className="cfg-subtitle">Toque em Editar para mudar horário, alimentos e macros.</p></div>
+            <button type="button" onClick={addRefeicao} className="cfg-btn cfg-btn-primary"><Plus size={16} aria-hidden="true" /> Nova refeição</button>
+          </div>
+          {(config.refeicoes || []).length === 0 && <div className="settings-empty settings-empty-small card-premium"><Apple size={21} /><p>Nenhuma refeição configurada.</p></div>}
+          <div className="cfg-list">
+            {(config.refeicoes || []).map((ref, i) => {
+              const aberta = expandedMeal === ref.id
+              const nomeRef = ref.nome || `Refeição ${i + 1}`
+              return (
+                <article key={ref.id || i} ref={node => { const refKey = ref.id || String(i); if (node) mealRefs.current[refKey] = node; else delete mealRefs.current[refKey] }} className={`cfg-card card-premium ${aberta ? 'is-open' : ''}`}>
+                  <div className="cfg-card-head">
+                    <span className="cfg-index cfg-index-time" aria-hidden="true"><Timer size={13} /> {ref.horario || '--:--'}</span>
+                    <div className="cfg-card-info">
+                      <strong>{nomeRef}</strong>
+                      <small>{Math.round(numeroNutricional(ref.kcal))} kcal · {Math.round(numeroNutricional(ref.proteinas))}g P · {Math.round(numeroNutricional(ref.carboidratos))}g C · {Math.round(numeroNutricional(ref.gorduras))}g G</small>
+                    </div>
+                    <div className="cfg-card-actions">
+                      <button type="button" onClick={() => setExpandedMeal(aberta ? null : ref.id)} className={`cfg-btn ${aberta ? 'cfg-btn-ghost' : 'cfg-btn-outline'}`} aria-expanded={aberta}>
+                        {aberta ? <><ChevronDown size={16} aria-hidden="true" className="rotate-180" /> Fechar</> : <><Pencil size={15} aria-hidden="true" /> Editar</>}
+                      </button>
+                      <button type="button" onClick={() => pedirExclusaoRefeicao(i)} className="cfg-icon-btn cfg-icon-danger" aria-label={`Excluir ${nomeRef}`} title="Excluir refeição"><Trash size={16} aria-hidden="true" /></button>
+                    </div>
+                  </div>
+                  {aberta && (
+                    <div className="cfg-editor">
+                      <div className="cfg-editor-row">
+                        <label className="settings-field settings-field-grow"><span>Nome da refeição</span><input type="text" maxLength={60} value={ref.nome || ''} onChange={e => updateRefeicao(i, 'nome', e.target.value)} /></label>
+                        <label className="settings-field cfg-time"><span>Horário</span><input type="time" value={/^\d{2}:\d{2}$/.test(ref.horario || '') ? ref.horario : ''} onChange={e => updateRefeicao(i, 'horario', e.target.value)} /></label>
+                      </div>
+                      <div className="cfg-food-row">
+                        <label className="settings-field settings-field-grow"><span>Alimentos (separados por vírgula)</span><input type="text" value={textoAlimentos[ref.id] ?? (ref.alimentos || []).join(', ')} onChange={e => setTextoAlimentos(p => ({ ...p, [ref.id]: e.target.value }))} onBlur={e => updateRefeicao(i, 'alimentos', normalizarListaAlimentos(e.target.value))} placeholder="Ex.: 150 g de arroz, 120 g de frango, salada" /></label>
+                        <button type="button" onClick={() => calcularMacrosRefeicao(i)} disabled={!textoAlimentos[ref.id]?.trim() || aiLoadingIdx === i} className="cfg-btn cfg-btn-outline" title="Calcular macros com IA">{aiLoadingIdx === i ? <Loader size={15} className="animate-spin" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />} {aiLoadingIdx === i ? 'Analisando...' : 'Calcular com IA'}</button>
+                      </div>
+                      <div className="settings-macro-grid">
+                        {[{ key: 'kcal', label: 'Calorias', unit: 'kcal' }, { key: 'proteinas', label: 'Proteínas', unit: 'g' }, { key: 'carboidratos', label: 'Carboidratos', unit: 'g' }, { key: 'gorduras', label: 'Gorduras', unit: 'g' }, { key: 'fibras', label: 'Fibras', unit: 'g' }].map(c => <label key={c.key} className="settings-field"><span>{c.label} ({c.unit})</span><input type="text" inputMode="decimal" value={ref[c.key] ?? 0} onChange={e => updateRefeicao(i, c.key, e.target.value)} /></label>)}
+                      </div>
+                      <div className="cfg-editor-foot"><button type="button" onClick={concluirEdicao} className="cfg-btn cfg-btn-solid"><Check size={16} aria-hidden="true" /> Concluir</button></div>
+                    </div>
+                  )}
+                </article>
+              )
+            })}
+          </div>
         </section>
       )}
       </div>
-
-      <details className="settings-utilities card-premium">
-        <summary>Conta, dados e aparência <ChevronDown size={17} aria-hidden="true" /></summary>
-        <div className="settings-utilities-content">
-          <div className="settings-account">
-            <div className="settings-account-avatar"><UserCircle size={24} /></div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-white">{user.isAnonymous ? 'Visitante' : user.email}</div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                <span className={`settings-status ${user.isAnonymous ? 'settings-status-warning' : 'settings-status-success'}`}>
-                  <span className="settings-status-dot" /> {user.isAnonymous ? 'Conta anônima' : 'Conta sincronizada'}
-                </span>
-                <span className="font-mono text-white/50">UID {user.uid.slice(0, 8)}...</span>
-              </div>
-            </div>
-            <button type="button" onClick={() => signOut(auth)} className="settings-account-action" title="Sair da conta">
-              <LogOut size={15} /> <span className="hidden sm:inline">Sair</span>
-            </button>
-          </div>
-
-          <ContaPlano user={user} />
-
-          <section className="settings-export card-premium" aria-labelledby="exportar-dados-heading">
-            <div className="settings-account-avatar"><Download size={18} /></div>
-            <div className="min-w-0 flex-1">
-              <h2 id="exportar-dados-heading" className="text-sm font-semibold text-white">Seus dados</h2>
-              <p className="mt-1 text-xs leading-relaxed text-neutral-500">Baixe uma cópia local da sua configuração, treinos, diário alimentar e medidas.</p>
-            </div>
-            <button type="button" onClick={exportarDados} disabled={exportando} className="settings-action settings-action-outline shrink-0">
-              {exportando ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
-              {exportando ? 'Preparando...' : 'Exportar JSON'}
-            </button>
-          </section>
-
-          <div className="settings-appearance">
-            <div className="flex items-center gap-2">
-              <Palette size={16} className="text-emerald-400" />
-              <span className="section-label">Aparência</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-              {THEMES.map((t) => (
-                <button type="button" key={t.id} onClick={() => setThemeId(t.id)} className={`theme-swatch ${themeId === t.id ? 'active' : ''}`} title={t.name} aria-pressed={themeId === t.id}>
-                  <div className="theme-swatch-preview" style={{ background: t.previewBg || t.bgDeep, color: t.mode === 'light' ? '#2b1a15' : '#ffffff', boxShadow: `inset 0 0 0 1px ${t.brand[500]}44` }}>
-                    <span className="theme-swatch-preview-dot" style={{ background: t.brand[500] }} />
-                    <span className="theme-swatch-preview-line" style={{ background: t.mode === 'light' ? '#765c50' : '#ffffff99' }} />
-                  </div>
-                  <div className="theme-swatch-dots justify-center">
-                    <span className="theme-swatch-dot" style={{ background: t.brand[500], color: t.brand[500] }} />
-                    <span className="theme-swatch-dot" style={{ background: t.accent[500], color: t.accent[500] }} />
-                    <span className="theme-swatch-dot" style={{ background: t.highlightHex, color: t.highlightHex }} />
-                  </div>
-                  <span className="text-xs font-semibold text-neutral-300 block leading-tight">{t.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <ExcluirConta user={user} />
-        </div>
-      </details>
 
       <ConfirmModal
         isOpen={confirmacao !== null}

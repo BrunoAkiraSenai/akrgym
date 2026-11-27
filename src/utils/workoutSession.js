@@ -174,6 +174,38 @@ export function moverRotina(treinos, chave, delta) {
 }
 
 // ID interno gerado a partir do nome: a pessoa não precisa inventar um.
+// Cópia da divisão logo abaixo da original, com nome "(cópia)" e exercícios com
+// identidade nova (o histórico de cada exercício segue o nome, não o id).
+export function duplicarRotina(treinos, chave) {
+  const original = treinos?.[chave]
+  if (!original) return { treinos, chave: null }
+  const nome = `${String(original.nome || chave).trim()} (cópia)`.slice(0, 60)
+  const novaChave = gerarIdRotina(nome, Object.keys(treinos))
+  const copia = {
+    ...structuredClone(original),
+    nome,
+    exercicios: (original.exercicios || []).map(ex => ({ ...structuredClone(ex), id: novoIdExercicio() })),
+  }
+  const lista = ordenarRotinas(treinos)
+  const posicao = lista.findIndex(([k]) => k === chave)
+  lista.splice(posicao + 1, 0, [novaChave, copia])
+  return { treinos: Object.fromEntries(lista.map(([k, rotina], i) => [k, { ...rotina, ordem: i }])), chave: novaChave }
+}
+
+// Duração aproximada de uma divisão no protocolo do app: por exercício, preparatória,
+// top set e back-off (mais o aquecimento, se marcado), ~40 s por série, o descanso entre
+// elas e ~1 min de troca de aparelho. Arredonda para 5 min; null sem exercícios.
+export function estimarDuracaoMinutos(exercicios = []) {
+  const lista = (exercicios || []).filter(ex => String(ex?.nome || '').trim())
+  if (!lista.length) return null
+  const segundos = lista.reduce((total, ex) => {
+    const series = 3 + (ex.tem_aquecimento ? 1 : 0)
+    const descanso = Number(ex.descanso_segundos) > 0 ? Number(ex.descanso_segundos) : 90
+    return total + series * 40 + (series - 1) * descanso + 60
+  }, 0)
+  return Math.max(5, Math.round(segundos / 60 / 5) * 5)
+}
+
 export function gerarIdRotina(nome, existentes = []) {
   const base = String(nome || '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
