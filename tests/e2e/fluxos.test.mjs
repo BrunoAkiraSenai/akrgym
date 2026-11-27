@@ -86,7 +86,7 @@ test('visitante não usa a IA e vê o convite para criar conta', async () => {
 test('excluir conta apaga os dados e volta para o login', async () => {
   const { page, contexto, erros } = await abrirApp()
   await navegar(page, 'Configurar')
-  await page.getByText('Conta, dados e aparência').click()
+  await page.getByRole('tab', { name: 'Conta' }).click()
   await page.getByRole('button', { name: 'Excluir conta' }).click()
   const confirmar = page.getByRole('button', { name: 'Excluir tudo para sempre' })
   assert.equal(await confirmar.isDisabled(), true)

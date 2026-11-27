@@ -1909,3 +1909,119 @@ button.home-next:focus-visible { outline: 2px solid var(--brand-bright); outline
 
 [data-theme="lava"] .rest-timer-panel { background: linear-gradient(145deg, var(--bg-card-solid), rgba(var(--brand-rgb),0.08)); }
 [data-theme="lava"] .rest-timer-ring-inner { background: var(--bg-card-solid); }
+
+/* ============================================================
+   CONFIGURAÇÕES v2 — cabeçalho com estado do salvamento, cards
+   de divisão/refeição com ações fixas e editor organizado.
+   ============================================================ */
+.cfg-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.9rem; }
+.cfg-header > div:first-child { flex: 1 1 14rem; }
+.cfg-save-status { display: inline-flex; align-items: center; gap: 0.6rem; min-height: 3rem; padding: 0.5rem 0.85rem; border: 1px solid var(--settings-border); border-radius: 0.9rem; background: var(--settings-surface); color: var(--text-secondary); }
+.cfg-save-status span { display: flex; flex-direction: column; line-height: 1.2; }
+.cfg-save-status strong { color: var(--text-primary); font-size: 0.8rem; font-weight: 800; }
+.cfg-save-status small { font-size: 0.7rem; }
+.cfg-save-status.is-salvo { border-color: rgba(var(--brand-rgb),0.35); }
+.cfg-save-status.is-salvo > svg { color: var(--brand-bright); }
+.cfg-save-status.is-pendente > svg, .cfg-save-status.is-salvando > svg { color: var(--accent-bright); }
+.cfg-save-status.is-erro { border-color: rgba(248,113,113,0.45); background: rgba(239,68,68,0.08); }
+.cfg-save-status.is-erro > svg { color: #f87171; }
+.cfg-save-retry { min-height: 2.75rem; margin-left: 0.25rem; padding: 0 0.8rem; border-radius: 0.65rem; border: 1px solid rgba(248,113,113,0.45); color: #fca5a5; font-size: 0.72rem; font-weight: 800; cursor: pointer; }
+
+.cfg-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.cfg-section { display: flex; flex-direction: column; gap: 0.9rem; }
+.cfg-section-head, .cfg-subhead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem; }
+.cfg-section-head > div, .cfg-subhead > div { flex: 1 1 15rem; min-width: 0; }
+.cfg-title { margin: 0; color: var(--text-primary); font-family: var(--font-display); font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; }
+.cfg-block-title { margin: 0; color: var(--text-primary); font-size: 0.92rem; font-weight: 800; }
+.cfg-subtitle { margin: 0.2rem 0 0; color: var(--text-secondary); font-size: 0.74rem; line-height: 1.5; }
+.cfg-hint { margin: 0; padding: 0.9rem; border: 1px dashed var(--settings-border); border-radius: 0.8rem; color: var(--text-secondary); font-size: 0.75rem; text-align: center; }
+.cfg-help { color: var(--text-secondary); font-size: 0.68rem; }
+.cfg-block { display: flex; flex-direction: column; gap: 0.8rem; padding: 1rem; }
+.cfg-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 0.6rem; padding: 1rem; color: var(--text-secondary); font-size: 0.8rem; }
+
+/* Botões: mesma altura (44 px) e três pesos visuais. */
+.cfg-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; min-height: 2.75rem; padding: 0 1rem; border: 1px solid transparent; border-radius: 0.75rem; font-size: 0.78rem; font-weight: 800; white-space: nowrap; cursor: pointer; transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast); }
+.cfg-btn:active { transform: scale(0.98); }
+.cfg-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.cfg-btn-primary { border-color: rgba(var(--brand-rgb),0.45); color: var(--brand-bright); background: rgba(var(--brand-rgb),0.14); }
+.cfg-btn-solid { color: #04110b; background: var(--brand-bright); }
+.cfg-btn-outline { border-color: var(--settings-border); color: var(--text-primary); background: rgba(255,255,255,0.03); }
+.cfg-btn-ghost { color: var(--text-secondary); background: transparent; border-color: transparent; }
+@media (hover: hover) {
+  .cfg-btn-primary:hover:enabled { background: rgba(var(--brand-rgb),0.22); }
+  .cfg-btn-outline:hover:enabled { border-color: rgba(var(--brand-rgb),0.4); }
+  .cfg-btn-ghost:hover:enabled { color: var(--text-primary); }
+}
+.cfg-icon-btn { display: grid; width: 2.75rem; height: 2.75rem; flex-shrink: 0; place-items: center; border: 1px solid var(--settings-border); border-radius: 0.75rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); cursor: pointer; transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast); }
+.cfg-icon-btn:disabled { opacity: 0.35; cursor: default; }
+@media (hover: hover) { .cfg-icon-btn:hover:enabled { color: var(--text-primary); border-color: rgba(var(--brand-rgb),0.4); } }
+.cfg-icon-danger { color: #f87171; border-color: rgba(248,113,113,0.25); background: rgba(239,68,68,0.06); }
+@media (hover: hover) { .cfg-icon-danger:hover:enabled { color: #fca5a5; border-color: rgba(248,113,113,0.5); } }
+
+/* Card de divisão / refeição */
+.cfg-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.cfg-card { overflow: visible; }
+.cfg-card.is-open { border-color: rgba(var(--brand-rgb),0.45); }
+.cfg-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem 0.75rem; padding: 0.8rem 0.9rem; }
+.cfg-index { display: grid; min-width: 2.5rem; height: 2.5rem; flex-shrink: 0; place-items: center; border-radius: 0.7rem; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.12); font-family: var(--font-mono); font-size: 0.78rem; font-weight: 800; }
+.cfg-index-time { display: inline-flex; gap: 0.3rem; padding: 0 0.6rem; font-size: 0.72rem; }
+.cfg-card-info { display: flex; flex: 1 1 10rem; min-width: 0; flex-direction: column; gap: 0.15rem; }
+.cfg-card-info strong { overflow: hidden; color: var(--text-primary); font-size: 0.92rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.cfg-card-info small { color: var(--text-secondary); font-size: 0.72rem; }
+.cfg-badge { padding: 0.3rem 0.6rem; border: 1px solid rgba(var(--brand-rgb),0.4); border-radius: 999px; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.1); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.02em; }
+.cfg-card-actions { display: flex; align-items: center; gap: 0.45rem; margin-left: auto; }
+@media (max-width: 520px) {
+  .cfg-card-actions { width: 100%; margin-left: 0; }
+  .cfg-card-actions > .cfg-btn { flex: 1; }
+}
+
+.cfg-editor { display: flex; flex-direction: column; gap: 0.85rem; border-top: 1px solid var(--settings-border); padding: 0.95rem 0.9rem 1rem; }
+.cfg-editor-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem; }
+.cfg-editor-row > .settings-field-grow { flex: 1 1 14rem; }
+.cfg-order { display: flex; flex-direction: column; gap: 0.35rem; }
+.cfg-order > div { display: flex; gap: 0.4rem; }
+.cfg-order-label { color: var(--text-secondary); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.cfg-editor-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; padding-top: 0.2rem; }
+.cfg-actions-end { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.cfg-new { display: flex; flex-direction: column; gap: 0.8rem; padding: 1rem; }
+
+/* Exercício */
+.cfg-exercise { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.85rem; }
+.cfg-exercise-top { display: flex; align-items: flex-start; gap: 0.6rem; }
+.cfg-exercise-top .settings-exercise-name { flex: 1; min-width: 0; }
+.cfg-number { display: grid; width: 2.75rem; height: 2.75rem; flex-shrink: 0; place-items: center; border-radius: 999px; color: var(--brand-bright); background: rgba(var(--brand-rgb),0.14); font-family: var(--font-mono); font-size: 0.9rem; font-weight: 800; }
+.cfg-exercise-name-input { min-height: 2.75rem; font-size: 0.88rem !important; font-weight: 700; }
+.cfg-exercise-tools { display: flex; gap: 0.35rem; }
+.cfg-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
+.cfg-fields .settings-field > span, .cfg-exercise > .settings-field > span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.cfg-fields input, .cfg-fields select { min-height: 2.75rem; }
+.cfg-check { display: flex; align-items: center; gap: 0.7rem; min-height: 2.75rem; padding: 0.55rem 0.75rem; border: 1px solid var(--settings-border); border-radius: 0.75rem; background: var(--settings-surface); cursor: pointer; }
+.cfg-check input { width: 1.15rem; height: 1.15rem; flex-shrink: 0; accent-color: var(--brand); }
+.cfg-check span { display: flex; flex-direction: column; gap: 0.1rem; }
+.cfg-check strong { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--text-primary); font-size: 0.78rem; font-weight: 800; }
+.cfg-check small { color: var(--text-secondary); font-size: 0.7rem; }
+@media (max-width: 520px) {
+  .cfg-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cfg-fields > label:last-child { grid-column: 1 / -1; }
+  /* Celular: número e botões na mesma linha; o nome ocupa a linha de baixo inteira. */
+  .cfg-exercise-top { flex-wrap: wrap; justify-content: space-between; }
+  .cfg-exercise-top .settings-exercise-name { order: 3; flex-basis: 100%; }
+}
+
+/* Dieta */
+.cfg-goals-compare { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding-top: 0.8rem; border-top: 1px solid var(--settings-border); }
+.cfg-goals-compare > div { display: flex; flex: 1 1 15rem; min-width: 0; flex-direction: column; gap: 0.2rem; }
+.cfg-goals-compare span { color: var(--text-secondary); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.cfg-goals-compare strong { color: var(--text-primary); font-family: var(--font-mono); font-size: 0.76rem; font-weight: 700; }
+.cfg-goals-compare small { color: var(--text-secondary); font-size: 0.72rem; }
+.cfg-goals-compare small.cfg-diff { color: var(--accent-bright); }
+.cfg-food-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; }
+.cfg-food-row > .settings-field-grow { flex: 1 1 15rem; }
+.cfg-time { width: 8.5rem; }
+.cfg-time input { min-height: 2.75rem; }
+
+[data-theme="lava"] .cfg-icon-danger, [data-theme="lava"] .cfg-save-status.is-erro > svg { color: #b42318; }
+[data-theme="lava"] .cfg-save-retry { color: #b42318; }
+[data-theme="lava"] .cfg-btn-solid { color: #ffffff; }
+[data-theme="lava"] .cfg-btn-outline, [data-theme="lava"] .cfg-icon-btn { background: rgba(255,255,255,0.6); }
