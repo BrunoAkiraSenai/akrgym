@@ -2,23 +2,26 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <!-- Quem já usa o app vai direto para ele; visitante novo (e buscador) vê esta apresentação. -->
-    <script>try { if (localStorage.getItem('akrgym-app') || localStorage.getItem('akrgym-theme')) location.replace('/app' + location.search + location.hash) } catch (e) {}</script>
+    <!-- Quem já usa o app vai direto para ele; visitante novo (e buscador) vê esta apresentação.
+         No endereço antigo (*.web.app / *.firebaseapp.com), quem ainda não usa o app vai para akrgym.com;
+         quem já usa continua no endereço antigo, onde estão o login e os dados do aparelho. -->
+    <script>try { if (localStorage.getItem('akrgym-app') || localStorage.getItem('akrgym-theme')) location.replace('/app' + location.search + location.hash); else if (/\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) location.replace('https://akrgym.com' + location.pathname + location.search + location.hash) } catch (e) {}</script>
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AkrGym | Treino, dieta e evolução em um só lugar</title>
     <meta name="description" content="AkrGym é o app fitness para registrar treinos, acompanhar cargas, organizar a dieta com a tabela TACO e visualizar sua evolução." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
-    <link rel="canonical" href="https://akrgym.web.app/" />
-    <link rel="alternate" hreflang="pt-BR" href="https://akrgym.web.app/" />
+    <link rel="canonical" href="https://akrgym.com/" />
+    <link rel="alternate" hreflang="pt-BR" href="https://akrgym.com/" />
     <meta name="author" content="AkrGym" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="pt_BR" />
     <meta property="og:site_name" content="AkrGym" />
     <meta property="og:title" content="AkrGym | Treino, dieta e evolução em um só lugar" />
     <meta property="og:description" content="Registre treinos, organize refeições e acompanhe sua evolução com o AkrGym." />
-    <meta property="og:url" content="https://akrgym.web.app/" />
-    <meta property="og:image" content="https://akrgym.web.app/pwa-512x512.png" />
+    <meta property="og:url" content="https://akrgym.com/" />
+    <meta property="og:image" content="https://akrgym.com/pwa-512x512.png" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="AkrGym | Treino, dieta e evolução em um só lugar" />
     <meta name="twitter:description" content="Registre treinos, organize refeições e acompanhe sua evolução com o AkrGym." />
@@ -32,20 +35,20 @@
         "@graph": [
           {
             "@type": "WebSite",
-            "@id": "https://akrgym.web.app/#website",
-            "url": "https://akrgym.web.app/",
+            "@id": "https://akrgym.com/#website",
+            "url": "https://akrgym.com/",
             "name": "AkrGym",
             "description": "Treinos, dieta e evolução em um só lugar.",
             "inLanguage": "pt-BR"
           },
           {
             "@type": "WebPage",
-            "@id": "https://akrgym.web.app/#webpage",
-            "url": "https://akrgym.web.app/",
+            "@id": "https://akrgym.com/#webpage",
+            "url": "https://akrgym.com/",
             "name": "AkrGym | Treino, dieta e evolução em um só lugar",
             "description": "Registre treinos, organize refeições e acompanhe sua evolução com o AkrGym.",
             "inLanguage": "pt-BR",
-            "isPartOf": { "@id": "https://akrgym.web.app/#website" }
+            "isPartOf": { "@id": "https://akrgym.com/#website" }
           }
         ]
       }

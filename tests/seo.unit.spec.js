@@ -6,8 +6,8 @@ const root = new URL('..', import.meta.url)
 const read = (file) => readFileSync(new URL(file, root), 'utf8')
 const publicPages = ['treinos', 'dieta', 'progresso', 'sobre', 'ajuda']
 const sitemapUrls = [
-  'https://akrgym.web.app/',
-  ...publicPages.map((page) => `https://akrgym.web.app/${page}`),
+  'https://akrgym.com/',
+  ...publicPages.map((page) => `https://akrgym.com/${page}`),
 ]
 
 function getJsonLd(html) {
@@ -22,7 +22,7 @@ test('home publica metadados canônicos e dados estruturados válidos', () => {
   assert.match(html, /<title>AkrGym \| Treino, dieta e evolução em um só lugar<\/title>/)
   assert.match(html, /<meta name="description" content="[^"]+" \/>/)
   assert.match(html, /<meta name="robots" content="index, follow/)
-  assert.match(html, /<link rel="canonical" href="https:\/\/akrgym\.web\.app\/" \/>/)
+  assert.match(html, /<link rel="canonical" href="https:\/\/akrgym\.com\/" \/>/)
   assert.match(html, /<link rel="icon" type="image\/png" sizes="192x192" href="\/pwa-192x192\.png" \/>/)
   assert.match(html, /<meta name="google-site-verification" content="[^"]+" \/>/)
   assert.match(html, /<meta property="og:type" content="website" \/>/)
@@ -44,6 +44,8 @@ test('o app fica em /app, fora da busca', () => {
   assert.match(app, /<meta name="robots" content="noindex, nofollow" \/>/)
   assert.match(app, /src="\/src\/main\.jsx"/)
   assert.doesNotMatch(app, /rel="canonical"/)
+  // O app (/app) não muda de endereço: quem já usa mantém login e dados do aparelho.
+  assert.doesNotMatch(app, /location\.replace\('https:\/\/akrgym\.com/)
   assert.match(read('public/robots.txt'), /^Disallow: \/app$/m)
   assert.match(read('src/main.jsx'), /localStorage\.setItem\('akrgym-app', '1'\)/)
   const vite = read('vite.config.js')
@@ -58,14 +60,14 @@ test('robots e sitemap listam somente URLs públicas canônicas e acessíveis', 
   const listedUrls = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
 
   assert.match(robots, /^User-agent: \*\r?\nAllow: \/\r?\n/m)
-  assert.match(robots, /Sitemap: https:\/\/akrgym\.web\.app\/sitemap\.xml/)
+  assert.match(robots, /Sitemap: https:\/\/akrgym\.com\/sitemap\.xml/)
   assert.deepEqual(listedUrls, sitemapUrls)
   assert.equal(new Set(listedUrls).size, listedUrls.length)
   assert.doesNotMatch(sitemap, /<lastmod>/)
   assert.doesNotMatch(sitemap, /\.html|\/$/m)
 
   const sitemapXml = read('scripts/gen-pwa-icons.cjs')
-  assert.match(sitemapXml, /Sitemap: https:\/\/akrgym\.web\.app\/sitemap\.xml/)
+  assert.match(sitemapXml, /Sitemap: https:\/\/akrgym\.com\/sitemap\.xml/)
 })
 
 test('páginas públicas têm canonical, navegação interna e JSON-LD válido', () => {
@@ -74,7 +76,7 @@ test('páginas públicas têm canonical, navegação interna e JSON-LD válido',
   for (const page of publicPages) {
     const html = read(`public/${page}.html`)
     assert.match(html, /<html lang="pt-BR">/)
-    assert.match(html, new RegExp(`<link rel="canonical" href="https://akrgym\\.web\\.app/${page}"`))
+    assert.match(html, new RegExp(`<link rel="canonical" href="https://akrgym\\.com/${page}"`))
     assert.match(html, /<link rel="icon" type="image\/png" sizes="192x192" href="\/pwa-192x192\.png" \/>/)
     assert.match(html, /<meta name="robots" content="index, follow/)
     assert.match(html, /<h1>[^<]+<\/h1>/)
