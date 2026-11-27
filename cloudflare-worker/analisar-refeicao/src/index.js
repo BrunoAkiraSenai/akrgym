@@ -4,12 +4,11 @@ import TACO from './taco.js'
 const DEFAULT_PROJECT_ID = 'akrgym'
 const DEFAULT_PROJECT_NUMBER = '272661727889'
 const DEFAULT_APP_ID = '1:272661727889:web:532c4b51c35afa28d64d30'
-// gemini-2.5-flash foi descontinuado: em 1/12/2026 o Google o redireciona para o
-// gemini-3.5-flash-lite, que pede outra forma de chamada (ai.google.dev, Deprecations).
-// O 2.5-flash-lite respondeu 404 para esta chave (os 2.5 só atendem quem já os usava),
-// então segue o 2.5-flash até a migração para a família 3.5.
-const MODEL_NAME = 'gemini-2.5-flash'
+// Principal: gemini-3.5-flash-lite (o 2.5-flash foi descontinuado e o 2.5-flash-lite
+// responde 404 para esta chave). O formato do pedido muda por geração: ver corpoGemini.
+const MODEL_NAME = 'gemini-3.5-flash-lite'
 // Reserva para sobrecarga (503), falta de cota (429) ou modelo indisponível (404).
+// Depois de 1/12/2026 o Google redireciona este nome para a família 3.5.
 const FALLBACK_MODEL_NAME = 'gemini-2.5-flash'
 const AUTH_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 const APP_CHECK_JWKS_URL = 'https://firebaseappcheck.googleapis.com/v1/jwks'
@@ -381,8 +380,9 @@ export async function callGemini(text, apiKey, { fetcher = fetch, aguardar = esp
       if (i > 0) {
         const anterior = ultimoErro?.status
         const mesmoModelo = modelo === modelos[i - 1]
-        // Sem cota (429) ou modelo indisponível (404): repetir o mesmo não adianta; só outro modelo.
-        const trocaModelo = anterior === 429 || anterior === 404
+        // Sem cota (429), modelo indisponível (404) ou pedido recusado por um modelo de outra
+        // geração (400): repetir o mesmo não adianta; só outro modelo.
+        const trocaModelo = anterior === 429 || anterior === 404 || anterior === 400
         if (trocaModelo && mesmoModelo) continue
         if (!trocaModelo && !STATUS_TEMPORARIOS.has(anterior) && !ultimoErro?.rede) break
         if (mesmoModelo) await aguardar(pausas[Math.min(i - 1, pausas.length - 1)])
@@ -401,25 +401,50 @@ export async function callGemini(text, apiKey, { fetcher = fetch, aguardar = esp
   }
 }
 
+// Esquema no formato JSON Schema (tipos em minúsculas), pedido pelos modelos 3.x.
+function paraJsonSchema(no) {
+  if (Array.isArray(no)) return no.map(paraJsonSchema)
+  if (!no || typeof no !== 'object') return no
+  return Object.fromEntries(Object.entries(no).map(([k, v]) => [k, k === 'type' && typeof v === 'string' ? v.toLowerCase() : paraJsonSchema(v)]))
+}
+
+const ehGeracao2 = modelo => /^gemini-2\./.test(modelo)
+
+// Corpo do pedido conforme a geração do modelo. 2.x: o formato de sempre.
+// 3.x em diante (guia de migração do Google): sem temperature (ignorada e, no futuro, erro 400),
+// raciocínio no mínimo com thinkingLevel e o esquema em responseJsonSchema.
+export function corpoGemini(modelo, prompt) {
+  const comum = {
+    responseMimeType: 'application/json',
+    // Cerca de 60 tokens por item; 30 itens cabem com folga. Nos 3.x inclui o raciocínio.
+    maxOutputTokens: 2_400,
+  }
+  const generationConfig = ehGeracao2(modelo)
+    ? { ...comum, responseSchema: RESPONSE_SCHEMA, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } }
+    : { ...comum, responseJsonSchema: paraJsonSchema(RESPONSE_SCHEMA), thinkingConfig: { thinkingLevel: 'minimal' } }
+  return { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig }
+}
+
+// Junta o texto das partes da resposta, sem as de raciocínio (modelos 3.x podem enviá-las).
+export function textoDaResposta(body) {
+  const partes = body?.candidates?.[0]?.content?.parts || []
+  const texto = partes.filter(p => !p?.thought && typeof p?.text === 'string').map(p => p.text).join('')
+  return texto || undefined
+}
+
+// Lista de modelos, em ordem, pela variável GEMINI_MODELOS ("a,a,b"); sem ela, o padrão do código.
+export function listaModelos(env) {
+  const lista = String(env?.GEMINI_MODELOS || '').split(',').map(m => m.trim()).filter(m => /^gemini-[a-z0-9.-]+$/.test(m))
+  return lista.length ? lista.slice(0, 4) : [MODEL_NAME, MODEL_NAME, FALLBACK_MODEL_NAME]
+}
+
 async function chamarModelo(modelo, text, apiKey, signal, fetcher) {
   let response
   try {
     response = await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: `${PROMPT}\n\nRefeição: "${textoParaPrompt(text)}"` }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-          temperature: 0.1,
-          // Cerca de 60 tokens por item; 30 itens cabem com folga.
-          maxOutputTokens: 2_400,
-          // A tarefa é uma extração curta; desativar o raciocínio evita que o
-          // orçamento de saída seja consumido antes do JSON nutricional.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
+      body: JSON.stringify(corpoGemini(modelo, `${PROMPT}\n\nRefeição: "${textoParaPrompt(text)}"`)),
       signal,
     })
   } catch (error) {
@@ -428,8 +453,7 @@ async function chamarModelo(modelo, text, apiKey, signal, fetcher) {
     throw Object.assign(new Error('Gemini rede'), { rede: true })
   }
   if (!response.ok) throw Object.assign(new Error(`Gemini HTTP ${response.status}`), { status: response.status })
-  const body = await response.json()
-  return body?.candidates?.[0]?.content?.parts?.[0]?.text
+  return textoDaResposta(await response.json())
 }
 
 export default {
@@ -489,7 +513,7 @@ export default {
       if (usados !== null && usados >= limite) {
         return json({ _erro: mensagemLimiteDiario(limite), _motivo: 'limite', _limite: limite }, 429, origin)
       }
-      const resposta = await callGemini(text, env.GEMINI_API_KEY)
+      const resposta = await callGemini(text, env.GEMINI_API_KEY, { modelos: listaModelos(env) })
       // Só conta no limite do dia quando o Gemini respondeu; falha do Google não gasta análise.
       if (usados !== null) await somarUsoDiarioIA(env.USO_IA, authPayload.sub, usados).catch(() => {})
       const { result, motivo } = sanitizeModelResponse(resposta, text)

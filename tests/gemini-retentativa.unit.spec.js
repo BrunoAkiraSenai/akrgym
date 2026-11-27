@@ -51,10 +51,18 @@ test('sem cota (429): não repete o mesmo modelo, vai direto ao reserva', async 
   assert.deepEqual(g.modelos, ['principal', 'reserva'])
 })
 
-test('erro do pedido (400) não se repete', async () => {
+test('pedido recusado (400): não repete o mesmo modelo, mas tenta o reserva', async () => {
   const volta = quieto()
   const g = googleFalso([400, 200])
-  await assert.rejects(callGemini('arroz', 'k', { fetcher: g.fetcher, aguardar: semEspera, modelos: M }), e => e.status === 400)
+  assert.equal(await callGemini('arroz', 'k', { fetcher: g.fetcher, aguardar: semEspera, modelos: M }), '{"itens":[]}')
+  volta()
+  assert.deepEqual(g.modelos, ['principal', 'reserva'])
+})
+
+test('pedido recusado (400) sem outro modelo: desiste na hora', async () => {
+  const volta = quieto()
+  const g = googleFalso([400, 200])
+  await assert.rejects(callGemini('arroz', 'k', { fetcher: g.fetcher, aguardar: semEspera, modelos: ['principal', 'principal'] }), e => e.status === 400)
   volta()
   assert.equal(g.modelos.length, 1)
 })
@@ -84,10 +92,10 @@ test('modelo indisponível (404) para esta chave: vai direto ao reserva', async 
   assert.deepEqual(g.modelos, ['principal', 'reserva'])
 })
 
-test('configuração atual do Worker: três tentativas no gemini-2.5-flash', async () => {
+test('configuração atual do Worker: 3.5-flash-lite duas vezes e 2.5-flash de reserva', async () => {
   const volta = quieto()
   const g = googleFalso([503, 503, 200])
   assert.equal(await callGemini('arroz', 'k', { fetcher: g.fetcher, aguardar: semEspera }), '{"itens":[]}')
   volta()
-  assert.deepEqual(g.modelos, ['gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash'])
+  assert.deepEqual(g.modelos, ['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'])
 })
