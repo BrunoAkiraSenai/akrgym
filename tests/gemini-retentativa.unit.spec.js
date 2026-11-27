@@ -22,7 +22,7 @@ test('sobrecarga (503) seguida de sucesso: tenta de novo e responde', async () =
   const g = googleFalso([503, 200])
   assert.equal(await callGemini('arroz', 'k', { fetcher: g.fetcher, aguardar: semEspera }), '{"itens":[]}')
   volta()
-  assert.deepEqual(g.modelos, ['gemini-2.5-flash', 'gemini-2.5-flash'])
+  assert.deepEqual(g.modelos, ['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite'])
 })
 
 test('principal sobrecarregado duas vezes: usa o modelo reserva', async () => {
@@ -30,7 +30,7 @@ test('principal sobrecarregado duas vezes: usa o modelo reserva', async () => {
   const g = googleFalso([503, 503, 200])
   assert.equal(await callGemini('arroz', 'k', { fetcher: g.fetcher, aguardar: semEspera }), '{"itens":[]}')
   volta()
-  assert.deepEqual(g.modelos, ['gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'])
+  assert.deepEqual(g.modelos, ['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'])
 })
 
 test('tudo sobrecarregado: desiste depois de 3 tentativas com o erro do Google', async () => {
@@ -46,7 +46,7 @@ test('sem cota (429): não repete o mesmo modelo, vai direto ao reserva', async 
   const g = googleFalso([429, 200])
   assert.equal(await callGemini('arroz', 'k', { fetcher: g.fetcher, aguardar: semEspera }), '{"itens":[]}')
   volta()
-  assert.deepEqual(g.modelos, ['gemini-2.5-flash', 'gemini-2.5-flash-lite'])
+  assert.deepEqual(g.modelos, ['gemini-2.5-flash-lite', 'gemini-2.5-flash'])
 })
 
 test('erro do pedido (400) não se repete', async () => {

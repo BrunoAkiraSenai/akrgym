@@ -4,9 +4,13 @@ import TACO from './taco.js'
 const DEFAULT_PROJECT_ID = 'akrgym'
 const DEFAULT_PROJECT_NUMBER = '272661727889'
 const DEFAULT_APP_ID = '1:272661727889:web:532c4b51c35afa28d64d30'
-const MODEL_NAME = 'gemini-2.5-flash'
-// Modelo reserva, usado só quando o principal está sobrecarregado (503) ou sem cota (429).
-const FALLBACK_MODEL_NAME = 'gemini-2.5-flash-lite'
+// gemini-2.5-flash foi descontinuado: em 1/12/2026 o Google o redireciona para o
+// gemini-3.5-flash-lite, que pede outra forma de chamada (ai.google.dev, Deprecations).
+// O 2.5-flash-lite usa a mesma chamada de hoje, não tem data de desligamento e custa menos.
+const MODEL_NAME = 'gemini-2.5-flash-lite'
+// Reserva só para sobrecarga (503) ou falta de cota (429) do principal.
+// Depois de 1/12/2026 este nome passa a ser redirecionado pelo Google; trocar ao migrar para a família 3.5.
+const FALLBACK_MODEL_NAME = 'gemini-2.5-flash'
 const AUTH_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 const APP_CHECK_JWKS_URL = 'https://firebaseappcheck.googleapis.com/v1/jwks'
 const MAX_TEXT_CHARS = 500
