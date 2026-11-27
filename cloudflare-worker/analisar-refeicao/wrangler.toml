@@ -38,7 +38,6 @@ FIREBASE_APP_ID = "1:272661727889:web:532c4b51c35afa28d64d30"
 ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 ALLOW_LOCAL_ORIGIN = "true"
 LIMITE_IA_DIA = "20"
-
 [[env.staging.kv_namespaces]]
 binding = "USO_IA"
 id = "2fa22a1b41974e58bcbe78d0c0122908"
