@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <!-- Quem já usa o app vai direto para ele; visitante novo (e buscador) vê esta apresentação.
-         No endereço antigo (*.web.app / *.firebaseapp.com), quem ainda não usa o app vai para akrgym.com;
-         quem já usa continua no endereço antigo, onde estão o login e os dados do aparelho. -->
-    <script>try { if (localStorage.getItem('akrgym-app') || localStorage.getItem('akrgym-theme')) location.replace('/app' + location.search + location.hash); else if (/\.(web\.app|firebaseapp\.com)$/.test(location.hostname)) location.replace('https://akrgym.com' + location.pathname + location.search + location.hash) } catch (e) {}</script>
+         No endereço antigo (*.web.app / *.firebaseapp.com) todos vão para akrgym.com, menos quem tem
+         um treino em andamento: esse segue para o /app antigo, onde está o rascunho. -->
+    <script>try { var antigo = /\.(web\.app|firebaseapp\.com)$/.test(location.hostname); var treino = Object.keys(localStorage).some(function (k) { return k.indexOf('rascunho_treino_') === 0 }); if (antigo && !treino) location.replace('https://akrgym.com' + location.pathname + location.search + location.hash); else if (localStorage.getItem('akrgym-app') || localStorage.getItem('akrgym-theme')) location.replace('/app' + location.search + location.hash) } catch (e) {}</script>
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

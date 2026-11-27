@@ -2,6 +2,9 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <!-- Endereço oficial: akrgym.com. Do endereço antigo o app vai para o novo, a não ser que haja
+         um treino em andamento neste aparelho (o rascunho só existe no endereço antigo). -->
+    <script>try { if (/\.(web\.app|firebaseapp\.com)$/.test(location.hostname) && !Object.keys(localStorage).some(function (k) { return k.indexOf('rascunho_treino_') === 0 })) location.replace('https://akrgym.com' + location.pathname + location.search + location.hash) } catch (e) {}</script>
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />

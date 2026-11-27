@@ -44,8 +44,6 @@ test('o app fica em /app, fora da busca', () => {
   assert.match(app, /<meta name="robots" content="noindex, nofollow" \/>/)
   assert.match(app, /src="\/src\/main\.jsx"/)
   assert.doesNotMatch(app, /rel="canonical"/)
-  // O app (/app) não muda de endereço: quem já usa mantém login e dados do aparelho.
-  assert.doesNotMatch(app, /location\.replace\('https:\/\/akrgym\.com/)
   assert.match(read('public/robots.txt'), /^Disallow: \/app$/m)
   assert.match(read('src/main.jsx'), /localStorage\.setItem\('akrgym-app', '1'\)/)
   const vite = read('vite.config.js')
