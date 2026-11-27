@@ -6,10 +6,10 @@ const DEFAULT_PROJECT_NUMBER = '272661727889'
 const DEFAULT_APP_ID = '1:272661727889:web:532c4b51c35afa28d64d30'
 // gemini-2.5-flash foi descontinuado: em 1/12/2026 o Google o redireciona para o
 // gemini-3.5-flash-lite, que pede outra forma de chamada (ai.google.dev, Deprecations).
-// O 2.5-flash-lite usa a mesma chamada de hoje, não tem data de desligamento e custa menos.
-const MODEL_NAME = 'gemini-2.5-flash-lite'
-// Reserva só para sobrecarga (503) ou falta de cota (429) do principal.
-// Depois de 1/12/2026 este nome passa a ser redirecionado pelo Google; trocar ao migrar para a família 3.5.
+// O 2.5-flash-lite respondeu 404 para esta chave (os 2.5 só atendem quem já os usava),
+// então segue o 2.5-flash até a migração para a família 3.5.
+const MODEL_NAME = 'gemini-2.5-flash'
+// Reserva para sobrecarga (503), falta de cota (429) ou modelo indisponível (404).
 const FALLBACK_MODEL_NAME = 'gemini-2.5-flash'
 const AUTH_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'
 const APP_CHECK_JWKS_URL = 'https://firebaseappcheck.googleapis.com/v1/jwks'
@@ -381,9 +381,10 @@ export async function callGemini(text, apiKey, { fetcher = fetch, aguardar = esp
       if (i > 0) {
         const anterior = ultimoErro?.status
         const mesmoModelo = modelo === modelos[i - 1]
-        // Sem cota (429) não adianta repetir o mesmo modelo; só o reserva.
-        if (anterior === 429 && mesmoModelo) continue
-        if (anterior !== 429 && !STATUS_TEMPORARIOS.has(anterior) && !ultimoErro?.rede) break
+        // Sem cota (429) ou modelo indisponível (404): repetir o mesmo não adianta; só outro modelo.
+        const trocaModelo = anterior === 429 || anterior === 404
+        if (trocaModelo && mesmoModelo) continue
+        if (!trocaModelo && !STATUS_TEMPORARIOS.has(anterior) && !ultimoErro?.rede) break
         if (mesmoModelo) await aguardar(pausas[Math.min(i - 1, pausas.length - 1)])
       }
       try {
